@@ -272,6 +272,84 @@ export const NORM = {
   violationCooldown: 240,
 } as const;
 
+/**
+ * SHARED EXPECTATIONS — private expectation becoming social knowledge.
+ *
+ * Nothing here describes what a group believes. These numbers govern how one
+ * individual comes to hold an *imperfect* model of what another individual
+ * expects, how that model decays, and how far it can travel by word of mouth.
+ */
+export const SOCIAL = {
+  /** Beliefs about other people's expectations, per settler. Bounded. */
+  maxBeliefs: 16,
+  /**
+   * Generalizations about "people around here", per settler. Bounded.
+   * Each place a settler frequents can produce evidence on two topics, so a
+   * tighter budget evicted records before they ever gathered enough
+   * observations to mean anything.
+   */
+  maxCustoms: 8,
+
+  /** How close you must be to witness a social event and learn from it. */
+  witnessRange: 34,
+
+  /**
+   * Certainty is never total. Nothing in this system may reach 1: you can be
+   * confident about what someone expects, never certain.
+   */
+  maxConfidence: 0.92,
+  /** Starting confidence by how directly the knowledge was acquired. */
+  confidenceDirect: 0.78, // it happened to you, or they told you themselves
+  confidenceWitnessed: 0.58, // you watched it happen to someone else
+  confidenceHearsay: 0.4, // someone told you what they saw
+  /** Extra confidence each time fresh evidence agrees with what you thought. */
+  confirmBonus: 0.07,
+  /**
+   * Beliefs go stale. Confidence halves over this many sim-seconds since the
+   * last confirmation (five in-world days), which is what allows a settler to
+   * be confidently wrong after the other person has quietly changed their mind.
+   *
+   * Balanced against how often norm events actually happen: at a two-day
+   * half-life almost every belief had decayed to noise before anything
+   * confirmed it, and knowledge stopped mattering to behaviour at all.
+   */
+  staleHalfLife: 3600,
+  /** Below this effective confidence a belief is not worth carrying. */
+  minConfidence: 0.08,
+
+  /** Word of mouth. */
+  hearsayFactor: 0.72,
+  /** Hops from the original witness before a claim stops being passed on. */
+  maxDepth: 2,
+  /** A settler shares what they know about others at most this often. */
+  talkCooldown: 540,
+  /** Chance an eligible conversation carries social information at all. */
+  talkChance: 0.34,
+  /** You do not discuss other people's business with a near-stranger. */
+  talkMinFamiliarity: 25,
+
+  /**
+   * Absent any knowledge, a settler assumes others feel as they do. Weak on
+   * purpose: naive projection must lose decisively to anything actually learned.
+   */
+  projectionConfidence: 0.28,
+
+  /** Proto-custom: a generalization, never a world fact. */
+  minCustomEvidence: 3,
+  /** Evidence weight decays at this rate per sim-second (~half a day to halve). */
+  customEvidenceDecayPerSec: 0.0000018,
+  maxCustomConfidence: 0.85,
+  /** How far a place-level generalization reaches. */
+  customRadius: 70,
+
+  /** How strongly a believed personal claim discourages use, per confidence. */
+  beliefWeight: 62,
+  /** A generalization is worth less than knowing the individual. */
+  customSubstituteWeight: 0.7,
+  /** Confidence a settler needs before politeness is worth the detour. */
+  askConfidenceFloor: 0.22,
+} as const;
+
 /** Glowberry abundance, adjustable from Creator Mode. */
 export const YIELD = {
   normal: { regenScale: 1, capScale: 1, label: 'Normal' },

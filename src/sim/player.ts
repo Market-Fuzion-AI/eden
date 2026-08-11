@@ -3,9 +3,10 @@ import { chronicle } from './chronicle';
 import { buildExchange, type DialogueExchange } from './dialogue';
 import { placeName } from './landmarks';
 import { remember } from './memory';
-import { emersonBlocker } from './normEvents';
+import { emersonBlocker, observePlayerAsk } from './normEvents';
 import { attitudeFor, decidePermission, permissionLine } from './norms';
 import { applyRelationship, peekRelationship, relationshipState } from './relationships';
+import { emersonKnows, witnessNorm } from './socialKnowledge';
 import { missingResources } from './structures';
 import { groundY, isWater } from './terrain';
 import { damageCreature } from './wildlife';
@@ -260,12 +261,19 @@ export function getInteractions(world: World): InteractionPrompt[] {
     if (lumi) out.push({ key: 'F', label: 'Offer a glowberry', action: 'offer' });
   }
 
-  // Standing at a shelter somebody considers theirs.
+  // Standing at a shelter somebody considers theirs. Emerson is *not* told who
+  // that is unless he has seen something to tell him — the prompt names a
+  // claimant only when he has personally witnessed them acting like one.
   const shelter = shelterAtHand(world);
   if (shelter) {
     const blocker = emersonBlocker(world, shelter);
     if (blocker && dist(blocker.settler.pos, p.pos) < NORM.askRange) {
-      out.push({ key: 'R', label: `Ask ${blocker.settler.name} to use the shelter`, action: 'ask' });
+      const known = emersonKnows(world, shelter.id, blocker.settler.id);
+      out.push({
+        key: 'R',
+        label: known ? `Ask ${blocker.settler.name} to use the shelter` : 'Ask about using the shelter',
+        action: 'ask',
+      });
     }
   }
   return out;
@@ -284,7 +292,8 @@ export function shelterAtHand(world: World): Structure | null {
 
 /**
  * Emerson asks a claimant for leave to use their shelter. Resolved by exactly
- * the same machinery the settlers use on each other.
+ * the same machinery the settlers use on each other — and watched by whoever
+ * happens to be standing nearby, who learn from it like any other onlooker.
  */
 export function playerAskPermission(world: World): { name: string; line: string; outcome: string } | null {
   const p = world.player;
@@ -308,6 +317,18 @@ export function playerAskPermission(world: World): { name: string; line: string;
     att.sharedDrift = Math.min(NORM.maxDrift, att.sharedDrift + NORM.sharedDriftPerPermission);
   }
 
+  // Emerson learns what he was just told, and so does anyone who saw it.
+  witnessNorm(
+    world,
+    shelter,
+    claimant,
+    outcome === 'allow' ? 'shared' : 'personal',
+    outcome === 'refuse' ? 'turned Emerson away from' : 'gave Emerson leave to use',
+    // He was standing in it and asked the question — proximity is not in doubt.
+    false,
+  );
+  const onlookers = observePlayerAsk(world, claimant, shelter, outcome);
+
   chronicle(
     world,
     'norm',
@@ -321,16 +342,19 @@ export function playerAskPermission(world: World): { name: string; line: string;
       place: shelter.place,
       structureId: shelter.id,
       cause: ['Emerson asked rather than walking in', ...reasons],
-      effects:
-        outcome === 'refuse'
+      effects: [
+        ...(outcome === 'refuse'
           ? ['Emerson was turned away', 'The refusal is remembered']
-          : ['Emerson may use it freely', "The claimant's grip loosened slightly"],
+          : ['Emerson may use it freely', "The claimant's grip loosened slightly"]),
+        ...(onlookers.length > 0
+          ? [`${onlookers.length} settler${onlookers.length === 1 ? '' : 's'} nearby learned something from it`]
+          : []),
+      ],
     },
   );
 
   return { name: claimant.name, line: permissionLine(outcome, claimant, emerson), outcome };
 }
-
 
 /**
  * Speak with a nearby settler. Produces a real social interaction: the settler

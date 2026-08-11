@@ -1,4 +1,4 @@
-import { NORM } from './config';
+import { NORM, SOCIAL } from './config';
 import { chronicle } from './chronicle';
 import { remember } from './memory';
 import {
@@ -11,8 +11,15 @@ import {
   type PermissionOutcome,
 } from './norms';
 import { applyRelationship, peekRelationship, relationshipState } from './relationships';
+import {
+  BELIEF_LABEL,
+  observeEvent,
+  predictClaim,
+  witnessNorm,
+  type Prediction,
+} from './socialKnowledge';
 import { STRUCTURE_DEFS } from './structures';
-import type { Settler, Structure, World } from './types';
+import type { ClaimKind, EntityId, Settler, Structure, World } from './types';
 import { clamp, dist } from './vec';
 
 /**
@@ -33,6 +40,69 @@ export function restUrgency(s: Settler): number {
 }
 
 // ---------------------------------------------------------------------------
+// Surprise — the moment a prediction meets reality
+// ---------------------------------------------------------------------------
+
+/**
+ * What an outcome actually reveals about the person who produced it.
+ * Granting freely says "I do not hold this tightly"; refusing says the opposite.
+ */
+function revealedBy(outcome: PermissionOutcome): ClaimKind {
+  return outcome === 'allow' ? 'shared' : 'personal';
+}
+
+/**
+ * Record being wrong about someone.
+ *
+ * Only worth marking when the settler was actually confident — being unsure
+ * and then finding out is just learning, not surprise. Chronicling is
+ * deliberately narrow so this never becomes a running commentary.
+ */
+function noteSurprise(
+  world: World,
+  s: Settler,
+  prediction: Prediction,
+  actual: ClaimKind,
+  about: { id: EntityId; name: string },
+  structure: Structure,
+): boolean {
+  if (prediction.kind === actual) return false;
+  if (prediction.confidence < 0.35) return false;
+  const t = world.timeSec;
+  remember(s, {
+    type: 'surprised_by_reaction',
+    subjectId: about.id,
+    subjectName: about.name,
+    place: structureName(structure),
+    t,
+    emotionalWeight: actual === 'personal' ? -0.4 : 0.35,
+  });
+  chronicle(
+    world,
+    'norm',
+    `${s.name} had misjudged how ${about.name} felt about ${structureName(structure)}.`,
+    {
+      actorIds: [s.id, about.id],
+      actorNames: [s.name, about.name],
+      pos: { ...structure.pos },
+      place: structure.place,
+      structureId: structure.id,
+      cause: [
+        `${s.name} expected that ${about.name} ${BELIEF_LABEL[prediction.kind]}`,
+        `They were ${Math.round(prediction.confidence * 100)}% sure`,
+        ...prediction.why,
+      ],
+      effects: [
+        `In fact ${about.name} ${BELIEF_LABEL[actual]}`,
+        `${s.name} now believes otherwise`,
+        'What they thought they knew was wrong',
+      ],
+    },
+  );
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Asking permission
 // ---------------------------------------------------------------------------
 
@@ -40,6 +110,10 @@ export interface AskResult {
   outcome: PermissionOutcome;
   reasons: string[];
   line: string;
+  /** True when the answer contradicted what the asker confidently expected. */
+  surprised: boolean;
+  /** How many bystanders learned something from watching. */
+  witnessed: number;
 }
 
 /**
@@ -54,6 +128,8 @@ export function resolveAsk(
 ): AskResult {
   const t = world.timeSec;
   const urgency = restUrgency(asker);
+  // Captured *before* the answer: what the asker walked up expecting.
+  const prediction = predictClaim(world, asker, claimant, structure);
   const { outcome, reasons } = decidePermission(world, claimant, asker, structure, urgency);
 
   const askerAtt = attitudeFor(asker, structure.id);
@@ -123,6 +199,26 @@ export function resolveAsk(
     });
   }
 
+  // --- what everyone present takes away from it --------------------------
+  // The exchange happens in the open. The asker hears the answer from the
+  // claimant's own mouth; anyone close enough watches it happen. Nobody else in
+  // the valley learns a thing.
+  const revealed = revealedBy(outcome);
+  const learned = observeEvent(world, {
+    about: { id: claimant.id, name: claimant.name },
+    structure,
+    kind: revealed,
+    source: outcome === 'refuse' ? 'refused' : 'granted',
+    participants: [{ id: asker.id, name: asker.name }],
+    custom: [
+      // Somebody asked rather than walking in: that is the visible convention,
+      // whatever the answer turned out to be.
+      { topic: 'ask-first', supports: true },
+      { topic: 'shelters-shared', supports: outcome === 'allow' },
+    ],
+  });
+  const surprised = noteSurprise(world, asker, prediction, revealed, claimant, structure);
+
   const claim = evaluateClaim(world, claimant, structure);
   const rel = peekRelationship(claimant, asker.id);
   const headline =
@@ -146,15 +242,51 @@ export function resolveAsk(
     ],
     effects:
       outcome === 'refuse'
-        ? [`${asker.name} was turned away`, `Affinity toward ${claimant.name} fell`, 'The refusal is remembered']
+        ? [
+            `${asker.name} was turned away`,
+            `Affinity toward ${claimant.name} fell`,
+            'The refusal is remembered',
+            ...(learned.length > 1 ? [`${learned.length - 1} other${learned.length === 2 ? '' : 's'} saw it happen`] : []),
+          ]
         : [
             `${asker.name} may now use it without friction`,
             `Trust between them rose`,
             `${claimant.name}'s grip on the place loosened slightly`,
+            ...(learned.length > 1 ? [`${learned.length - 1} other${learned.length === 2 ? '' : 's'} saw it happen`] : []),
           ],
   });
 
-  return { outcome, reasons, line: permissionLine(outcome, claimant, asker) };
+  return {
+    outcome,
+    reasons,
+    line: permissionLine(outcome, claimant, asker),
+    surprised,
+    witnessed: Math.max(0, learned.length - 1),
+  };
+}
+
+/**
+ * Emerson asked, and the settlers standing nearby watched him get an answer.
+ * He is a participant in the valley's social life like anyone else, so what
+ * happens to him teaches the people who saw it.
+ */
+export function observePlayerAsk(
+  world: World,
+  claimant: Settler,
+  structure: Structure,
+  outcome: PermissionOutcome,
+): Settler[] {
+  return observeEvent(world, {
+    about: { id: claimant.id, name: claimant.name },
+    structure,
+    kind: revealedBy(outcome),
+    source: outcome === 'refuse' ? 'refused' : 'granted',
+    participants: [],
+    custom: [
+      { topic: 'ask-first', supports: true },
+      { topic: 'shelters-shared', supports: outcome === 'allow' },
+    ],
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -178,6 +310,8 @@ export function noticeUse(world: World, user: Settler, structure: Structure): vo
     if (t - att.lastViolationAt < NORM.violationCooldown) continue;
     att.lastViolationAt = t;
 
+    // What the user expected of them, captured before they react.
+    const prediction = predictClaim(world, user, claimant, structure);
     const claim = evaluateClaim(world, claimant, structure);
     const rel = peekRelationship(claimant, user.id);
     const trust = rel?.trust ?? 0;
@@ -201,6 +335,26 @@ export function noticeUse(world: World, user: Settler, structure: Structure): vo
     if (reaction === 'tolerate') {
       // Quietly accepting it is itself how a norm loosens.
       att.sharedDrift = Math.min(NORM.maxDrift, att.sharedDrift + NORM.sharedDriftPerPeacefulUse);
+      // Letting it pass only teaches anyone anything if they were visibly
+      // standing there while it happened. Tolerance from across the valley is
+      // invisible — which is precisely why beliefs about tolerant people go
+      // stale and stay wrong.
+      if (dist(claimant.pos, structure.pos) <= SOCIAL.witnessRange) {
+        observeEvent(world, {
+          about: { id: claimant.id, name: claimant.name },
+          structure,
+          kind: 'shared',
+          source: 'tolerated',
+          participants: [{ id: user.id, name: user.name }],
+          // Saying nothing is a far weaker signal than saying something.
+          participantSource: 'tolerated',
+          weight: 0.7,
+          custom: [
+            { topic: 'shelters-shared', supports: true },
+            { topic: 'ask-first', supports: false },
+          ],
+        });
+      }
       continue;
     }
 
@@ -228,6 +382,24 @@ export function noticeUse(world: World, user: Settler, structure: Structure): vo
     );
 
     if (reaction === 'object' || reaction === 'confront') {
+      // Being told off is the most legible norm signal there is: the user hears
+      // it directly, and anyone nearby watches it land.
+      observeEvent(world, {
+        about: { id: claimant.id, name: claimant.name },
+        structure,
+        kind: 'personal',
+        source: 'objected',
+        participants: [{ id: user.id, name: user.name }],
+        custom: [
+          { topic: 'ask-first', supports: true },
+          { topic: 'shelters-shared', supports: false },
+        ],
+      });
+      noteSurprise(world, user, prediction, 'personal', claimant, structure);
+      // If Emerson happens to be standing there, he sees it too — and that is
+      // the only way ARI ever comes to know anything about who claims what.
+      witnessNorm(world, structure, claimant, 'personal', `objected to ${user.name} using`);
+
       // An objection is a short social action; a confrontation goes through
       // the v0.3 machinery and can escalate or clear the air on its own.
       if (reaction === 'confront' && t >= claimant.confrontCooldownUntil) {

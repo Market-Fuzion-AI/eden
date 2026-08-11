@@ -14,6 +14,7 @@ import {
   peekAttitude,
 } from './norms';
 import { applyRelationship } from './relationships';
+import { recordBelief } from './socialKnowledge';
 import { initWorld } from './index';
 import { simTick } from './simulation';
 import { chooseBuildSite, createProject, recordUse } from './structures';
@@ -75,11 +76,11 @@ describe('claims are agent-relative', () => {
     const [mira, june, kael] = world.settlers;
     // Mira initiates and works hardest; June contributes heavily; Kael does
     // nothing but holds strongly communal values.
-    mira.values = { individualism: 0.9, territoriality: 0.85 };
+    mira.values = { individualism: 0.9, territoriality: 0.85, conformity: 0.5 };
     mira.personality.empathy = 0.25;
-    june.values = { individualism: 0.5, territoriality: 0.5 };
+    june.values = { individualism: 0.5, territoriality: 0.5, conformity: 0.5 };
     june.personality.empathy = 0.55;
-    kael.values = { individualism: 0.05, territoriality: 0.05 };
+    kael.values = { individualism: 0.05, territoriality: 0.05, conformity: 0.5 };
     kael.personality.empathy = 0.9;
 
     const st = makeShelter(world, mira, [{ settler: june, wood: 14, stone: 6, work: 0.45 }]);
@@ -118,8 +119,8 @@ describe('claims are agent-relative', () => {
     const world = createWorld(203);
     const [a, b] = world.settlers;
     expect(a.speciesId).toBe(b.speciesId); // same people
-    a.values = { individualism: 0.95, territoriality: 0.95 };
-    b.values = { individualism: 0.05, territoriality: 0.05 };
+    a.values = { individualism: 0.95, territoriality: 0.95, conformity: 0.5 };
+    b.values = { individualism: 0.05, territoriality: 0.05, conformity: 0.5 };
     a.personality.empathy = 0.5;
     b.personality.empathy = 0.5;
 
@@ -147,7 +148,7 @@ describe('claims are agent-relative', () => {
   it('treats campfires as more communal than shelters, all else equal', () => {
     const world = createWorld(205);
     const s = world.settlers[0];
-    s.values = { individualism: 0.5, territoriality: 0.5 };
+    s.values = { individualism: 0.5, territoriality: 0.5, conformity: 0.5 };
     const shelterSite = chooseBuildSite(world, s, 'shelter')!;
     const shelter = createProject(world, s, 'shelter', shelterSite.pos, ['t'], shelterSite.reason);
     const fireSite = chooseBuildSite(world, s, 'campfire')!;
@@ -167,7 +168,7 @@ describe('permission', () => {
   it('grants to a trusted friend and refuses a resented stranger (Scenario B)', () => {
     const world = createWorld(210);
     const [mira, june, kael] = world.settlers;
-    mira.values = { individualism: 0.8, territoriality: 0.75 };
+    mira.values = { individualism: 0.8, territoriality: 0.75, conformity: 0.5 };
     mira.personality.empathy = 0.6;
     const st = makeShelter(world, mira);
     for (let i = 0; i < 6; i++) recordUse(world, st, mira);
@@ -191,7 +192,7 @@ describe('permission', () => {
   it('records permission for both sides and eases future use', () => {
     const world = createWorld(211);
     const [mira, june] = world.settlers;
-    mira.values = { individualism: 0.8, territoriality: 0.8 };
+    mira.values = { individualism: 0.8, territoriality: 0.8, conformity: 0.5 };
     const st = makeShelter(world, mira);
     for (let i = 0; i < 6; i++) recordUse(world, st, mira);
     applyRelationship(world, mira, june.id, june.name, 'gift', 'Trusted', {
@@ -219,7 +220,7 @@ describe('permission', () => {
   it('remembers refusal and makes the place less inviting', () => {
     const world = createWorld(212);
     const [mira, kael] = world.settlers;
-    mira.values = { individualism: 0.9, territoriality: 0.9 };
+    mira.values = { individualism: 0.9, territoriality: 0.9, conformity: 0.5 };
     mira.personality.empathy = 0.1;
     const st = makeShelter(world, mira);
     for (let i = 0; i < 6; i++) recordUse(world, st, mira);
@@ -239,7 +240,7 @@ describe('violation', () => {
   it('is not triggered by substantial co-builders', () => {
     const world = createWorld(220);
     const [mira, june] = world.settlers;
-    mira.values = { individualism: 0.9, territoriality: 0.9 };
+    mira.values = { individualism: 0.9, territoriality: 0.9, conformity: 0.5 };
     const st = makeShelter(world, mira, [{ settler: june, wood: 12, stone: 5, work: 0.4 }]);
     for (let i = 0; i < 6; i++) recordUse(world, st, mira);
     expect(isViolation(world, mira, june, st)).toBe(false);
@@ -248,7 +249,7 @@ describe('violation', () => {
   it('is triggered by an uninvolved user of a personally-held shelter', () => {
     const world = createWorld(221);
     const [mira, , kael] = world.settlers;
-    mira.values = { individualism: 0.95, territoriality: 0.95 };
+    mira.values = { individualism: 0.95, territoriality: 0.95, conformity: 0.5 };
     mira.personality.empathy = 0.1;
     const st = makeShelter(world, mira);
     for (let i = 0; i < 8; i++) recordUse(world, st, mira);
@@ -259,7 +260,7 @@ describe('violation', () => {
   it('is cancelled by permission', () => {
     const world = createWorld(222);
     const [mira, , kael] = world.settlers;
-    mira.values = { individualism: 0.95, territoriality: 0.95 };
+    mira.values = { individualism: 0.95, territoriality: 0.95, conformity: 0.5 };
     const st = makeShelter(world, mira);
     for (let i = 0; i < 8; i++) recordUse(world, st, mira);
     attitudeFor(mira, st.id).allowed.push(kael.id);
@@ -271,7 +272,7 @@ describe('violation', () => {
     const build = (seed: number, empathy: number, aggression: number) => {
       const world = createWorld(seed);
       const [claimant, , intruder] = world.settlers;
-      claimant.values = { individualism: 0.95, territoriality: 0.95 };
+      claimant.values = { individualism: 0.95, territoriality: 0.95, conformity: 0.5 };
       claimant.personality.empathy = empathy;
       claimant.personality.aggression = aggression;
       const st = makeShelter(world, claimant);
@@ -302,7 +303,7 @@ describe('norms shift with history (Scenario D)', () => {
   it('softens a personal claim through repeated permitted use', () => {
     const world = createWorld(230);
     const [mira, june] = world.settlers;
-    mira.values = { individualism: 0.78, territoriality: 0.72 };
+    mira.values = { individualism: 0.78, territoriality: 0.72, conformity: 0.5 };
     mira.personality.empathy = 0.5;
     const st = makeShelter(world, mira);
     for (let i = 0; i < 6; i++) recordUse(world, st, mira);
@@ -322,7 +323,7 @@ describe('norms shift with history (Scenario D)', () => {
   it('hardens a claim when use is treated as intrusion', () => {
     const world = createWorld(231);
     const mira = world.settlers[0];
-    mira.values = { individualism: 0.55, territoriality: 0.55 };
+    mira.values = { individualism: 0.55, territoriality: 0.55, conformity: 0.5 };
     const st = makeShelter(world, mira);
     for (let i = 0; i < 5; i++) recordUse(world, st, mira);
     const before = evaluateClaim(world, mira, st).exclusivity;
@@ -343,15 +344,23 @@ describe('use decisions weigh other people', () => {
   it('avoids a shelter a feared claimant holds, and says why', () => {
     const world = createWorld(240);
     const [mira, june] = world.settlers;
-    mira.values = { individualism: 0.95, territoriality: 0.95 };
+    mira.values = { individualism: 0.95, territoriality: 0.95, conformity: 0.5 };
     const st = makeShelter(world, mira);
     for (let i = 0; i < 8; i++) recordUse(world, st, mira);
     june.knownStructureIds.push(st.id);
     june.pos = { ...st.pos };
+    // Since v0.6 a settler acts on what they have *learned*, not on the truth:
+    // June has to have seen Mira behave like a claimant to weigh her claim.
+    recordBelief(world, june, {
+      about: { id: mira.id, name: mira.name },
+      structureId: st.id,
+      kind: 'personal',
+      source: 'refused',
+    });
 
     const neutral = assessAccess(world, june, st, 20);
     expect(neutral.blocker?.settler.id).toBe(mira.id);
-    expect(neutral.reasons.join(' ')).toMatch(/strongly claims/);
+    expect(neutral.reasons.join(' ')).toMatch(/Expects Mira to mind|Expects .* to mind/);
 
     applyRelationship(world, june, mira.id, mira.name, 'conflict', 'Terrifying', {
       affinity: -50,
@@ -365,7 +374,7 @@ describe('use decisions weigh other people', () => {
   it('lets desperation outweigh someone else\'s expectation', () => {
     const world = createWorld(241);
     const [mira, june] = world.settlers;
-    mira.values = { individualism: 0.9, territoriality: 0.9 };
+    mira.values = { individualism: 0.9, territoriality: 0.9, conformity: 0.5 };
     const st = makeShelter(world, mira);
     for (let i = 0; i < 8; i++) recordUse(world, st, mira);
     june.knownStructureIds.push(st.id);
@@ -379,7 +388,7 @@ describe('use decisions weigh other people', () => {
   it('surfaces the social calculation in the rest decision', () => {
     const world = createWorld(242);
     const [mira, june] = world.settlers;
-    mira.values = { individualism: 0.9, territoriality: 0.9 };
+    mira.values = { individualism: 0.9, territoriality: 0.9, conformity: 0.5 };
     const st = makeShelter(world, mira);
     for (let i = 0; i < 8; i++) recordUse(world, st, mira);
     june.knownStructureIds.push(st.id);
@@ -398,9 +407,9 @@ describe('inspection', () => {
     const w = createWorld(250);
     setTerrainSeed(w.seed);
     const [mira, june, kael] = w.settlers;
-    mira.values = { individualism: 0.92, territoriality: 0.9 };
+    mira.values = { individualism: 0.92, territoriality: 0.9, conformity: 0.5 };
     mira.personality.empathy = 0.2;
-    kael.values = { individualism: 0.05, territoriality: 0.05 };
+    kael.values = { individualism: 0.05, territoriality: 0.05, conformity: 0.5 };
     const st = makeShelter(w, mira, [{ settler: june, wood: 13, stone: 5, work: 0.4 }]);
     for (let i = 0; i < 7; i++) recordUse(w, st, mira);
     for (let i = 0; i < 4; i++) recordUse(w, st, june);

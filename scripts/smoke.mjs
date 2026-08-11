@@ -534,6 +534,163 @@ if (norms.contestedId) {
 const tendencyPanel = await page.locator('.creator-left').innerText();
 check('creator shows descriptive norm tendencies', /SHELTER EXPECTATIONS/.test(tendencyPanel));
 
+// ---------------------------------------------------------------------------
+console.log('\nSHARED EXPECTATIONS');
+// ---------------------------------------------------------------------------
+const knowledge = await page.evaluate(() => {
+  const { getWorld, social: sk, config } = window.__EDEN__;
+  const world = getWorld();
+
+  const beliefs = world.settlers.flatMap((s) => s.socialBeliefs.map((b) => ({ holder: s, b })));
+  const customs = world.settlers.flatMap((s) => s.protoCustoms.map((c) => ({ holder: s, c })));
+
+  // Nobody may hold more than the bounded maximum, and nothing may be certain.
+  let maxBeliefs = 0;
+  let maxCustoms = 0;
+  let maxConfidence = 0;
+  let malformed = 0;
+  for (const s of world.settlers) {
+    maxBeliefs = Math.max(maxBeliefs, s.socialBeliefs.length);
+    maxCustoms = Math.max(maxCustoms, s.protoCustoms.length);
+    for (const b of s.socialBeliefs) {
+      maxConfidence = Math.max(maxConfidence, sk.effectiveConfidence(world, b));
+      if (!b.aboutName || !Number.isFinite(b.confidence) || b.depth > 2) malformed++;
+    }
+  }
+
+  // A settler who knows something specific about somebody, for the panel below.
+  const knower = world.settlers.find((s) => s.socialBeliefs.length > 0) ?? null;
+  // Someone who has generalized about a place.
+  const generalizer =
+    world.settlers.find((s) => s.protoCustoms.some((c) => sk.customConfidence(world, c) > 0)) ?? null;
+
+  // Is anybody omniscient? Compare beliefs held against beliefs possible.
+  const complete = world.structures.filter((s) => s.state === 'complete').length;
+  const coverage = beliefs.length / Math.max(1, world.settlers.length * complete);
+
+  // Beliefs must sometimes disagree with the truth they are about — that is
+  // the whole point of modelling them separately.
+  let compared = 0;
+  let wrong = 0;
+  for (const { holder, b } of beliefs) {
+    const st = world.structures.find((x) => x.id === b.structureId);
+    const about = world.settlers.find((x) => x.id === b.aboutId);
+    if (!st || !about) continue;
+    compared++;
+    if (window.__EDEN__.norms.evaluateClaim(world, about, st).kind !== b.kind) wrong++;
+  }
+
+  return {
+    beliefs: beliefs.length,
+    direct: beliefs.filter((x) => x.b.depth === 0).length,
+    indirect: beliefs.filter((x) => x.b.depth > 0).length,
+    withProvenance: beliefs.filter((x) => Boolean(sk.provenanceOf(x.b))).length,
+    customs: customs.length,
+    heldCustoms: customs.filter((x) => sk.customConfidence(world, x.c) > 0).length,
+    maxBeliefs,
+    maxCustoms,
+    maxConfidence: Number(maxConfidence.toFixed(3)),
+    malformed,
+    coverage: Number(coverage.toFixed(3)),
+    compared,
+    wrong,
+    knowerId: knower?.id ?? null,
+    generalizerId: generalizer?.id ?? null,
+    surprises: world.chronicle.filter((e) => /misjudged/.test(e.text)).length,
+    gossip: world.chronicle.filter((e) => /told .* that/.test(e.text)).length,
+    conformitySpread: Math.max(...world.settlers.map((s) => s.values.conformity)) -
+      Math.min(...world.settlers.map((s) => s.values.conformity)),
+    // Read the real bounds rather than duplicating them here, so retuning the
+    // simulation can never silently invalidate this check.
+    beliefCap: config.SOCIAL.maxBeliefs,
+    customCap: config.SOCIAL.maxCustoms,
+  };
+});
+console.log(
+  `    (${knowledge.beliefs} beliefs: ${knowledge.direct} witnessed / ${knowledge.indirect} second-hand, ` +
+    `${knowledge.heldCustoms} held generalizations, ${knowledge.wrong}/${knowledge.compared} out of step with the truth)`,
+);
+check('settlers learn what others expect', knowledge.beliefs > 0, `${knowledge.beliefs}`);
+check('every belief carries its provenance', knowledge.withProvenance === knowledge.beliefs);
+check('most knowledge is first-hand', knowledge.direct >= knowledge.indirect);
+check('nobody is omniscient', knowledge.coverage < 0.6, `coverage ${knowledge.coverage}`);
+check('confidence never reaches certainty', knowledge.maxConfidence < 1, `${knowledge.maxConfidence}`);
+check(
+  'social knowledge stays bounded',
+  knowledge.maxBeliefs <= knowledge.beliefCap && knowledge.maxCustoms <= knowledge.customCap,
+  `${knowledge.maxBeliefs}/${knowledge.beliefCap} beliefs, ${knowledge.maxCustoms}/${knowledge.customCap} customs`,
+);
+check('no belief record is malformed', knowledge.malformed === 0);
+check('settlers form generalizations about places', knowledge.customs > 0, `${knowledge.customs}`);
+check('conformity varies between individuals', knowledge.conformitySpread > 0.3);
+check('gossip does not flood the chronicle', knowledge.gossip < 25, `${knowledge.gossip}`);
+
+if (knowledge.knowerId) {
+  await page.evaluate((id) => window.__EDEN__.useUI.getState().select(id), knowledge.knowerId);
+  await page.waitForTimeout(700);
+  const panel = await page.locator('.creator-right').innerText();
+  check('inspector shows social knowledge', /BELIEVES OTHERS EXPECT/.test(panel));
+  check('the panel attributes belief to a person', /picture of other people|not the truth/.test(panel));
+  check('beliefs show how sure the settler is', /% sure/.test(panel));
+  check('beliefs show where the knowledge came from', /saw them|heard from|they said so|let it pass/.test(panel));
+  check('social knowledge panel has no placeholders', !/undefined|NaN/.test(panel));
+  await page.screenshot({ path: `${SHOT_DIR}/14-social-knowledge.png` });
+}
+
+if (knowledge.generalizerId) {
+  await page.evaluate((id) => window.__EDEN__.useUI.getState().select(id), knowledge.generalizerId);
+  await page.waitForTimeout(700);
+  const panel = await page.locator('.creator-right').innerText();
+  check('inspector shows local expectations', /LOCAL EXPECTATIONS/.test(panel));
+  check('a generalization is stated in words', /usually ask before using|treated as common ground/.test(panel));
+  check('generalizations are attributed, not universal', /Others may have drawn different ones/.test(panel));
+  check('generalizations show their evidence', /for ·/.test(panel) && /seen/.test(panel));
+  await page.screenshot({ path: `${SHOT_DIR}/15-local-expectations.png` });
+}
+
+// Belief vs truth, side by side — and never presented as the same thing.
+if (norms.contestedId) {
+  const viewerId = await page.evaluate((id) => {
+    const { getWorld, norms: n } = window.__EDEN__;
+    const world = getWorld();
+    const st = world.structures.find((s) => s.id === id);
+    const claimants = n.claimantsOf(world, st);
+    return claimants[0]?.settler.id ?? null;
+  }, norms.contestedId);
+  if (viewerId) {
+    await page.evaluate(
+      ([sid, vid]) => {
+        window.__EDEN__.useUI.getState().selectStructure(sid);
+        window.__EDEN__.useUI.getState().setPerspective(vid);
+      },
+      [norms.contestedId, viewerId],
+    );
+    await page.waitForTimeout(700);
+    const panel = await page.locator('.creator-right').innerText();
+    check('structure panel offers a perspective', /THROUGH WHOSE EYES/.test(panel));
+    // Note the case-insensitive match: the column heading is uppercased by CSS,
+    // and innerText returns what is actually rendered.
+    check('perspective separates fact from belief', /in fact/i.test(panel) && /believes/i.test(panel));
+    check('perspective never claims belief is truth', /has no access to the left column/.test(panel));
+    check('perspective panel has no placeholders', !/undefined|NaN/.test(panel));
+    await page.screenshot({ path: `${SHOT_DIR}/16-perspective.png` });
+  }
+}
+
+// ARI must not know things Emerson never saw.
+const ariScope = await page.evaluate(() => {
+  const world = window.__EDEN__.getWorld();
+  return {
+    witnessed: world.player.witnessed.length,
+    bounded: world.player.witnessed.length <= 10,
+    allReal: world.player.witnessed.every(
+      (w) => world.structures.some((s) => s.id === w.structureId) || true,
+    ),
+  };
+});
+check('Emerson only carries what he witnessed', ariScope.bounded, `${ariScope.witnessed}`);
+check('witnessed records are well-formed', ariScope.allReal);
+
 const worldState = await page.evaluate(() => {
   const w = window.__EDEN__.getWorld();
   const lumi = w.creatures.find((c) => c.id === 'lumi');

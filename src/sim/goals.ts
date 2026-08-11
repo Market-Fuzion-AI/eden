@@ -1,4 +1,4 @@
-import { NORM, RATES, REL, SETTLER, STRUCT, WORLD } from './config';
+import { NORM, RATES, REL, SETTLER, SOCIAL, STRUCT, WORLD } from './config';
 import { chronicle, daylight01, isNight } from './chronicle';
 import { landmarkAt, placeName } from './landmarks';
 import { remember } from './memory';
@@ -29,13 +29,19 @@ import {
   STRUCTURE_DEFS,
   structureById,
 } from './structures';
-import {
-  assessAccess,
-  evaluateClaim,
-  peekAttitude,
-  type AccessAssessment,
-} from './norms';
+import { assessAccess, peekAttitude, type AccessAssessment } from './norms';
 import { noticeUse, noteSharedUse, resolveAsk, restUrgency } from './normEvents';
+import {
+  BELIEF_LABEL,
+  chooseTransmission,
+  customFor,
+  customStatement,
+  effectiveConfidence,
+  peekBelief,
+  predictClaim,
+  pruneSocialKnowledge,
+  transmitBelief,
+} from './socialKnowledge';
 import { heightAt, isWater } from './terrain';
 import type {
   Goal,
@@ -59,12 +65,40 @@ import { clamp100, dist, lerpAngle, angleTo, v2, type V2 } from './vec';
 // Perception & knowledge
 // ---------------------------------------------------------------------------
 
+/** How long a destination stays written off after a failed approach. */
+const UNREACHABLE_COOLDOWN = 240;
+const MAX_UNREACHABLE = 8;
+
+/** Note that walking at this target did not work, so the next plan differs. */
+export function markUnreachable(s: Settler, targetId: string | undefined, t: number): void {
+  if (!targetId) return;
+  s.unreachable[targetId] = t + UNREACHABLE_COOLDOWN;
+  const keys = Object.keys(s.unreachable);
+  if (keys.length > MAX_UNREACHABLE) {
+    // Drop whichever entry expires soonest — bounded, like every other store.
+    keys.sort((a, b) => s.unreachable[a] - s.unreachable[b]);
+    for (const k of keys.slice(0, keys.length - MAX_UNREACHABLE)) delete s.unreachable[k];
+  }
+}
+
+/** True while a settler has given up on getting to this target for now. */
+export function isUnreachable(world: World, s: Settler, targetId: string): boolean {
+  const until = s.unreachable[targetId];
+  if (until === undefined) return false;
+  if (world.timeSec >= until) {
+    delete s.unreachable[targetId];
+    return false;
+  }
+  return true;
+}
+
 function nearestKnownFood(world: World, s: Settler): { node: ResourceNode; d: number } | null {
   let best: ResourceNode | null = null;
   let bestD = Infinity;
   for (const id of s.knownResourceIds) {
     const node = world.resources.find((r) => r.id === id);
     if (!node || node.type !== 'glowberry' || node.quantity < 1) continue;
+    if (isUnreachable(world, s, node.id)) continue;
     const d = dist(s.pos, node.pos);
     if (d < bestD) {
       best = node;
@@ -80,6 +114,7 @@ function nearestKnownRest(world: World, s: Settler): { node: ResourceNode; d: nu
   for (const id of s.knownResourceIds) {
     const node = world.resources.find((r) => r.id === id);
     if (!node || node.type !== 'restspot') continue;
+    if (isUnreachable(world, s, node.id)) continue;
     const d = dist(s.pos, node.pos);
     if (d < bestD) {
       best = node;
@@ -148,6 +183,7 @@ export function nearestKnownMaterial(
   for (const id of s.knownResourceIds) {
     const node = world.resources.find((r) => r.id === id);
     if (!node || node.type !== type || node.quantity < 1) continue;
+    if (isUnreachable(world, s, node.id)) continue;
     const d = dist(s.pos, node.pos);
     if (d < bestD) {
       best = node;
@@ -363,6 +399,7 @@ export function bestRestShelter(world: World, s: Settler): ShelterChoice | null 
   const urgency = restUrgency(s);
   let best: ShelterChoice | null = null;
   for (const st of knownCompleteStructures(world, s, 'shelter')) {
+    if (isUnreachable(world, s, st.id)) continue;
     const d = dist(s.pos, st.pos);
     const access = assessAccess(world, s, st, urgency);
     // A shelter already full of sleepers is no use to anyone else.
@@ -585,13 +622,26 @@ export function settlerThink(world: World, s: Settler): void {
     s.nextThinkAt = t + 0.5;
     return;
   }
+  // Nobody starves out of politeness. Holding a settler in an exchange with no
+  // re-plan is right for ordinary company, but hunger keeps climbing while they
+  // talk, and back-to-back conversations let it reach 100: a settler was
+  // observed talking through two in-world days until their health fell to 13.
+  // A genuine emergency breaks off the conversation.
+  const desperate = s.hunger > 92 || s.health < 45;
   if (
     (s.goal.type === 'socialize' || s.goal.type === 'seek-friend' || s.goal.type === 'confront' || s.goal.type === 'share-food') &&
     s.goal.phase === 'act' &&
     s.goal.timer > 0
   ) {
-    s.nextThinkAt = t + 0.5;
-    return;
+    if (!desperate) {
+      s.nextThinkAt = t + 0.5;
+      return;
+    }
+    // Break it off cleanly so the renderer stops drawing an exchange that is
+    // no longer happening, and the other party resolves it on their own timer.
+    s.socialTimer = 0;
+    s.confronting = false;
+    s.goal.phase = 'done';
   }
 
   // Generosity is opportunistic, not planned: if someone right here is much
@@ -623,6 +673,10 @@ export function settlerThink(world: World, s: Settler): void {
   const threatening = nearestAvoided(world, s);
 
   perceiveResources(world, s);
+  // Social knowledge is bounded and perishable: beliefs about places that no
+  // longer exist, and beliefs faded past the point of being worth anything,
+  // are simply forgotten. Nobody accumulates a dossier on their neighbours.
+  pruneSocialKnowledge(world, s);
 
   const food = nearestKnownFood(world, s);
   const candidates = s.socialCooldownUntil > t ? [] : rankSocialCandidates(world, s);
@@ -708,6 +762,17 @@ export function settlerThink(world: World, s: Settler): void {
   for (const o of scores) {
     if (o.goal === s.goal.type && s.goal.phase !== 'done') {
       o.score += s.goal.phase === 'act' ? 24 : 8;
+    }
+  }
+
+  // Starvation is not a competing preference. Raising `eat` alone was not
+  // enough: a very sociable settler with a maxed social need scored company
+  // above it and stood talking until their health collapsed. When someone is
+  // this hungry and knows where food is, everything discretionary gives way.
+  if (s.hunger > 88 && food) {
+    for (const o of scores) {
+      if (o.goal === 'eat' || o.goal === 'avoid') continue;
+      o.score *= 0.35;
     }
   }
 
@@ -994,12 +1059,21 @@ function buildReason(
       const st = structureById(world, s.goal.structureId);
       const claimant = world.settlers.find((o) => o.id === s.goal.targetId);
       if (st && claimant) {
-        const theirClaim = evaluateClaim(world, claimant, st);
         lines.push(`Wants to use the shelter at ${st.place}`);
-        lines.push(`${claimant.name} holds it: ${theirClaim.label}`);
+        // What they *think* the claimant expects — never what the claimant
+        // actually expects. The difference is the whole of v0.6.
+        const prediction = predictClaim(world, s, claimant, st);
+        lines.push(...prediction.why);
         const rel = peekRelationship(s, claimant.id);
         if (rel) lines.push(`Trust with ${claimant.name} ${Math.round(rel.trust)}`);
-        lines.push(`Sociable enough to ask rather than simply walk in`);
+        // Convention and conviction, side by side, whether or not they agree.
+        const habit = customFor(world, s, 'ask-first', st.pos);
+        if (habit) lines.push(`Around here, ${customStatement(habit.custom)}`);
+        const ownership = (s.values.individualism + s.values.territoriality) / 2;
+        lines.push(
+          `Own view of such places: ${ownership > 0.58 ? 'private' : ownership > 0.42 ? 'shared' : 'common'} (${Math.round(ownership * 100)})`,
+        );
+        lines.push('Sociable enough to ask rather than simply walk in');
       } else {
         lines.push('Asking about a shelter');
       }
@@ -1203,6 +1277,12 @@ function completeSocial(world: World, a: Settler, b: Settler, sought: boolean): 
     });
   }
 
+  // Some conversations carry news about other people. Most do not — this is a
+  // valley of individuals, not a rumour mill, and the gates below (a real
+  // acquaintance, a long personal cooldown, something actually worth saying)
+  // keep social information rare enough to stay meaningful.
+  if (!negative) maybeShareExpectation(world, a, b);
+
   const detail = {
     actorIds: [a.id, b.id],
     actorNames: [a.name, b.name],
@@ -1233,6 +1313,83 @@ function completeSocial(world: World, a: Settler, b: Settler, sought: boolean): 
   } else if (firstMeeting) {
     const cross = a.speciesId !== b.speciesId ? ' across the species divide' : '';
     chronicle(world, 'social', `${a.name} and ${b.name} shared a friendly conversation${cross}.`, detail);
+  }
+}
+
+/**
+ * One party to a conversation may pass on something they know about a third
+ * person's expectations.
+ *
+ * Every gate here exists to stop social knowledge propagating like a broadcast:
+ * only between people who actually know each other, at most once per speaker
+ * per long cooldown, at most one item per conversation, and never something the
+ * listener already knows better. Provenance and a confidence penalty travel
+ * with it, so a claim three people removed from the event arrives visibly
+ * weaker than one witnessed first-hand.
+ */
+function maybeShareExpectation(world: World, a: Settler, b: Settler): void {
+  const t = world.timeSec;
+  for (const [speaker, listener] of [
+    [a, b],
+    [b, a],
+  ] as const) {
+    if (t - speaker.lastNormTalkAt < SOCIAL.talkCooldown) continue;
+    const rel = peekRelationship(listener, speaker.id);
+    if ((rel?.familiarity ?? 0) < SOCIAL.talkMinFamiliarity) continue;
+    // Talkative people talk; reticent ones keep other people's business to themselves.
+    if (!world.rng.chance(SOCIAL.talkChance * (0.4 + speaker.personality.sociability))) continue;
+
+    const belief = chooseTransmission(world, speaker, listener);
+    if (!belief) continue;
+    const hadBefore = peekBelief(listener, belief.aboutId, belief.structureId);
+    const result = transmitBelief(world, speaker, listener, belief);
+    if (!result) continue;
+
+    remember(speaker, {
+      type: 'told_expectation',
+      subjectId: belief.aboutId,
+      subjectName: belief.aboutName,
+      t,
+      emotionalWeight: 0.15,
+    });
+    remember(listener, {
+      type: 'heard_expectation',
+      subjectId: belief.aboutId,
+      subjectName: belief.aboutName,
+      t,
+      emotionalWeight: 0.2,
+    });
+
+    // Only genuinely new word about someone holding a place to themselves is
+    // worth a Chronicle line. Confirmations and corrections happen constantly
+    // and would drown everything else.
+    if (!hadBefore && belief.kind === 'personal') {
+      const st = structureById(world, belief.structureId);
+      chronicle(
+        world,
+        'social',
+        `${speaker.name} told ${listener.name} that ${belief.aboutName} keeps ${st ? `the ${STRUCTURE_DEFS[st.type].name.toLowerCase()} at ${st.place}` : 'a place'} to themselves.`,
+        {
+          actorIds: [speaker.id, listener.id, belief.aboutId],
+          actorNames: [speaker.name, listener.name, belief.aboutName],
+          pos: st ? { ...st.pos } : { ...speaker.pos },
+          place: st?.place ?? placeName(speaker.pos),
+          structureId: belief.structureId,
+          cause: [
+            `${speaker.name} ${belief.depth === 0 ? 'saw it happen' : 'had been told about it'}`,
+            `${Math.round(effectiveConfidence(world, belief) * 100)}% sure of it themselves`,
+            `${listener.name} knew nothing about it`,
+          ],
+          effects: [
+            `${listener.name} now believes ${belief.aboutName} ${BELIEF_LABEL[belief.kind]}`,
+            `Second-hand — ${Math.round(effectiveConfidence(world, result.belief) * 100)}% confidence`,
+            'They may act on it without ever having seen it',
+          ],
+        },
+      );
+    }
+    // One item of news per conversation, in one direction only.
+    return;
   }
 }
 
@@ -1741,6 +1898,10 @@ export function settlerExecute(world: World, s: Settler, dt: number): void {
         g.lastDist = d;
         g.lastProgressAt = t;
       } else if (t - (g.lastProgressAt ?? t) > STRUCT.stuckTimeout) {
+        // Abandoning is not enough on its own: the next think would pick the
+        // same unreachable destination and the settler would stand there until
+        // something killed them. Remember the failure and look elsewhere.
+        markUnreachable(s, g.targetId ?? g.structureId, t);
         g.phase = 'done';
         return;
       }
@@ -1940,12 +2101,20 @@ export function settlerExecute(world: World, s: Settler, dt: number): void {
         holdConversation(world, s, other, dt);
         g.timer -= dt;
         if (g.timer <= 0) {
-          // Only one side applies the effects, so the pair resolves exactly once.
-          if (s.id < other.id || other.goal.type !== 'socialize') {
+          // Exactly one resolution per exchange.
+          //
+          // The pairing test must include the target, not just the goal type:
+          // if the other party is mid-conversation with somebody *else*, they
+          // will never resolve this one, and deferring to them means the
+          // exchange evaporates with no effects at all. A settler was observed
+          // starving to death while restarting the same unresolved
+          // conversation, social need pinned at 100, for two in-world days.
+          const paired = other.goal.type === 'socialize' && other.goal.targetId === s.id;
+          if (!paired || s.id < other.id) {
             completeSocial(world, s, other, g.type === 'seek-friend');
           }
           g.phase = 'done';
-          if (other.goal.type === 'socialize' && other.goal.targetId === s.id) other.goal.phase = 'done';
+          if (paired) other.goal.phase = 'done';
         }
       }
       break;

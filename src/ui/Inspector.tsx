@@ -1,4 +1,10 @@
-import { inspect, structureExpectationsOf, type InspectorBar } from '../sim/inspect';
+import {
+  inspect,
+  localExpectationsOf,
+  socialKnowledgeOf,
+  structureExpectationsOf,
+  type InspectorBar,
+} from '../sim/inspect';
 import { useUI } from '../state/store';
 
 function Bar({ bar }: { bar: InspectorBar }) {
@@ -32,6 +38,8 @@ export function Inspector() {
 
   const data = inspect(selectedId);
   const expectations = structureExpectationsOf(selectedId);
+  const knowledge = socialKnowledgeOf(selectedId);
+  const local = localExpectationsOf(selectedId);
   if (!data) {
     return (
       <div className="creator-right panel empty-inspector">
@@ -146,6 +154,69 @@ export function Inspector() {
                   </div>
                 ))}
                 {e.permissionNote && <div className="why-line dim">{e.permissionNote}</div>}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      {knowledge.length > 0 && (
+        <>
+          {/* Everything in this block is what one person *thinks*. The heading
+              names them on purpose: none of it is a fact about the world, and
+              some of it is out of date or was never right. */}
+          <div className="section-title">WHAT {data.name.toUpperCase()} BELIEVES OTHERS EXPECT</div>
+          <div className="belief-disclaimer">
+            {data.name}&rsquo;s own picture of other people — not the truth of the matter.
+          </div>
+          {knowledge.map((k, i) => (
+            <div key={i} className="belief-block">
+              <button className="belief-head" onClick={() => selectStructure(k.structureId)}>
+                <span className="rel-name">{k.belief}</span>
+                <span className="rel-chevron">›</span>
+              </button>
+              <div className="belief-meta">
+                <span className={`belief-kind claim-${k.kind}`}>{k.structureName} · {k.place}</span>
+                <span className="belief-conf">
+                  <span className="bar belief-bar">
+                    <span className="bar-fill tone-trust" style={{ width: `${k.confidence}%` }} />
+                  </span>
+                  {k.confidence}% sure
+                </span>
+              </div>
+              <div className="belief-source">
+                {k.secondHand ? `↝ ${k.provenance}` : `👁 ${k.provenance}`}
+                {k.confirmations > 0 && ` · confirmed ${k.confirmations}×`}
+                {` · last seen ${k.confirmedAgo}`}
+                {k.stale && <span className="belief-stale"> · may be out of date</span>}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      {local.length > 0 && (
+        <>
+          <div className="section-title">LOCAL EXPECTATIONS</div>
+          <div className="belief-disclaimer">
+            Generalizations {data.name} has drawn personally. Others may have drawn different ones.
+          </div>
+          {local.map((c, i) => (
+            <div key={i} className="custom-block">
+              <div className="custom-statement">{c.statement}</div>
+              <div className="belief-meta">
+                <span className="belief-conf">
+                  <span className="bar belief-bar">
+                    <span className="bar-fill tone-accent" style={{ width: `${c.confidence}%` }} />
+                  </span>
+                  {c.confidence > 0 ? `${c.confidence}% sure` : 'not yet a pattern'}
+                </span>
+                <span className="custom-evidence">
+                  {c.supporting} for · {c.contradicting} against · {c.observations} seen
+                </span>
+              </div>
+              <div className="belief-source">
+                Defers to local habit: {c.conformity}/100 · first noticed {c.heldFor}
               </div>
             </div>
           ))}

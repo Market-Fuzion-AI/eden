@@ -96,7 +96,11 @@ export interface MemoryEntry {
     | 'refused_permission'
     | 'was_refused'
     | 'expectation_violated'
-    | 'used_claimed_structure';
+    | 'used_claimed_structure'
+    | 'learned_expectation'
+    | 'told_expectation'
+    | 'heard_expectation'
+    | 'surprised_by_reaction';
   subjectId?: EntityId;
   subjectName?: string;
   place?: string;
@@ -157,9 +161,88 @@ export interface Values {
   individualism: number;
   /** Preference for exclusive personal space. 0..1 */
   territoriality: number;
+  /**
+   * How much weight this settler gives to what people around here seem to
+   * expect, as against their own reading of a situation. 0..1
+   *
+   * Low conformity is *not* rebelliousness and not antisociality: an
+   * independent settler simply trusts their own judgement over local habit.
+   * They can still be generous, sociable and well-liked.
+   */
+  conformity: number;
 }
 
 export type ClaimKind = 'none' | 'public' | 'shared' | 'personal';
+
+// ---------------------------------------------------------------------------
+// Second-order social knowledge
+// ---------------------------------------------------------------------------
+
+/**
+ * How a settler came by a belief about someone else's expectation. Provenance
+ * is never discarded — it is what makes a belief arguable rather than a fact.
+ */
+export type BeliefSource =
+  | 'told-by-them' // the person said so, or answered your request themselves
+  | 'granted' // watched them give someone leave
+  | 'refused' // watched them turn someone away
+  | 'objected' // watched them take exception to a use
+  | 'tolerated' // watched someone use it in front of them and nothing happened
+  | 'heard-from'; // a third party passed it on
+
+/**
+ * "I believe X expects Y about structure Z."
+ *
+ * Held on the believer. There is deliberately no path from here to the truth:
+ * the belief can be stale, second-hand, or simply mistaken, and the simulation
+ * never reconciles it against what X actually thinks.
+ */
+export interface SocialBelief {
+  /** Whose expectation this is a belief *about*. */
+  aboutId: EntityId;
+  aboutName: string;
+  structureId: EntityId;
+  /** What they are believed to expect. */
+  kind: ClaimKind;
+  source: BeliefSource;
+  /** Stored confidence, 0..1. Effective confidence also decays with staleness. */
+  confidence: number;
+  learnedAt: number;
+  lastConfirmedAt: number;
+  /** 0 = first-hand, 1 = told by a witness, 2 = told by someone who was told. */
+  depth: number;
+  /** Who passed it on, when depth > 0. */
+  viaId?: EntityId;
+  viaName?: string;
+  /** How many times fresh evidence has agreed with it. */
+  confirmations: number;
+}
+
+/** The generalizations a settler is capable of forming. Deliberately few. */
+export type CustomTopic = 'ask-first' | 'shelters-shared';
+
+/**
+ * One settler's private generalization about a place: "people around Landing
+ * Meadow usually ask before using someone's shelter."
+ *
+ * This is an *opinion about a pattern*, stored on the individual who formed it.
+ * Two settlers standing in the same clearing may hold opposite generalizations
+ * and the world does not arbitrate. There is no settlement-level equivalent of
+ * this record and there must never be one.
+ */
+export interface ProtoCustom {
+  topic: CustomTopic;
+  /** The landmark this generalization is scoped to. */
+  place: string;
+  pos: V2;
+  /** Time-decayed evidence for and against. */
+  supporting: number;
+  contradicting: number;
+  /** Distinct observations behind it — a pattern needs more than one event. */
+  observations: number;
+  firstAt: number;
+  lastAt: number;
+}
 
 /**
  * One settler's evolving stance toward one structure.
@@ -216,6 +299,12 @@ export interface Settler extends AgentCommon {
   values: Values;
   /** Stances toward structures, keyed by structure id. Bounded. */
   structureAttitudes: Record<EntityId, StructureAttitude>;
+  /** What this settler believes *other people* expect. Imperfect. Bounded. */
+  socialBeliefs: SocialBelief[];
+  /** Generalizations they have drawn about places. Bounded. */
+  protoCustoms: ProtoCustom[];
+  /** Last time they passed on something about someone else. */
+  lastNormTalkAt: number;
   needs: { social: number; curiosity: number; safety: number };
   relationships: Record<EntityId, Relationship>;
   knownResourceIds: EntityId[];
@@ -230,6 +319,14 @@ export interface Settler extends AgentCommon {
   confrontCooldownUntil: number;
   shareCooldownUntil: number;
   projectCooldownUntil: number;
+  /**
+   * Targets this settler walked at and could not reach, and the sim time until
+   * which they will look elsewhere instead. Keyed by target id. Bounded.
+   *
+   * Without this a settler wedged against geometry re-selects the same
+   * unreachable destination every think and can starve within sight of food.
+   */
+  unreachable: Record<EntityId, number>;
   /** Conceptual knowledge carried from the homeworld (future tech system). */
   knowledge: string[];
   socialCooldownUntil: number;
@@ -409,6 +506,20 @@ export interface ChronicleDetail {
   effects?: string[];
 }
 
+/**
+ * A norm event Emerson personally saw happen. ARI may only speak about what is
+ * in this list — he is a participant in the valley, not an observer of its
+ * internals.
+ */
+export interface WitnessedNorm {
+  structureId: EntityId;
+  aboutId: EntityId;
+  aboutName: string;
+  kind: ClaimKind;
+  text: string;
+  t: number;
+}
+
 export interface PlayerState {
   id: 'emerson';
   name: 'Emerson';
@@ -432,6 +543,8 @@ export interface PlayerState {
   respawnTimer: number;
   /** Sim time of the last fast approach — used by wildlife startle checks. */
   lastSprintAt: number;
+  /** Norm events Emerson was actually present for. Bounded. */
+  witnessed: WitnessedNorm[];
 }
 
 export type Weather = 'clear' | 'mist';

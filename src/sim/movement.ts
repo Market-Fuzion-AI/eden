@@ -66,8 +66,9 @@ export function stepToward(world: World, agent: AgentCommon, target: V2, dt: num
   if (inWater && !opts.aquatic) speed *= 0.45;
   if (d < 2.5) speed *= Math.max(0.35, d / 2.5); // arrival slowdown
 
-  let nx = agent.pos.x + Math.sin(agent.heading) * speed * dt;
-  let nz = agent.pos.z + Math.cos(agent.heading) * speed * dt;
+  const stepLen = speed * dt;
+  let nx = agent.pos.x + Math.sin(agent.heading) * stepLen;
+  let nz = agent.pos.z + Math.cos(agent.heading) * stepLen;
 
   // Obstacle push-out (trees, boulders).
   for (const o of nearbyObstacles(world, agent.pos)) {
@@ -79,6 +80,31 @@ export function stepToward(world: World, agent: AgentCommon, target: V2, dt: num
       const push = (min - od) / od;
       nx += ox * push;
       nz += oz * push;
+    }
+  }
+
+  // Slide rather than press.
+  //
+  // Push-out alone has a fixed point: an agent standing in a pocket of
+  // overlapping boulders, heading into them, has its whole step cancelled and
+  // stays there forever — reporting full walking speed while never moving. A
+  // settler was observed starving to death twelve metres from a stocked
+  // glowberry patch this way. When the push has eaten the step, go around the
+  // geometry instead, choosing whichever side makes more headway.
+  if ((nx - agent.pos.x) * Math.sin(agent.heading) + (nz - agent.pos.z) * Math.cos(agent.heading) < stepLen * 0.3) {
+    const obstacles = nearbyObstacles(world, agent.pos);
+    let bestD = Infinity;
+    for (const side of [Math.PI / 2, -Math.PI / 2]) {
+      const a = agent.heading + side;
+      const tx = agent.pos.x + Math.sin(a) * stepLen;
+      const tz = agent.pos.z + Math.cos(a) * stepLen;
+      if (obstacles.some((o) => Math.hypot(tx - o.pos.x, tz - o.pos.z) < o.radius + 0.5)) continue;
+      const d2 = (tx - target.x) ** 2 + (tz - target.z) ** 2;
+      if (d2 < bestD) {
+        bestD = d2;
+        nx = tx;
+        nz = tz;
+      }
     }
   }
 

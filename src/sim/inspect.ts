@@ -1,3 +1,4 @@
+import { SOCIAL } from './config';
 import { formatClock, formatClockShort } from './chronicle';
 import { getEntity, getWorld } from './index';
 import { LANDMARKS, placeName } from './landmarks';
@@ -10,6 +11,14 @@ import {
   type RelationshipState,
 } from './relationships';
 import { claimantsOf, evaluateClaim, peekAttitude } from './norms';
+import {
+  BELIEF_LABEL,
+  customConfidence,
+  customStatement,
+  effectiveConfidence,
+  peekBelief,
+  provenanceOf,
+} from './socialKnowledge';
 import { CREATURE_SPECIES_BY_ID, INTELLIGENT_SPECIES } from './species';
 import { constructionStage, frequentUsers, STAGE_LABEL, STRUCTURE_DEFS } from './structures';
 import type { ClaimKind, IntelligentSpeciesId, Relationship } from './types';
@@ -144,6 +153,163 @@ export function structureExpectationsOf(settlerId: string): StructureExpectation
   }
   const rank: Record<ClaimKind, number> = { personal: 3, shared: 2, public: 1, none: 0 };
   out.sort((a, b) => rank[b.kind] - rank[a.kind] || b.attachment - a.attachment);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Social knowledge (v0.6)
+//
+// Everything below describes the contents of ONE settler's head. The UI that
+// renders it must say whose head, every time: none of it is a fact about the
+// world, and some of it is wrong.
+// ---------------------------------------------------------------------------
+
+/** One belief a settler holds about what somebody else expects. */
+export interface SocialKnowledgeRow {
+  holderId: string;
+  holderName: string;
+  aboutId: string;
+  aboutName: string;
+  structureId: string;
+  structureName: string;
+  place: string;
+  /** What the holder thinks that person expects. */
+  belief: string;
+  kind: ClaimKind;
+  /** 0..100, already eroded by staleness. */
+  confidence: number;
+  provenance: string;
+  secondHand: boolean;
+  viaName: string | null;
+  learnedAgo: string;
+  confirmedAgo: string;
+  confirmations: number;
+  /** True once it has gone long enough unconfirmed to be doubtful. */
+  stale: boolean;
+}
+
+export function socialKnowledgeOf(settlerId: string): SocialKnowledgeRow[] {
+  const world = getWorld();
+  const s = getEntity(settlerId);
+  if (!s || s.kind !== 'settler') return [];
+  const now = world.timeSec;
+  return s.socialBeliefs
+    .map((b) => {
+      const st = world.structures.find((x) => x.id === b.structureId);
+      const confidence = effectiveConfidence(world, b);
+      return {
+        holderId: s.id,
+        holderName: s.name,
+        aboutId: b.aboutId,
+        aboutName: b.aboutName,
+        structureId: b.structureId,
+        structureName: st ? STRUCTURE_DEFS[st.type].name : 'somewhere gone',
+        place: st?.place ?? 'unknown',
+        belief: `${b.aboutName} ${BELIEF_LABEL[b.kind]}`,
+        kind: b.kind,
+        confidence: Math.round(confidence * 100),
+        provenance: provenanceOf(b),
+        secondHand: b.depth > 0,
+        viaName: b.viaName ?? null,
+        learnedAgo: agoText(now, b.learnedAt),
+        confirmedAgo: agoText(now, b.lastConfirmedAt),
+        confirmations: b.confirmations,
+        stale: now - b.lastConfirmedAt > SOCIAL.staleHalfLife * 0.75,
+      };
+    })
+    .sort((a, b) => b.confidence - a.confidence);
+}
+
+/** One generalization a settler has drawn about a place. */
+export interface LocalExpectationRow {
+  holderId: string;
+  holderName: string;
+  place: string;
+  statement: string;
+  /** 0..100. Zero until enough has been seen to call it a pattern. */
+  confidence: number;
+  observations: number;
+  supporting: number;
+  contradicting: number;
+  heldFor: string;
+  /** How much this settler defers to local habit at all, 0..100. */
+  conformity: number;
+}
+
+export function localExpectationsOf(settlerId: string): LocalExpectationRow[] {
+  const world = getWorld();
+  const s = getEntity(settlerId);
+  if (!s || s.kind !== 'settler') return [];
+  return s.protoCustoms
+    .map((c) => ({
+      holderId: s.id,
+      holderName: s.name,
+      place: c.place,
+      statement: `${s.name} believes ${customStatement(c)}`,
+      confidence: Math.round(customConfidence(world, c) * 100),
+      observations: c.observations,
+      supporting: Math.round(c.supporting * 10) / 10,
+      contradicting: Math.round(c.contradicting * 10) / 10,
+      heldFor: agoText(world.timeSec, c.firstAt),
+      conformity: Math.round(s.values.conformity * 100),
+    }))
+    .filter((r) => r.observations > 1)
+    .sort((a, b) => b.confidence - a.confidence);
+}
+
+/**
+ * Side-by-side comparison for one structure: what each involved settler
+ * actually expects, against what the selected settler *thinks* they expect.
+ *
+ * The two columns are deliberately not reconciled. `mismatch` marks a
+ * difference; it does not mark the viewer as wrong, because the panel showing
+ * this is a god view and the settler living it has no such column.
+ */
+export interface PerspectiveRow {
+  id: string;
+  name: string;
+  /** The claim this person genuinely holds, from the v0.5 model. */
+  actualKind: ClaimKind;
+  actualLabel: string;
+  /** What the viewer believes they hold, if they have any view at all. */
+  believedKind: ClaimKind | null;
+  /** Full sentence, naming the believer — for anywhere without a column header. */
+  believedLabel: string;
+  /** Just the belief, for use under a column already headed "X believes". */
+  believedShort: string;
+  confidence: number;
+  provenance: string | null;
+  mismatch: boolean;
+}
+
+export function perspectiveOn(structureId: string, viewerId: string): PerspectiveRow[] {
+  const world = getWorld();
+  const st = world.structures.find((x) => x.id === structureId);
+  const viewer = getEntity(viewerId);
+  if (!st || !viewer || viewer.kind !== 'settler') return [];
+
+  const out: PerspectiveRow[] = [];
+  for (const c of claimantsOf(world, st)) {
+    if (c.settler.id === viewer.id) continue;
+    const belief = peekBelief(viewer, c.settler.id, st.id);
+    const confidence = belief ? effectiveConfidence(world, belief) : 0;
+    out.push({
+      id: c.settler.id,
+      name: c.settler.name,
+      actualKind: c.claim.kind,
+      actualLabel: c.claim.label,
+      believedKind: belief?.kind ?? null,
+      believedLabel: belief
+        ? `${viewer.name} believes ${c.settler.name} ${BELIEF_LABEL[belief.kind]}`
+        : `${viewer.name} does not know what ${c.settler.name} expects`,
+      believedShort: belief
+        ? `${c.settler.name} ${BELIEF_LABEL[belief.kind]}`
+        : `Does not know what ${c.settler.name} expects`,
+      confidence: Math.round(confidence * 100),
+      provenance: belief ? provenanceOf(belief) : null,
+      mismatch: Boolean(belief) && belief!.kind !== c.claim.kind,
+    });
+  }
   return out;
 }
 

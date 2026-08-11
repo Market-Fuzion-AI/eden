@@ -46,6 +46,31 @@ simulation stores all three without deciding between them. They ask each other f
 it or refuse it, notice intrusions or let them pass, and their expectations harden or soften with what
 they live through.
 
+**v0.6** let those expectations travel between people —
+
+> *Private expectation becomes social knowledge becomes informal custom.*
+
+Settlers now hold beliefs about **each other's** expectations: *"I think Sareth treats that shelter as
+hers."* They learn by being there — you only find out what someone expects if you were close enough to
+watch them refuse, grant, object, or visibly let something pass — and occasionally by being told, when
+a conversation happens to turn to somebody else's business. Every belief remembers where it came from,
+how sure its holder is, and how long it has been since anything confirmed it.
+
+None of it is authoritative. There is no `structure.norm`, no settlement consensus, no world-level
+custom, and there never will be. Beliefs are stored on the person who holds them, and the simulation
+never reconciles them against the truth, so a settler can be confidently wrong: about a third of the
+mistakes people hold are the kind that actually change what they do. Knowledge goes stale because
+nobody announces a change of heart. Hearsay arrives visibly weaker than what you saw yourself. And a
+settler who has learned nothing simply assumes everyone feels the way they do — which is how most
+misunderstandings start.
+
+Watch it long enough and individuals begin to generalize: *"people around Landing Meadow usually ask
+before using someone else's shelter."* That takes several sightings, weakens when the evidence turns
+against it, and stays that person's opinion — two settlers in the same clearing can hold opposite ones.
+It is enough to change behaviour at a shelter they have never touched, belonging to someone they know
+nothing about. How much it sways them depends on how much they defer to local habit at all; the
+independent-minded are not rebellious, just unmoved.
+
 ## Running it
 
 ```bash
@@ -85,6 +110,14 @@ node scripts/smoke.mjs   # browser smoke test with screenshots (needs preview/de
   The same panel shows **how each person reads the place**, with the reasoning behind every claim, and
   flags it CONTESTED when they disagree. The left panel tallies each people's shelter expectations —
   descriptive only; it is not law and not culture, just a count of what individuals happen to believe.
+
+  Select a settler for **what they believe others expect** — each belief with how sure they are, where
+  they got it (watched it happen, were told outright, heard it from someone by name), and whether it
+  has gone long enough unconfirmed to be doubtful — and for the **local expectations** they have
+  generalized, with the evidence for and against. On any structure you can pick a person and read it
+  *through their eyes*: what each claimant actually expects on the left, that person's picture of it on
+  the right, with DIFFERS marked where the two part company. Only Creator Mode gets both columns.
+  The settler living in the valley has just the one, and no way of knowing when they are wrong.
 
 Skip ahead at 5× or 20× and drop back to 1×, and the world reports what changed while you were not
 watching — population, new relationships, discoveries, budding events, deaths, conflicts. Every figure
@@ -127,6 +160,9 @@ src/sim/      Pure TypeScript simulation. No Three.js, no React.
               structured relationships (affinity/trust/familiarity/fear with
               recorded history), structures and construction with full
               provenance, agent-relative claims and informal norms,
+              second-order beliefs about what other people expect (with
+              provenance, confidence and decay) and the private
+              generalizations drawn from them,
               wildlife, Lumi, chronicle (with structured
               who/where/why/effects payloads), landmarks, deterministic
               dialogue, temporal summaries, terrain math, seeded RNG,

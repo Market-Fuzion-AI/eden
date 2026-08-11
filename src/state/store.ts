@@ -37,6 +37,12 @@ interface UIState {
   structuresVersion: number;
   /** Structure open in the Creator inspector. */
   selectedStructureId: string | null;
+  /**
+   * Whose eyes the structure panel is read through, if anyone. Selecting a
+   * perspective switches the panel from the record of what people expect to
+   * one person's (possibly wrong) picture of what the others expect.
+   */
+  perspectiveId: string | null;
   ariLine: string | null;
   dialogue: DialogueExchange | null;
   summary: TemporalSummary | null;
@@ -63,6 +69,7 @@ interface UIState {
   bumpResources(): void;
   bumpStructures(): void;
   selectStructure(id: string | null): void;
+  setPerspective(id: string | null): void;
   setAriLine(line: string | null): void;
   openDialogue(d: DialogueExchange): void;
   closeDialogue(): void;
@@ -92,6 +99,7 @@ export const useUI = create<UIState>((set) => ({
   resourcesVersion: 0,
   structuresVersion: 0,
   selectedStructureId: null,
+  perspectiveId: null,
   ariLine: null,
   dialogue: null,
   summary: null,
@@ -120,7 +128,14 @@ export const useUI = create<UIState>((set) => ({
   bumpResources: () => set((s) => ({ resourcesVersion: s.resourcesVersion + 1 })),
   bumpStructures: () => set((s) => ({ structuresVersion: s.structuresVersion + 1 })),
   selectStructure: (selectedStructureId) =>
-    set({ selectedStructureId, selectedId: null, selectedEvent: null, relationshipPair: null }),
+    set({
+      selectedStructureId,
+      selectedId: null,
+      selectedEvent: null,
+      relationshipPair: null,
+      perspectiveId: null,
+    }),
+  setPerspective: (perspectiveId) => set({ perspectiveId }),
   setAriLine: (ariLine) => set({ ariLine }),
   openDialogue: (dialogue) => set({ dialogue }),
   closeDialogue: () => set({ dialogue: null }),

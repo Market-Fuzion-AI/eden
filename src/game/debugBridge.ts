@@ -1,9 +1,12 @@
 import * as THREE from 'three';
 import { getWorld } from '../sim';
+import * as config from '../sim/config';
 import * as creator from '../sim/creator';
 import * as goals from '../sim/goals';
 import * as rel from '../sim/relationships';
 import * as norms from '../sim/norms';
+import * as social from '../sim/socialKnowledge';
+import * as inspect from '../sim/inspect';
 import * as structures from '../sim/structures';
 import { getInteractions, updatePlayer } from '../sim/player';
 import { simTick } from '../sim/simulation';
@@ -56,6 +59,7 @@ export function installDebugBridge(): void {
   (window as unknown as Record<string, unknown>).__EDEN__ = {
     useUI,
     getWorld,
+    config,
     input,
     sim: { getInteractions },
     creator,
@@ -63,6 +67,8 @@ export function installDebugBridge(): void {
     rel,
     structures,
     norms,
+    social,
+    inspect,
     perf,
     terrainHash,
     fogDensity: () => activeFog?.density ?? -1,

@@ -111,8 +111,15 @@ function makeSettler(
     values: {
       individualism: clamp01(INTELLIGENT_SPECIES[speciesId].valueBias.individualism + (rng.next() - 0.5) * 0.8),
       territoriality: clamp01(INTELLIGENT_SPECIES[speciesId].valueBias.territoriality + (rng.next() - 0.5) * 0.8),
+      // How readily they defer to local habit. Spread across the whole range
+      // and independent of everything else: an independent-minded settler is
+      // not thereby unfriendly, aggressive or contrarian.
+      conformity: clamp01(0.5 + (rng.next() - 0.5) * 0.9),
     },
     structureAttitudes: {},
+    socialBeliefs: [],
+    protoCustoms: [],
+    lastNormTalkAt: -9999,
     personality: {
       curiosity: trait(bias.curiosity),
       sociability: trait(bias.sociability),
@@ -131,6 +138,7 @@ function makeSettler(
     confrontCooldownUntil: 0,
     shareCooldownUntil: 0,
     projectCooldownUntil: 0,
+    unreachable: {},
     knowledge,
     socialCooldownUntil: 0,
     talkingUntil: 0,
@@ -309,6 +317,7 @@ export function createWorld(seed: number): World {
     dead: false,
     respawnTimer: 0,
     lastSprintAt: -999,
+    witnessed: [],
   };
 
   const world: World = {

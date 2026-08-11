@@ -6,7 +6,7 @@ import { CREATURE_SPECIES_BY_ID } from './species';
 import { buildSummary, snapshot } from './summary';
 import { createWorld } from './worldgen';
 import { simTick } from './simulation';
-import type { World } from './types';
+import type { GoalType, World } from './types';
 import { dist } from './vec';
 
 /**
@@ -25,12 +25,22 @@ function run(world: World, simSeconds: number): void {
   }
 }
 
-const VALID_GOALS = new Set([
-  'idle', 'eat', 'rest', 'explore', 'socialize', 'wander', 'graze', 'flee',
-  'investigate', 'watch-emerson', 'approach-food', 'follow-emerson', 'attack-player',
-  'talk-emerson', 'seek-friend', 'confront', 'avoid', 'share-food',
-  'gather-wood', 'gather-stone', 'build', 'help-build', 'gather-at-fire',
-]);
+/**
+ * Every goal an agent is allowed to be in.
+ *
+ * Kept as an exhaustive `Record<GoalType, true>` rather than a hand-written
+ * list: a bare Set silently rotted behind the type as milestones added goals,
+ * and only failed years later when a run happened to sample the new one at the
+ * wrong moment. This form makes the compiler reject the omission instead.
+ */
+const VALID_GOAL_MAP: Record<GoalType, true> = {
+  idle: true, eat: true, rest: true, explore: true, socialize: true, wander: true,
+  graze: true, flee: true, investigate: true, 'watch-emerson': true, 'approach-food': true,
+  'follow-emerson': true, 'attack-player': true, 'talk-emerson': true, 'seek-friend': true,
+  confront: true, avoid: true, 'share-food': true, 'gather-wood': true, 'gather-stone': true,
+  build: true, 'help-build': true, 'gather-at-fire': true, 'ask-to-use': true,
+};
+const VALID_GOALS = new Set(Object.keys(VALID_GOAL_MAP));
 
 describe('EDEN simulation', () => {
   it('runs 40 sim-minutes without corrupting state', async () => {

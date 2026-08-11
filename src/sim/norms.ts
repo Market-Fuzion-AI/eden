@@ -1,5 +1,11 @@
-import { NORM } from './config';
+import { NORM, SOCIAL } from './config';
 import { peekRelationship, relationshipState } from './relationships';
+import {
+  believedBlocker,
+  customFor,
+  customStatement,
+  type BelievedBlocker,
+} from './socialKnowledge';
 import type {
   ClaimKind,
   EntityId,
@@ -208,6 +214,34 @@ export function evaluateClaim(world: World, s: Settler, structure: Structure): C
     }
   }
 
+  // --- what they think is done around here -------------------------------
+  // A generalization the settler formed themselves, weighted by how much they
+  // defer to local habit at all. This is where convention and conviction can
+  // pull in opposite directions on the same structure — both are recorded, and
+  // neither is authoritative.
+  const shared = customFor(world, s, 'shelters-shared', structure.pos);
+  if (shared) {
+    const pull = shared.confidence * 0.3 * s.values.conformity;
+    if (pull > 0.01) {
+      exclusivity -= pull;
+      factors.push({
+        label: `Around here, ${customStatement(shared.custom)}`,
+        value: -Math.round(pull * 100),
+      });
+    }
+  }
+  const askHabit = customFor(world, s, 'ask-first', structure.pos);
+  if (askHabit) {
+    const pull = askHabit.confidence * 0.22 * s.values.conformity;
+    if (pull > 0.01) {
+      exclusivity += pull;
+      factors.push({
+        label: `Around here, ${customStatement(askHabit.custom)}`,
+        value: Math.round(pull * 100),
+      });
+    }
+  }
+
   // A fire everybody uses becomes everybody's.
   const distinctUsers = structure.usage.length;
   if (structure.type === 'campfire' && distinctUsers >= NORM.publicUserThreshold) {
@@ -288,16 +322,24 @@ export interface AccessAssessment {
   modifier: number;
   /** Named reasons, surfaced in the goal WHY. */
   reasons: string[];
-  /** Whoever would consider this an intrusion, if anyone. */
-  blocker: Claimant | null;
+  /** Whoever they *believe* would consider this an intrusion, if anyone. */
+  blocker: BelievedBlocker | null;
   /** True when asking first is the sensible move. */
   shouldAsk: boolean;
 }
 
 /**
  * How comfortable is `s` about using this structure right now?
- * Never a hard prohibition: urgency, trust and permission all trade against
- * someone else's expectation, and a desperate settler may simply walk in.
+ *
+ * v0.6 rewires this to run on *belief*. It no longer reads what other settlers
+ * actually expect — that would be telepathy, and it made every settler equally
+ * well-informed. The discouragement now scales with how sure `s` is, so a
+ * settler who watched Sareth turn someone away last night treats the place very
+ * differently from one who has heard a vague rumour, who in turn behaves
+ * differently from a newcomer who knows nothing at all.
+ *
+ * Never a hard prohibition: urgency, trust and permission all trade against a
+ * believed expectation, and a desperate settler may simply walk in.
  */
 export function assessAccess(world: World, s: Settler, structure: Structure, urgency: number): AccessAssessment {
   const reasons: string[] = [];
@@ -314,9 +356,10 @@ export function assessAccess(world: World, s: Settler, structure: Structure, urg
     reasons.push('No personal claim');
   }
 
-  const blocker = strongestOtherClaimant(world, s, structure);
+  const blocker = believedBlocker(world, s, structure);
   let shouldAsk = false;
   if (blocker) {
+    const { prediction } = blocker;
     const rel = peekRelationship(s, blocker.settler.id);
     const permitted = hasPermission(s, structure, blocker.settler.id);
     const refused = wasRefused(s, structure, blocker.settler.id);
@@ -325,9 +368,21 @@ export function assessAccess(world: World, s: Settler, structure: Structure, urg
       modifier += 16;
       reasons.push(`${blocker.settler.name} has already allowed this +16`);
     } else {
-      const weight = Math.round(blocker.claim.attachment * NORM.blockerWeight);
-      modifier -= weight;
-      reasons.push(`${blocker.settler.name} strongly claims this shelter −${weight}`);
+      // The expected cost of intruding, discounted by how sure they are.
+      const severity = prediction.kind === 'personal' ? 1 : 0.35;
+      const weight = Math.round(SOCIAL.beliefWeight * severity * prediction.confidence);
+      if (weight > 0) {
+        modifier -= weight;
+        reasons.push(
+          prediction.kind === 'personal'
+            ? `Expects ${blocker.settler.name} to mind −${weight}`
+            : `${blocker.settler.name} may have a stake in it −${weight}`,
+        );
+      }
+      // The provenance of that expectation, verbatim.
+      reasons.push(...prediction.why);
+      reasons.push(blocker.visibleTie);
+
       if (refused) {
         modifier -= 22;
         reasons.push(`${blocker.settler.name} has refused before −22`);
@@ -349,12 +404,30 @@ export function assessAccess(world: World, s: Settler, structure: Structure, urg
           reasons.push('Would not set foot in it −30');
         }
       }
-      // Asking is worthwhile when they are sociable enough and not desperate.
+
+      // Asking is the hedge for someone who suspects they might be intruding.
+      // Note it does *not* require certainty: an uncertain settler who holds a
+      // local "people ask first" habit is exactly the one who asks.
       shouldAsk =
         !refused &&
-        blocker.claim.kind === 'personal' &&
+        prediction.kind === 'personal' &&
+        prediction.confidence >= SOCIAL.askConfidenceFloor &&
         s.personality.sociability + s.personality.empathy > 0.7 &&
         urgency < NORM.desperationUrgency;
+    }
+  } else {
+    reasons.push('No reason to think anyone would mind');
+  }
+
+  // A held generalization colours the decision even when a specific belief
+  // decided it — this is where local habit and private conviction can pull in
+  // opposite directions, and both are shown.
+  const habit = customFor(world, s, 'ask-first', structure.pos);
+  if (habit && blocker) {
+    const pull = Math.round(habit.confidence * 16 * s.values.conformity);
+    if (pull > 0) {
+      modifier -= pull;
+      reasons.push(`Locally, ${customStatement(habit.custom)} −${pull}`);
     }
   }
 
