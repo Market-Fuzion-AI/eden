@@ -2,6 +2,7 @@ import { DAY_SEC } from './config';
 import { ariTick } from './ari';
 import { chronicle, clockOf } from './chronicle';
 import { settlerExecute, settlerNeedsTick, settlerThink } from './goals';
+import { separateAgents } from './movement';
 import { tickOfferedFood } from './player';
 import { creatureExecute, creatureNeedsTick, creatureThink } from './wildlife';
 import type { World } from './types';
@@ -38,6 +39,9 @@ export function simTick(world: World, dt: number): void {
     }
     creatureExecute(world, c, dt);
   }
+
+  // Resolve residual body overlap after everyone has moved.
+  separateAgents(world, dt);
 
   // ARI runs at ~2 Hz of sim time.
   const lastAri = (world.flags.lastAriTick as number) ?? 0;

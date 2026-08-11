@@ -3,6 +3,7 @@ import { Agents } from './Agents';
 import { CampVisuals } from './CampVisuals';
 import { CreatorRig } from './CreatorRig';
 import { EdenEnvironment } from './Environment';
+import { MistLayer } from './MistLayer';
 import { PlayerRig } from './PlayerRig';
 import { ResourceNodes } from './ResourceNodes';
 import { Terrain } from './Terrain';
@@ -19,6 +20,7 @@ export function Scene() {
       <Vegetation />
       <CampVisuals />
       <ResourceNodes />
+      <MistLayer />
       <Agents />
       <PlayerRig />
       {mode === 'creator' && <CreatorRig />}

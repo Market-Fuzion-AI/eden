@@ -24,6 +24,8 @@ export function memoryText(m: MemoryEntry): string {
       return `Had a tense exchange with ${m.subjectName ?? 'someone'}`;
     case 'fed_by_emerson':
       return 'Emerson gave me food';
+    case 'talked_to_emerson':
+      return `Spoke with Emerson${m.place ? ` at ${m.place}` : ''}`;
     case 'threatened':
       return `Was threatened by ${m.subjectName ?? 'something'}`;
     case 'explored':

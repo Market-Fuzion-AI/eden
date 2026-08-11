@@ -1,10 +1,11 @@
 import { getWorld } from '../sim';
 import { formatClock } from '../sim/chronicle';
+import { identifyFocus } from '../sim/identify';
 import { getInteractions } from '../sim/player';
-import { CREATURE_SPECIES_BY_ID, INTELLIGENT_SPECIES } from '../sim/species';
-import type { IntelligentSpeciesId } from '../sim/types';
-import { dist } from '../sim/vec';
 import { useUI } from '../state/store';
+import { inputState } from '../game/input';
+import { DialoguePanel } from './DialoguePanel';
+import { SummaryPanel } from './SummaryPanel';
 
 /** Minimal in-world HUD. The 3D world dominates; panels stay out of the way. */
 export function LiveHUD() {
@@ -13,31 +14,17 @@ export function LiveHUD() {
   const paused = useUI((s) => s.paused);
   const speed = useUI((s) => s.speed);
   const locked = useUI((s) => s.pointerLocked);
+  const learnedLook = useUI((s) => s.learnedLook);
   const helpOpen = useUI((s) => s.helpOpen);
+  const dialogue = useUI((s) => s.dialogue);
+  const summary = useUI((s) => s.summary);
 
   const world = getWorld();
   const p = world.player;
   const prompts = getInteractions(world);
 
-  // ARI proximity scan: nearest lifeform in front of Emerson.
-  let scanLabel: string | null = null;
-  let bestD = 9;
-  for (const s of world.settlers) {
-    const d = dist(s.pos, p.pos);
-    if (d < bestD) {
-      bestD = d;
-      scanLabel = `${s.name} — ${INTELLIGENT_SPECIES[s.speciesId as IntelligentSpeciesId].name}`;
-    }
-  }
-  for (const c of world.creatures) {
-    const d = dist(c.pos, p.pos);
-    if (d < bestD) {
-      bestD = d;
-      scanLabel = c.lumi
-        ? `${c.name} — Unknown native lifeform`
-        : `${CREATURE_SPECIES_BY_ID[c.speciesId].name} — Native lifeform`;
-    }
-  }
+  // ARI identifies whatever Emerson is actually looking at.
+  const ident = identifyFocus(world, Math.sin(inputState.camYaw), Math.cos(inputState.camYaw));
 
   return (
     <div className="hud">
@@ -51,8 +38,18 @@ export function LiveHUD() {
 
       <div className="hud-topright">
         <div className="hint-chip">TAB — Creator Mode</div>
-        <div className="hint-chip dim">ESC — Help / Pause</div>
+        <div className="hint-chip dim">ESC — Help</div>
       </div>
+
+      {ident && (
+        <div className={`ident-card ${ident.notable ? 'notable' : ''}`}>
+          <div className="ident-name">{ident.name}</div>
+          <div className="ident-line">{ident.line}</div>
+          <div className="ident-disp">
+            <span className="ident-disp-label">Disposition</span> {ident.disposition}
+          </div>
+        </div>
+      )}
 
       <div className="hud-bottomleft">
         {ariLine && (
@@ -79,14 +76,19 @@ export function LiveHUD() {
       </div>
 
       <div className="hud-bottomcenter">
-        {scanLabel && <div className="scan-label">{scanLabel}</div>}
         {prompts.map((pr) => (
           <div key={pr.key} className="prompt">
             <span className="prompt-key">{pr.key}</span> {pr.label}
           </div>
         ))}
-        {!locked && !helpOpen && !p.dead && <div className="prompt dim">Click to take control</div>}
+        {/* Taught once, then retired for good. */}
+        {!locked && !learnedLook && !helpOpen && !dialogue && !p.dead && (
+          <div className="prompt look-hint">Click to look around · Esc releases the mouse</div>
+        )}
       </div>
+
+      {dialogue && <DialoguePanel exchange={dialogue} />}
+      {summary && <SummaryPanel summary={summary} />}
 
       {p.dead && (
         <div className="death-overlay">

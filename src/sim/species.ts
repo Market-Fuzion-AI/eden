@@ -23,6 +23,10 @@ export interface IntelligentSpeciesDef {
     skin: string[];
     hair: string[];
     outfit: string[];
+    /** Secondary garment colour: boots, shoulder yoke, trim. */
+    outfitAlt: string[];
+    /** Underside / muzzle / plumage highlight colour. */
+    belly: string;
     accent: string;
   };
 }
@@ -37,6 +41,8 @@ export const INTELLIGENT_SPECIES: Record<IntelligentSpeciesId, IntelligentSpecie
       skin: ['#e8b98d', '#c68a5e', '#8a5a3b', '#f0cba6', '#6e4529'],
       hair: ['#2b2118', '#5b3b22', '#111318', '#a56a35', '#8c8f96'],
       outfit: ['#3d6b70', '#5c5346', '#6b4a3d', '#46586b'],
+      outfitAlt: ['#2a4a4e', '#3d3830', '#48312a', '#2f3c4a'],
+      belly: '#e8cdb0',
       accent: '#59d6e6',
     },
   },
@@ -47,8 +53,10 @@ export const INTELLIGENT_SPECIES: Record<IntelligentSpeciesId, IntelligentSpecie
     bias: { curiosity: 0.45, sociability: 0.62, caution: 0.55, aggression: 0.45, empathy: 0.65, initiative: 0.5 },
     palette: {
       skin: ['#5d8a5f', '#4f7d70', '#6f9358', '#54806b', '#638a4e'],
-      hair: ['#26372a', '#1e3330', '#324222'],
+      hair: ['#2e5540', '#1e4a45', '#3d5a28'],
       outfit: ['#7a5a36', '#6d6242', '#8a6a3e'],
+      outfitAlt: ['#543d24', '#4a4230', '#5e472a'],
+      belly: '#cfd9a8',
       accent: '#ffb547',
     },
   },
@@ -61,6 +69,8 @@ export const INTELLIGENT_SPECIES: Record<IntelligentSpeciesId, IntelligentSpecie
       skin: ['#cfd7e8', '#b9c8de', '#dcd2e8', '#c2d8d4', '#e3d9c8'],
       hair: ['#7f5fd0', '#4f7fd0', '#d06fa0', '#50b5b0'],
       outfit: ['#4a4468', '#39586b', '#5c4462'],
+      outfitAlt: ['#2f2c48', '#243b4a', '#3d2c44'],
+      belly: '#f0eadf',
       accent: '#c08bff',
     },
   },
@@ -148,7 +158,9 @@ export const CREATURE_SPECIES: CreatureSpeciesDef[] = [
     traits: { aggression: 0.02, curiosity: 0.9, sociability: 0.6, fearfulness: 0.55, metabolism: 0.5 },
     homeAnchor: 'glade',
     replication: { cap: 3, chancePerThink: 0.004 },
-    palette: { body: '#e8ddf2', belly: '#fff7ea', accent: '#8a6fae', glow: '#6ef0d8' },
+    // Lilac body against a warm cream underside: gentle enough to read as
+    // friendly, saturated enough to hold its shape against sunlit grass.
+    palette: { body: '#a892d8', belly: '#ffeaca', accent: '#4e3480', glow: '#4fe0c4' },
   },
   {
     id: 'thornback',

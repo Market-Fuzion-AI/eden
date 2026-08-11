@@ -7,6 +7,7 @@ import {
   SETTLER_ROSTER,
   type CreatureSpeciesDef,
 } from './species';
+import { landmarkAt, placeName } from './landmarks';
 import { heightAt, isWater, riverX, setTerrainSeed } from './terrain';
 import type {
   Camp,
@@ -39,14 +40,19 @@ export const ANCHORS: Record<string, V2> = {
   caelariCamp: v2(-48, -95),
 };
 
-function directionLabel(p: V2): string {
-  const parts: string[] = [];
-  if (p.z < -35) parts.push('north');
-  else if (p.z > 35) parts.push('south');
-  if (p.x < -35) parts.push(p.z < -35 || p.z > 35 ? 'western' : 'western');
-  else if (p.x > 35) parts.push('eastern');
-  if (parts.length === 0) return 'central';
-  return parts.join('-');
+/** Resource labels read as places in the world, e.g. "the glowberries at River Bend". */
+function resourceLabel(type: ResourceNode['type'], pos: V2): string {
+  const place = placeName(pos);
+  switch (type) {
+    case 'glowberry':
+      return `the glowberries at ${place}`;
+    case 'wood':
+      return `the timber stand at ${place}`;
+    case 'stone':
+      return `the stone seam at ${place}`;
+    default:
+      return `the shelter at ${place}`;
+  }
 }
 
 export function idleGoal(t: number, label = 'Settling in'): Goal {
@@ -111,8 +117,10 @@ function makeSettler(
     needs: { social: rng.range(10, 45), curiosity: rng.range(20, 60), safety: 0 },
     relationships: {},
     knownResourceIds: [],
+    knownLandmarkIds: [],
     knowledge,
     socialCooldownUntil: 0,
+    talkingUntil: 0,
   };
 }
 
@@ -208,14 +216,12 @@ function placeResources(world: World, rng: Rng): void {
     regen: number,
     campOf?: IntelligentSpeciesId,
   ): ResourceNode => {
-    const typeName =
-      type === 'glowberry' ? 'glowberry patch' : type === 'wood' ? 'timber grove' : type === 'stone' ? 'stone outcrop' : 'shelter';
     const node: ResourceNode = {
       id: nextId('res'),
       type,
       label: campOf
-        ? `the ${INTELLIGENT_SPECIES[campOf].name} camp ${type === 'restspot' ? 'shelter' : typeName}`
-        : `the ${directionLabel(pos)} ${typeName}`,
+        ? `the ${INTELLIGENT_SPECIES[campOf].name} camp shelter`
+        : resourceLabel(type, pos),
       pos,
       quantity,
       maxQuantity: quantity,
@@ -232,7 +238,6 @@ function placeResources(world: World, rng: Rng): void {
     for (let i = 0; i < 2; i++) {
       const p = findLand(rng, camp.pos, 22);
       const node = addResource('glowberry', p, rng.int(5, 7), 1 / 55);
-      node.label = `the ${directionLabel(p)} glowberry patch`;
       node.discovered = true;
       // Camp members start knowing their local patches.
       for (const s of world.settlers) {
@@ -312,10 +317,13 @@ export function createWorld(seed: number): World {
     dirty: { entities: false, resources: false },
   };
 
-  // Settlers.
+  // Settlers. Each begins knowing the landmark their people camped in.
   for (const seedRow of SETTLER_ROSTER) {
     const camp = world.camps.find((c) => c.speciesId === seedRow.species)!;
-    world.settlers.push(makeSettler(world, rng, seedRow.name, seedRow.sex, seedRow.species, camp));
+    const settler = makeSettler(world, rng, seedRow.name, seedRow.sex, seedRow.species, camp);
+    const home = landmarkAt(settler.pos);
+    if (home) settler.knownLandmarkIds.push(home.id);
+    world.settlers.push(settler);
   }
 
   scatterFlora(world, rng);

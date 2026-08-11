@@ -1,4 +1,5 @@
-import { WORLD } from './config';
+import { SETTLER, WORLD } from './config';
+import { CREATURE_SPECIES_BY_ID } from './species';
 import { isWater } from './terrain';
 import type { AgentCommon, World } from './types';
 import { angleTo, dist, lerpAngle, type V2 } from './vec';
@@ -135,4 +136,47 @@ export function stepToward(world: World, agent: AgentCommon, target: V2, dt: num
 
 export function stand(agent: AgentCommon): void {
   agent.speed = 0;
+}
+
+/**
+ * Global presence pass: resolve residual overlap between every pair of
+ * agents, including stationary ones. `stepToward` only separates the agent
+ * that is moving, so without this two idle or conversing settlers can end up
+ * occupying the same spot and read as a single glitching body.
+ */
+export function separateAgents(world: World, dt: number): void {
+  const all: AgentCommon[] = [];
+  for (const s of world.settlers) all.push(s);
+  for (const c of world.creatures) {
+    // Aquatic and hovering creatures share no ground space with walkers.
+    const def = CREATURE_SPECIES_BY_ID[c.speciesId];
+    if (def.aquatic || def.hover) continue;
+    all.push(c);
+  }
+
+  const strength = Math.min(1, dt * 12);
+  for (let i = 0; i < all.length; i++) {
+    const a = all[i];
+    const ra = radiusOf(a);
+    for (let j = i + 1; j < all.length; j++) {
+      const b = all[j];
+      const dx = b.pos.x - a.pos.x;
+      const dz = b.pos.z - a.pos.z;
+      const d2 = dx * dx + dz * dz;
+      const min = ra + radiusOf(b);
+      if (d2 >= min * min || d2 < 1e-6) continue;
+      const d = Math.sqrt(d2);
+      const push = ((min - d) / d) * 0.5 * strength;
+      a.pos.x -= dx * push;
+      a.pos.z -= dz * push;
+      b.pos.x += dx * push;
+      b.pos.z += dz * push;
+    }
+  }
+}
+
+function radiusOf(a: AgentCommon): number {
+  if (a.kind === 'settler') return SETTLER.bodyRadius;
+  const def = CREATURE_SPECIES_BY_ID[a.speciesId];
+  return Math.max(0.25, def.scale * 0.35);
 }

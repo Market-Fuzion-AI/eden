@@ -1,4 +1,5 @@
 import { getEntity, getWorld } from './index';
+import { LANDMARKS, placeName } from './landmarks';
 import { memoryText } from './memory';
 import { CREATURE_SPECIES_BY_ID, INTELLIGENT_SPECIES } from './species';
 import type { IntelligentSpeciesId } from './types';
@@ -20,6 +21,8 @@ export interface InspectorData {
   name: string;
   subtitle: string;
   kindLabel: string;
+  /** Where the entity currently is, by landmark name. */
+  place: string;
   vitals: InspectorBar[];
   goal: { label: string; reason: string[] };
   scores: { goal: string; score: number }[];
@@ -54,6 +57,7 @@ export function inspect(id: string): InspectorData | null {
       name: 'Emerson',
       subtitle: 'Human · Player · Male',
       kindLabel: 'PLAYER CHARACTER',
+      place: placeName(p.pos),
       vitals: [
         { label: 'Health', value: p.health, tone: tone(p.health) },
         { label: 'Stamina', value: p.stamina, tone: tone(p.stamina) },
@@ -80,21 +84,29 @@ export function inspect(id: string): InspectorData | null {
     const speciesDef = INTELLIGENT_SPECIES[e.speciesId as IntelligentSpeciesId];
     const rels = Object.entries(e.relationships)
       .map(([otherId, rel]) => {
-        const other = getEntity(otherId);
-        return { name: other?.name ?? 'someone', affinity: Math.round(rel.affinity), interactions: rel.interactions };
+        const name = otherId === 'emerson' ? 'Emerson' : (getEntity(otherId)?.name ?? 'someone');
+        return { name, affinity: Math.round(rel.affinity), interactions: rel.interactions };
       })
       .sort((a, b) => Math.abs(b.affinity) - Math.abs(a.affinity))
       .slice(0, 5);
     const known = e.knownResourceIds
       .map((rid) => world.resources.find((r) => r.id === rid))
       .filter((r) => r && r.type !== 'restspot')
-      .slice(0, 6)
+      .slice(0, 5)
       .map((r) => r!.label);
+    if (e.knownLandmarkIds.length > 0) {
+      const places = e.knownLandmarkIds
+        .map((id) => LANDMARKS.find((l) => l.id === id)?.name)
+        .filter(Boolean)
+        .join(', ');
+      known.unshift(`Has visited: ${places}`);
+    }
     return {
       id,
       name: e.name,
       subtitle: `${speciesDef.name} · ${e.sex === 'female' ? 'Female' : 'Male'} · Adult`,
       kindLabel: 'INTELLIGENT SETTLER',
+      place: placeName(e.pos),
       vitals: [
         { label: 'Health', value: e.health, tone: tone(e.health) },
         { label: 'Energy', value: e.energy, tone: tone(e.energy) },
@@ -128,6 +140,7 @@ export function inspect(id: string): InspectorData | null {
     name: e.name,
     subtitle: `${def.name} · ${e.sex === 'female' ? 'Female' : 'Male'} · ${e.ageStage === 'juvenile' ? 'Juvenile' : 'Adult'}`,
     kindLabel: e.lumi ? 'NATIVE LIFEFORM · UNIQUE INDIVIDUAL' : 'NATIVE LIFEFORM',
+    place: placeName(e.pos),
     vitals: [
       { label: 'Health', value: e.health, tone: tone(e.health) },
       { label: 'Energy', value: e.energy, tone: tone(e.energy) },

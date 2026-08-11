@@ -1,5 +1,6 @@
 import { LUMI, WILDLIFE, WORLD } from './config';
 import { chronicle, daylight01 } from './chronicle';
+import { placeName } from './landmarks';
 import { remember } from './memory';
 import { stand, stepToward } from './movement';
 import { CREATURE_SPECIES_BY_ID } from './species';
@@ -81,20 +82,23 @@ function maybeReplicate(world: World, c: Creature): void {
   child.replicationCooldownUntil = t + WILDLIFE.replicationCooldown * 2;
   world.creatures.push(child);
   world.dirty.entities = true;
-  chronicle(world, 'wildlife', `A ${def.name} budded — a juvenile emerges near ${anchorName(def.homeAnchor)}.`);
-}
-
-function anchorName(key: string): string {
-  switch (key) {
-    case 'meadow': return 'the meadow';
-    case 'forest': return 'the western forest';
-    case 'rocks': return 'the rock fields';
-    case 'rocksSouth': return 'the southern crags';
-    case 'riverbank': return 'the river';
-    case 'river': return 'the river';
-    case 'glade': return 'the glowing glade';
-    default: return 'its home range';
-  }
+  const place = placeName(c.pos);
+  chronicle(world, 'wildlife', `A ${def.name} budded — a juvenile emerges at ${place}.`, {
+    actorIds: [c.id, child.id],
+    actorNames: [def.name, `juvenile ${def.name}`],
+    pos: { ...c.pos },
+    place,
+    cause: [
+      `Parent energy surplus (${Math.round(c.energy + WILDLIFE.replicationEnergyCost)})`,
+      `Hunger low (${Math.round(c.hunger)})`,
+      `Species population ${sameSpecies} of ${def.replication.cap} permitted`,
+    ],
+    effects: [
+      `Parent energy −${WILDLIFE.replicationEnergyCost}`,
+      'A juvenile joins the ecosystem',
+      `Parent cannot bud again for ${Math.round(WILDLIFE.replicationCooldown / 60)} minutes`,
+    ],
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +131,14 @@ function lumiThink(world: World, c: Creature): void {
   // First contact.
   if (dp < 14 && !world.flags.lumiMet) {
     world.flags.lumiMet = true;
-    chronicle(world, 'lumi', 'Emerson discovered a small glowing creature watching him from the glade.');
+    chronicle(world, 'lumi', 'Emerson discovered a small glowing creature watching him from the glade.', {
+      actorIds: ['lumi', 'emerson'],
+      actorNames: ['Lumi', 'Emerson'],
+      pos: { ...c.pos },
+      place: placeName(c.pos),
+      cause: ['Emerson came within 14m', `Her curiosity ${Math.round(c.curiosity)} outweighed her caution`],
+      effects: ['First contact recorded', `Trust begins at ${Math.round(l.trust)} / 100`],
+    });
     world.ariQueue.push('Unknown native organism detected. It does not match any catalogued species.');
   }
 
@@ -366,11 +377,27 @@ export function creatureExecute(world: World, c: Creature, dt: number): void {
             l.fedCount++;
             l.trust = Math.min(100, l.trust + LUMI.feedTrustGain + (l.fedCount === 1 ? LUMI.firstFeedBonus : 0));
             remember(c, { type: 'fed_by_emerson', t, emotionalWeight: 0.8 });
+            const detail = {
+              actorIds: ['lumi', 'emerson'],
+              actorNames: ['Lumi', 'Emerson'],
+              pos: { ...c.pos },
+              place: placeName(c.pos),
+              cause: [
+                `Hunger ${Math.round(c.hunger + 40)} before eating`,
+                'Emerson kept a respectful distance',
+                `Trust was ${Math.round(l.trust - LUMI.feedTrustGain - (l.fedCount === 1 ? LUMI.firstFeedBonus : 0))}`,
+              ],
+              effects: [
+                `Trust → ${Math.round(l.trust)} / 100`,
+                'Hunger −40',
+                'Memory created: Emerson gave me food',
+              ],
+            };
             if (l.fedCount === 1) {
-              chronicle(world, 'lumi', 'Lumi accepted food from Emerson for the first time.');
+              chronicle(world, 'lumi', 'Lumi accepted food from Emerson for the first time.', detail);
               world.ariQueue.push('Interesting. Trust behaviors forming. I suggest not ruining this.');
             } else {
-              chronicle(world, 'lumi', 'Lumi accepted food from Emerson.');
+              chronicle(world, 'lumi', 'Lumi accepted food from Emerson.', detail);
             }
             lumiTrustMilestones(world, c);
           }

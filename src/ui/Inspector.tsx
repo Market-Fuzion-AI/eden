@@ -45,6 +45,7 @@ export function Inspector() {
           <div className="insp-name">{data.name}</div>
           <div className="insp-subtitle">{data.subtitle}</div>
           <div className="insp-kind">{data.kindLabel}</div>
+          <div className="insp-place">◎ {data.place}</div>
         </div>
         <button className="btn close-btn" onClick={() => select(null)}>✕</button>
       </div>

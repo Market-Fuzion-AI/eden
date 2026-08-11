@@ -1,20 +1,30 @@
 /**
- * Browser smoke test: boots EDEN against a running dev/preview server,
- * exercises Live Mode, Creator Mode, the inspector and fast-forward, captures
- * screenshots and fails on any console/page error.
+ * Browser smoke test: boots EDEN against a running dev/preview server and
+ * exercises the v0.2 acceptance path — movement basis, pointer lock, NPC
+ * conversation, mode transitions, Chronicle event inspection, fast-forward
+ * summary, mist readability, terrain stability and entity separation.
  *
  * Usage:
- *   npm run preview &        (or npm run dev)
+ *   npm run preview &
  *   node scripts/smoke.mjs [url]
  */
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 
-const URL = process.argv[2] ?? 'http://localhost:4173/';
+const TARGET_URL = process.argv[2] ?? 'http://127.0.0.1:4173/';
 const SHOT_DIR = new URL('../smoke-shots', import.meta.url).pathname;
 mkdirSync(SHOT_DIR, { recursive: true });
 
 const errors = [];
+const failures = [];
+const check = (name, condition, detail = '') => {
+  if (condition) console.log(`  ✓ ${name}`);
+  else {
+    console.log(`  ✗ ${name} ${detail}`);
+    failures.push(name);
+  }
+};
+
 const browser = await chromium.launch({
   executablePath:
     process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell',
@@ -24,47 +34,283 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 810 } });
 page.on('console', (msg) => msg.type() === 'error' && errors.push('console: ' + msg.text()));
 page.on('pageerror', (err) => errors.push('pageerror: ' + err.message));
 
-await page.goto(URL, { waitUntil: 'networkidle' });
-await page.waitForTimeout(6000);
-await page.screenshot({ path: `${SHOT_DIR}/live.png` });
-
-await page.keyboard.press('Tab');
-await page.waitForTimeout(1200);
-await page.evaluate(() => {
-  const eden = window.__EDEN__;
-  eden.useUI.getState().select('lumi');
-  eden.useUI.getState().setSpeed(20);
-});
+await page.goto(TARGET_URL, { waitUntil: 'networkidle' });
 await page.waitForTimeout(5000);
-await page.screenshot({ path: `${SHOT_DIR}/creator-lumi.png` });
 
-const facts = await page.evaluate(() => {
+// ---------------------------------------------------------------------------
+console.log('\nFIRST RUN / HELP');
+// ---------------------------------------------------------------------------
+const helpVisible = await page.locator('.help').isVisible().catch(() => false);
+check('first-run help card is shown', helpVisible);
+await page.screenshot({ path: `${SHOT_DIR}/00-help.png` });
+if (helpVisible) await page.locator('.help-resume').click();
+await page.waitForTimeout(1500);
+
+// ---------------------------------------------------------------------------
+console.log('\nMOVEMENT BASIS (camera-relative, in the live app)');
+// ---------------------------------------------------------------------------
+const move = await page.evaluate(async () => {
+  const { useUI, getWorld, input } = window.__EDEN__;
+  const world = getWorld();
+  useUI.getState().setPaused(true); // isolate player integration from the world
+  const results = {};
+  const yaws = [0, 1.2, Math.PI, -2.0];
+  for (const yaw of yaws) {
+    input.inputState.camYaw = yaw;
+    // Screen-right basis vector for this yaw.
+    const rx = -Math.cos(yaw);
+    const rz = Math.sin(yaw);
+    const fx = Math.sin(yaw);
+    const fz = Math.cos(yaw);
+    const probe = (code) => {
+      const p = world.player;
+      const x0 = p.pos.x;
+      const z0 = p.pos.z;
+      input.inputState.keys.clear();
+      input.inputState.keys.add(code);
+      for (let i = 0; i < 12; i++) window.__EDEN__.stepPlayer(1 / 60);
+      input.inputState.keys.clear();
+      const dx = p.pos.x - x0;
+      const dz = p.pos.z - z0;
+      const len = Math.hypot(dx, dz) || 1;
+      return { right: (dx * rx + dz * rz) / len, fwd: (dx * fx + dz * fz) / len };
+    };
+    results[yaw.toFixed(2)] = {
+      D: probe('KeyD'),
+      A: probe('KeyA'),
+      W: probe('KeyW'),
+      ArrowRight: probe('ArrowRight'),
+      ArrowUp: probe('ArrowUp'),
+    };
+  }
+  useUI.getState().setPaused(false);
+  return results;
+});
+let dOk = true;
+let aOk = true;
+let wOk = true;
+let arrowOk = true;
+for (const [yaw, r] of Object.entries(move)) {
+  if (r.D.right < 0.9) { dOk = false; console.log(`    yaw ${yaw}: D right-dot ${r.D.right.toFixed(3)}`); }
+  if (r.A.right > -0.9) { aOk = false; console.log(`    yaw ${yaw}: A right-dot ${r.A.right.toFixed(3)}`); }
+  if (r.W.fwd < 0.9) { wOk = false; console.log(`    yaw ${yaw}: W fwd-dot ${r.W.fwd.toFixed(3)}`); }
+  if (r.ArrowRight.right < 0.9 || r.ArrowUp.fwd < 0.9) arrowOk = false;
+}
+check('D moves screen-right at every camera yaw', dOk);
+check('A moves screen-left at every camera yaw', aOk);
+check('W moves forward at every camera yaw', wOk);
+check('arrow keys mirror WASD', arrowOk);
+
+// ---------------------------------------------------------------------------
+console.log('\nNPC CONVERSATION');
+// ---------------------------------------------------------------------------
+const talk = await page.evaluate(async () => {
+  const { getWorld, sim } = window.__EDEN__;
+  const world = getWorld();
+  const target = world.settlers[3];
+  world.player.pos.x = target.pos.x + 1.3;
+  world.player.pos.z = target.pos.z;
+  const prompts = sim.getInteractions(world).map((p) => p.label);
+  return { prompts, name: target.name, id: target.id };
+});
+check('E prompt offers conversation by name', talk.prompts.some((l) => l.startsWith(`Talk to ${talk.name}`)), JSON.stringify(talk.prompts));
+await page.keyboard.press('KeyE');
+await page.waitForTimeout(900);
+const dlgVisible = await page.locator('.dialogue').isVisible().catch(() => false);
+const dlgLines = await page.locator('.dlg-line').count();
+check('conversation panel opens', dlgVisible);
+check('produces 1-3 contextual lines', dlgLines >= 1 && dlgLines <= 3, `got ${dlgLines}`);
+const talkState = await page.evaluate((id) => {
+  const s = window.__EDEN__.getWorld().settlers.find((x) => x.id === id);
+  return { goal: s.goal.type, speed: s.speed, affinity: s.relationships.emerson?.affinity ?? null };
+}, talk.id);
+check('settler halts and faces Emerson', talkState.goal === 'talk-emerson' && talkState.speed === 0, JSON.stringify(talkState));
+check('relationship actually moved', talkState.affinity > 0, `affinity ${talkState.affinity}`);
+await page.screenshot({ path: `${SHOT_DIR}/01-dialogue.png` });
+
+// ---------------------------------------------------------------------------
+console.log('\nAUTONOMOUS CONVERSATION VISIBILITY');
+// ---------------------------------------------------------------------------
+const social = await page.evaluate(async () => {
+  const { getWorld } = window.__EDEN__;
+  const world = getWorld();
+  // Wait (in sim terms) for a spontaneous conversation, then measure it.
+  const angleErr = (a, b) => {
+    let d = (Math.atan2(b.pos.x - a.pos.x, b.pos.z - a.pos.z) - a.heading) % (Math.PI * 2);
+    if (d > Math.PI) d -= Math.PI * 2;
+    if (d < -Math.PI) d += Math.PI * 2;
+    return Math.abs(d);
+  };
+  for (let i = 0; i < 4000; i++) {
+    window.__EDEN__.stepSim(1 / 30);
+    const pair = world.settlers.find((s) => s.goal.type === 'socialize' && s.goal.phase === 'act');
+    if (!pair) continue;
+    const other = world.settlers.find((o) => o.id === pair.goal.targetId);
+    if (!other) continue;
+
+    // Let the exchange settle for ~3 sim-seconds — the pair closes the last
+    // step and turns to face. The conversation runs far longer than this, so
+    // this is squarely what a passing player would actually see.
+    for (let k = 0; k < 90; k++) window.__EDEN__.stepSim(1 / 30);
+    if (pair.goal.phase !== 'act') continue; // ended early; keep looking
+
+    return {
+      found: true,
+      distance: Math.hypot(pair.pos.x - other.pos.x, pair.pos.z - other.pos.z),
+      bothStopped: pair.speed === 0 && other.speed === 0,
+      indicator: pair.socialTimer > 0 && other.socialTimer > 0,
+      facingError: Math.max(angleErr(pair, other), angleErr(other, pair)),
+    };
+  }
+  return { found: false };
+});
+check('a spontaneous conversation occurs', social.found);
+if (social.found) {
+  check('participants hold conversational spacing', social.distance > 0.8 && social.distance < 3.2, `${social.distance?.toFixed(2)}m`);
+  check('participants stop moving', social.bothStopped);
+  check('both show the speech indicator', social.indicator);
+  check('speaker faces their partner', social.facingError < 0.6, `err ${social.facingError?.toFixed(2)} rad`);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\nTERRAIN STABILITY UNDER FAST-FORWARD');
+// ---------------------------------------------------------------------------
+const terrainBefore = await page.evaluate(() => window.__EDEN__.terrainHash());
+const tStart = await page.evaluate(() => window.__EDEN__.getWorld().timeSec);
+await page.evaluate(() => window.__EDEN__.useUI.getState().setSpeed(20));
+
+// Software rendering caps how much sim time a frame budget can deliver, so
+// wait on actual elapsed *sim* time rather than assuming GPU-speed frames.
+const NEEDED_SIM_SEC = 70;
+const deadline = Date.now() + 60000;
+let elapsedSim = 0;
+while (Date.now() < deadline) {
+  await page.waitForTimeout(1000);
+  elapsedSim = (await page.evaluate(() => window.__EDEN__.getWorld().timeSec)) - tStart;
+  if (elapsedSim >= NEEDED_SIM_SEC) break;
+}
+const rate = await page.evaluate(() => ({ fps: window.__EDEN__.perf.fps, simRate: window.__EDEN__.perf.simRate }));
+console.log(`    (${elapsedSim.toFixed(0)} sim-sec elapsed at ${rate.fps} fps / ${rate.simRate.toFixed(1)}× achieved)`);
+check('fast-forward advances simulation time', elapsedSim >= NEEDED_SIM_SEC, `${elapsedSim.toFixed(1)}s`);
+
+const terrainAfter = await page.evaluate(() => window.__EDEN__.terrainHash());
+check('terrain geometry is byte-identical after fast-forward', terrainBefore === terrainAfter, `${terrainBefore} vs ${terrainAfter}`);
+
+// ---------------------------------------------------------------------------
+console.log('\nTEMPORAL SUMMARY');
+// ---------------------------------------------------------------------------
+await page.evaluate(() => window.__EDEN__.useUI.getState().setSpeed(1));
+await page.waitForTimeout(1200);
+const summaryVisible = await page.locator('.summary').isVisible().catch(() => false);
+const summaryText = summaryVisible ? await page.locator('.summary').innerText() : '';
+check('summary appears on returning to 1x', summaryVisible);
+check('summary reports elapsed time', /ELAPSED/.test(summaryText), summaryText.slice(0, 60));
+check('summary contains no placeholder values', !/undefined|NaN/.test(summaryText));
+await page.screenshot({ path: `${SHOT_DIR}/02-summary.png` });
+
+// ---------------------------------------------------------------------------
+console.log('\nCREATOR MODE + CHRONICLE EVENT DETAIL');
+// ---------------------------------------------------------------------------
+await page.keyboard.press('Tab');
+await page.waitForTimeout(1400);
+const lockedInCreator = await page.evaluate(() => Boolean(document.pointerLockElement));
+check('creator mode never holds pointer lock', !lockedInCreator);
+
+const clickable = page.locator('.chron-row.clickable').first();
+const hasClickable = (await clickable.count()) > 0;
+check('chronicle has inspectable events', hasClickable);
+if (hasClickable) {
+  await clickable.click();
+  await page.waitForTimeout(2200);
+  const detailVisible = await page.locator('.event-detail').isVisible().catch(() => false);
+  check('event detail opens', detailVisible);
+  const detailText = detailVisible ? await page.locator('.event-detail').innerText() : '';
+  check('detail explains WHY', /WHY IT HAPPENED/.test(detailText));
+  check('detail explains WHAT CHANGED', /WHAT CHANGED/.test(detailText));
+  check('detail names WHO and WHERE', /WHO/.test(detailText) && /WHERE/.test(detailText));
+  const selected = await page.evaluate(() => window.__EDEN__.useUI.getState().selectedId);
+  check('clicking an event selects a participant', Boolean(selected), String(selected));
+  await page.screenshot({ path: `${SHOT_DIR}/03-event-detail.png` });
+}
+
+// ---------------------------------------------------------------------------
+console.log('\nMIST READABILITY');
+// ---------------------------------------------------------------------------
+const fog = await page.evaluate(async () => {
+  const { getWorld, useUI, creator, fogDensity } = window.__EDEN__;
+  const world = getWorld();
+  const creatorClear = fogDensity();
+  creator.creatorToggleWeather(world);
+  await new Promise((r) => setTimeout(r, 400));
+  const creatorMist = fogDensity();
+  useUI.getState().setMode('live');
+  await new Promise((r) => setTimeout(r, 400));
+  const liveMist = fogDensity();
+  return { creatorClear, creatorMist, liveMist, weather: world.weather };
+});
+check('mist is recognizable in creator mode', fog.creatorMist > fog.creatorClear, JSON.stringify(fog));
+// Beyond ~0.006 an object 220m from the god camera is fully erased by fog.
+check('creator mist stays inspectable at god-camera range', fog.creatorMist < 0.006, `density ${fog.creatorMist}`);
+check('live mist is denser than creator mist', fog.liveMist > fog.creatorMist, JSON.stringify(fog));
+await page.evaluate(() => window.__EDEN__.useUI.getState().setMode('creator'));
+await page.waitForTimeout(1200);
+await page.screenshot({ path: `${SHOT_DIR}/04-creator-mist.png` });
+
+// ---------------------------------------------------------------------------
+console.log('\nMODE TRANSITIONS + SEPARATION');
+// ---------------------------------------------------------------------------
+await page.keyboard.press('Tab'); // -> live
+await page.waitForTimeout(900);
+const backInLive = await page.evaluate(() => ({
+  mode: window.__EDEN__.useUI.getState().mode,
+  locked: Boolean(document.pointerLockElement),
+}));
+check('creator → live returns to live mode', backInLive.mode === 'live');
+check('creator → live does not re-trap the cursor', !backInLive.locked);
+await page.keyboard.press('Tab');
+await page.waitForTimeout(600);
+await page.keyboard.press('Tab');
+await page.waitForTimeout(900);
+const finalMode = await page.evaluate(() => window.__EDEN__.useUI.getState().mode);
+check('live → creator → live is stable', finalMode === 'live');
+
+const overlap = await page.evaluate(() => {
+  const world = window.__EDEN__.getWorld();
+  let worst = 0;
+  const s = world.settlers;
+  for (let i = 0; i < s.length; i++) {
+    for (let j = i + 1; j < s.length; j++) {
+      worst = Math.max(worst, 0.84 - Math.hypot(s[i].pos.x - s[j].pos.x, s[i].pos.z - s[j].pos.z));
+    }
+  }
+  return worst;
+});
+check('settlers do not occupy the same space', overlap < 0.15, `worst overlap ${overlap.toFixed(3)}m`);
+
+const worldState = await page.evaluate(() => {
   const w = window.__EDEN__.getWorld();
   const lumi = w.creatures.find((c) => c.id === 'lumi');
   return {
-    simTime: Number(w.timeSec.toFixed(0)),
     settlers: w.settlers.length,
     creatures: w.creatures.length,
-    chronicleEvents: w.chronicle.length,
+    chronicle: w.chronicle.length,
     lumiGoal: lumi?.goal.label ?? 'GONE',
-    lumiTrust: lumi?.lumi.trust ?? -1,
-    stateFinite: w.settlers.every((s) => Number.isFinite(s.pos.x) && Number.isFinite(s.hunger)),
+    finite: w.settlers.every((s) => Number.isFinite(s.pos.x) && Number.isFinite(s.hunger)),
   };
 });
-console.log('WORLD:', JSON.stringify(facts, null, 2));
+check('world state remains finite', worldState.finite);
+check('Lumi persists as an individual', worldState.lumiGoal !== 'GONE');
+await page.screenshot({ path: `${SHOT_DIR}/05-live-final.png` });
 
-await page.keyboard.press('Tab');
-await page.waitForTimeout(1000);
-await page.screenshot({ path: `${SHOT_DIR}/live-after.png` });
+console.log('\nWORLD:', JSON.stringify(worldState));
+console.log(`\nBROWSER ERRORS: ${errors.length}`);
+for (const e of errors.slice(0, 10)) console.log('  -', e);
+
 await browser.close();
 
-if (!facts.stateFinite || facts.lumiGoal === 'GONE') {
-  console.error('SMOKE FAILED: bad world state');
+if (failures.length > 0 || errors.length > 0) {
+  console.error(`\nSMOKE FAILED — ${failures.length} check(s), ${errors.length} error(s)`);
+  for (const f of failures) console.error('  ✗', f);
   process.exit(1);
 }
-if (errors.length > 0) {
-  console.error(`SMOKE FAILED: ${errors.length} browser errors`);
-  for (const e of errors) console.error(' -', e);
-  process.exit(1);
-}
-console.log('SMOKE OK — screenshots in smoke-shots/');
+console.log('\nSMOKE OK — screenshots in smoke-shots/');

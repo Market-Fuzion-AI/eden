@@ -1,9 +1,24 @@
 import { CHRONICLE_CAP, DAY_SEC } from './config';
-import type { ChronicleCategory, World } from './types';
+import type { ChronicleCategory, ChronicleDetail, World } from './types';
 
-/** Append a meaningful event to the world's chronicle (bounded ring). */
-export function chronicle(world: World, category: ChronicleCategory, text: string): void {
-  world.chronicle.push({ id: world.chronicleCounter++, t: world.timeSec, category, text });
+/**
+ * Append a meaningful event to the world's chronicle (bounded ring).
+ * `detail` carries the structured payload the Creator UI uses to explain
+ * and locate the event — never re-derived by parsing the text.
+ */
+export function chronicle(
+  world: World,
+  category: ChronicleCategory,
+  text: string,
+  detail: ChronicleDetail = {},
+): void {
+  world.chronicle.push({
+    id: world.chronicleCounter++,
+    t: world.timeSec,
+    category,
+    text,
+    ...detail,
+  });
   if (world.chronicle.length > CHRONICLE_CAP) {
     world.chronicle.splice(0, world.chronicle.length - CHRONICLE_CAP);
   }

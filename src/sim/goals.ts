@@ -1,5 +1,6 @@
 import { RATES, SETTLER, WORLD } from './config';
 import { chronicle, daylight01, isNight } from './chronicle';
+import { landmarkAt, placeName } from './landmarks';
 import { remember } from './memory';
 import { stand, stepToward } from './movement';
 import { heightAt, isWater } from './terrain';
@@ -46,7 +47,7 @@ function nearestKnownRest(world: World, s: Settler): { node: ResourceNode; d: nu
   return best ? { node: best, d: bestD } : null;
 }
 
-/** Discover unknown resources within perception range; emits chronicle on global firsts. */
+/** Discover unknown resources and landmarks within perception range. */
 export function perceiveResources(world: World, s: Settler): void {
   for (const node of world.resources) {
     if (s.knownResourceIds.includes(node.id)) continue;
@@ -57,12 +58,29 @@ export function perceiveResources(world: World, s: Settler): void {
     }
     if (!node.discovered) {
       node.discovered = true;
-      // Only food finds make the chronicle — material nodes share labels and
-      // would read as duplicate history.
+      // Only food finds make the chronicle — material nodes would read as
+      // duplicate history.
       if (node.type === 'glowberry') {
-        chronicle(world, 'discovery', `${s.name} found ${node.label}.`);
+        chronicle(world, 'discovery', `${s.name} found ${node.label}.`, {
+          actorIds: [s.id],
+          actorNames: [s.name],
+          pos: { ...node.pos },
+          place: placeName(node.pos),
+          cause: [
+            `${s.name} was ${s.goal.type === 'explore' ? 'exploring' : 'passing through'} ${placeName(s.pos)}`,
+            `Curiosity ${Math.round(s.personality.curiosity * 100)} · caution ${Math.round(s.personality.caution * 100)}`,
+          ],
+          effects: [`${s.name} now knows this food source`, 'Added to their personal knowledge'],
+        });
       }
     }
+  }
+
+  // Landmark knowledge: standing inside a named place teaches it.
+  const lm = landmarkAt(s.pos);
+  if (lm && !s.knownLandmarkIds.includes(lm.id)) {
+    s.knownLandmarkIds.push(lm.id);
+    remember(s, { type: 'explored', place: lm.name, t: world.timeSec, emotionalWeight: 0.25 });
   }
 }
 
@@ -99,6 +117,18 @@ export function settlerThink(world: World, s: Settler): void {
   const t = world.timeSec;
   const rng = world.rng;
   const day = daylight01(t);
+
+  // A settler mid-conversation does not re-plan. Without this, one party can
+  // wander off mid-exchange while the other keeps talking to empty air — and
+  // the Chronicle would still report a conversation the player never saw.
+  if (s.goal.type === 'talk-emerson' && t < s.talkingUntil) {
+    s.nextThinkAt = t + 0.5;
+    return;
+  }
+  if (s.goal.type === 'socialize' && s.goal.phase === 'act' && s.goal.timer > 0) {
+    s.nextThinkAt = t + 0.5;
+    return;
+  }
 
   perceiveResources(world, s);
 
@@ -293,6 +323,12 @@ function completeSocial(world: World, a: Settler, b: Settler): void {
   const relA = relationshipWith(a, b.id);
   const relB = relationshipWith(b, a.id);
   const firstMeeting = relA.interactions === 0;
+
+  // Capture the "before" picture for the chronicle's explanation.
+  const beforeAffinity = Math.round(relA.affinity);
+  const beforeSocialA = Math.round(a.needs.social);
+  const beforeSocialB = Math.round(b.needs.social);
+
   const delta = negative ? -(4 + rng.range(0, 4)) : 4 + a.personality.empathy * 3 + b.personality.empathy * 3;
   relA.affinity = Math.max(-100, Math.min(100, relA.affinity + delta));
   relB.affinity = Math.max(-100, Math.min(100, relB.affinity + delta));
@@ -314,17 +350,50 @@ function completeSocial(world: World, a: Settler, b: Settler): void {
       emotionalWeight: negative ? -0.5 : 0.5,
     });
   }
+
+  const detail = {
+    actorIds: [a.id, b.id],
+    actorNames: [a.name, b.name],
+    pos: { x: (a.pos.x + b.pos.x) / 2, z: (a.pos.z + b.pos.z) / 2 },
+    place: placeName(a.pos),
+    cause: [
+      `${a.name} social need: ${beforeSocialA}`,
+      `${b.name} social need: ${beforeSocialB}`,
+      `${a.name} sociability: ${Math.round(a.personality.sociability * 100)}`,
+      `Relationship before: ${beforeAffinity >= 0 ? '+' : ''}${beforeAffinity}`,
+      ...(negative ? [`Aggression: ${Math.round(Math.max(a.personality.aggression, b.personality.aggression) * 100)}`] : []),
+    ],
+    effects: [
+      `Social need −${RATES.socialReduces} for both`,
+      `Affinity ${delta >= 0 ? '+' : ''}${Math.round(delta)} (now ${relA.affinity >= 0 ? '+' : ''}${Math.round(relA.affinity)})`,
+      'Memory created for both',
+    ],
+  };
+
   if (negative) {
-    chronicle(world, 'social', `${a.name} and ${b.name} had a tense exchange.`);
+    chronicle(world, 'social', `${a.name} and ${b.name} had a tense exchange.`, detail);
   } else if (firstMeeting) {
     const cross = a.speciesId !== b.speciesId ? ' across the species divide' : '';
-    chronicle(world, 'social', `${a.name} and ${b.name} shared a friendly conversation${cross}.`);
+    chronicle(world, 'social', `${a.name} and ${b.name} shared a friendly conversation${cross}.`, detail);
   }
 }
 
 export function settlerExecute(world: World, s: Settler, dt: number): void {
   const t = world.timeSec;
   const g = s.goal;
+
+  // Talking to Emerson supersedes locomotion: the settler stops and turns to
+  // face him for the duration of the exchange, then resumes its own life.
+  if (g.type === 'talk-emerson') {
+    stand(s);
+    s.heading = lerpAngle(s.heading, angleTo(s.pos, world.player.pos), 1 - Math.exp(-7 * dt));
+    if (t >= s.talkingUntil) {
+      g.phase = 'done';
+      s.nextThinkAt = Math.min(s.nextThinkAt, t + 0.1);
+    }
+    return;
+  }
+
   if (g.phase === 'done') {
     stand(s);
     return;
@@ -407,7 +476,20 @@ export function settlerExecute(world: World, s: Settler, dt: number): void {
           }
         }
       } else {
-        stand(s);
+        // Hold a believable conversational distance and face one another, so
+        // a Chronicle entry about a conversation matches something the player
+        // could actually have watched happen.
+        const d = dist(s.pos, other.pos);
+        if (d > SETTLER.socialHoldMax) {
+          stepToward(world, s, other.pos, dt, { speed: SETTLER.walkSpeed * 0.5 });
+        } else if (d < SETTLER.socialHoldMin && d > 0.01) {
+          const away = angleTo(other.pos, s.pos);
+          s.pos.x += Math.sin(away) * 0.6 * dt;
+          s.pos.z += Math.cos(away) * 0.6 * dt;
+          s.speed = 0;
+        } else {
+          stand(s);
+        }
         const face = angleTo(s.pos, other.pos);
         s.heading = lerpAngle(s.heading, face, 1 - Math.exp(-6 * dt));
         g.timer -= dt;

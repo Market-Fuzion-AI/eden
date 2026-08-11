@@ -1,4 +1,5 @@
 import { isNight } from './chronicle';
+import { landmarkAt } from './landmarks';
 import { dist } from './vec';
 import type { World } from './types';
 
@@ -21,6 +22,16 @@ export function ariTick(world: World): void {
   const say = (line: string) => {
     if (world.ariQueue.length < 4) world.ariQueue.push(line);
   };
+
+  // Landmark arrival: ARI names each place the first time Emerson enters it,
+  // giving the valley location identity rather than anonymous terrain.
+  if (!world.player.dead) {
+    const lm = landmarkAt(world.player.pos);
+    if (lm && !f[`lm_${lm.id}`]) {
+      f[`lm_${lm.id}`] = true;
+      say(lm.ariLine);
+    }
+  }
 
   // Arrival greeting.
   if (!f.ariIntro && t > (f.startTime as number ?? 0) + 3) {

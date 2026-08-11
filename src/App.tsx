@@ -21,7 +21,7 @@ export default function App() {
         gl={{ antialias: true }}
         onCreated={({ gl }) => {
           gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1.05;
+          gl.toneMappingExposure = 1.2;
         }}
       >
         <Scene />

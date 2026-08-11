@@ -1,5 +1,6 @@
 import { DAY_SEC } from './config';
 import { chronicle } from './chronicle';
+import { placeName } from './landmarks';
 import { isWater } from './terrain';
 import type { World } from './types';
 import type { V2 } from './vec';
@@ -34,20 +35,31 @@ export function creatorToggleWeather(world: World): void {
   chronicle(world, 'creator', world.weather === 'mist' ? 'The Creator drew a mist across the valley.' : 'The Creator cleared the skies.');
 }
 
-/** Spawn a glowberry patch at a clicked world position. */
+/**
+ * Spawn a glowberry patch at a clicked world position.
+ * The node records its provenance so a later inspection can always answer
+ * "who put this here, and when" — no world change is anonymous.
+ */
 export function creatorSpawnFood(world: World, pos: V2): boolean {
   if (isWater(pos.x, pos.z)) return false;
+  const place = placeName(pos);
   world.resources.push({
     id: `creator_food_${spawnCounter++}`,
     type: 'glowberry',
-    label: 'a patch that appeared from nowhere',
+    label: `the glowberries at ${place}`,
     pos: { x: pos.x, z: pos.z },
     quantity: 8,
     maxQuantity: 8,
     regenPerSec: 1 / 45,
     discovered: false,
+    origin: { cause: 'creator_spawn', actorId: 'creator', t: world.timeSec },
   });
   world.dirty.resources = true;
-  chronicle(world, 'creator', 'The Creator willed a glowberry patch into existence.');
+  chronicle(world, 'creator', `The Creator willed a glowberry patch into existence at ${place}.`, {
+    pos: { x: pos.x, z: pos.z },
+    place,
+    cause: ['Direct Creator intervention'],
+    effects: ['New food source added to the world', 'Settlers must still discover it themselves'],
+  });
   return true;
 }

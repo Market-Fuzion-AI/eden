@@ -18,7 +18,8 @@ export type GoalType =
   | 'watch-emerson'
   | 'approach-food'
   | 'follow-emerson'
-  | 'attack-player';
+  | 'attack-player'
+  | 'talk-emerson';
 
 export type GoalPhase = 'travel' | 'act' | 'done';
 
@@ -51,7 +52,8 @@ export interface MemoryEntry {
     | 'fed_by_emerson'
     | 'threatened'
     | 'explored'
-    | 'saw_emerson';
+    | 'saw_emerson'
+    | 'talked_to_emerson';
   subjectId?: EntityId;
   subjectName?: string;
   place?: string;
@@ -105,9 +107,13 @@ export interface Settler extends AgentCommon {
   needs: { social: number; curiosity: number; safety: number };
   relationships: Record<EntityId, Relationship>;
   knownResourceIds: EntityId[];
+  /** Landmarks this settler has personally visited. */
+  knownLandmarkIds: string[];
   /** Conceptual knowledge carried from the homeworld (future tech system). */
   knowledge: string[];
   socialCooldownUntil: number;
+  /** Sim time until which Emerson's conversation holds this settler in place. */
+  talkingUntil: number;
 }
 
 export interface LumiState {
@@ -147,6 +153,9 @@ export interface ResourceNode {
   campOf?: IntelligentSpeciesId;
   /** First global discovery emits a chronicle event. */
   discovered: boolean;
+  /** Provenance for anything not present at world creation: what caused this
+   *  to exist, who did it, and when. Absent = original worldgen. */
+  origin?: { cause: string; actorId: EntityId; t: number };
 }
 
 export interface OfferedFood {
@@ -190,6 +199,26 @@ export interface ChronicleEvent {
   t: number;
   category: ChronicleCategory;
   text: string;
+  /** Structured payload so the UI can explain and locate an event without
+   *  parsing its prose. All fields optional — simple world events carry none. */
+  actorIds?: EntityId[];
+  actorNames?: string[];
+  pos?: V2;
+  place?: string;
+  /** Why it happened, as discrete readable facts captured at event time. */
+  cause?: string[];
+  /** What changed as a result. */
+  effects?: string[];
+}
+
+/** Optional structured detail supplied when emitting a chronicle event. */
+export interface ChronicleDetail {
+  actorIds?: EntityId[];
+  actorNames?: string[];
+  pos?: V2;
+  place?: string;
+  cause?: string[];
+  effects?: string[];
 }
 
 export interface PlayerState {

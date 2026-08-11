@@ -1,8 +1,11 @@
-import { PLAYER, WILDLIFE, WORLD } from './config';
+import { PLAYER, RATES, SETTLER, WILDLIFE, WORLD } from './config';
 import { chronicle } from './chronicle';
+import { buildExchange, type DialogueExchange } from './dialogue';
+import { placeName } from './landmarks';
+import { remember } from './memory';
 import { groundY, isWater } from './terrain';
 import { damageCreature } from './wildlife';
-import type { World } from './types';
+import type { Settler, World } from './types';
 import { clamp100, dist, v2 } from './vec';
 
 /**
@@ -12,11 +15,32 @@ import { clamp100, dist, v2 } from './vec';
  */
 
 export interface PlayerInput {
-  moveX: number; // -1..1 strafe
-  moveZ: number; // -1..1 forward
+  moveX: number; // -1..1 strafe: +1 = the player's right on screen
+  moveZ: number; // -1..1 forward: +1 = away from the camera
   sprint: boolean;
   jump: boolean;
   camYaw: number;
+}
+
+/**
+ * Camera-relative movement basis.
+ *
+ * The chase camera sits behind the player along -(sin yaw, cos yaw), so the
+ * on-screen FORWARD direction is f = (sin yaw, cos yaw). In three.js' Y-up
+ * right-handed space the on-screen RIGHT direction is r = f × up =
+ * (-cos yaw, sin yaw).
+ *
+ * Desired motion is therefore moveZ·f + moveX·r, which is the heading
+ * camYaw + atan2(-moveX, moveZ). The negation on moveX is what makes A/D
+ * match the camera; omitting it silently mirrors strafing.
+ */
+export function headingFromInput(camYaw: number, moveX: number, moveZ: number): number {
+  return camYaw + Math.atan2(-moveX, moveZ);
+}
+
+/** Unit direction on the ground plane for a heading — the sim's movement convention. */
+export function dirFromHeading(heading: number): { x: number; z: number } {
+  return { x: Math.sin(heading), z: Math.cos(heading) };
 }
 
 let nextOfferId = 0;
@@ -60,8 +84,7 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
   }
   if (mag > 0.05 || p.dodgeTimer > 0) {
     if (mag > 0.05) {
-      const inputAngle = Math.atan2(input.moveX, input.moveZ);
-      p.heading = input.camYaw + inputAngle;
+      p.heading = headingFromInput(input.camYaw, input.moveX, input.moveZ);
     }
     const inWater = isWater(p.pos.x, p.pos.z);
     const effSpeed = speed * (inWater ? 0.5 : 1);
@@ -79,6 +102,23 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
         nz += oz * push;
       }
     }
+    // Character presence: Emerson cannot walk through the inhabitants.
+    // Settlers are solid; small creatures scatter rather than block.
+    for (const s of world.settlers) {
+      const ox = nx - s.pos.x;
+      const oz = nz - s.pos.z;
+      const od = Math.hypot(ox, oz);
+      const min = PLAYER.bodyRadius + SETTLER.bodyRadius;
+      if (od < min && od > 0.001) {
+        const push = (min - od) / od;
+        // Emerson takes most of the correction; the settler yields a little.
+        nx += ox * push * 0.75;
+        nz += oz * push * 0.75;
+        s.pos.x -= ox * push * 0.25;
+        s.pos.z -= oz * push * 0.25;
+      }
+    }
+
     const r = Math.hypot(nx, nz);
     if (r > WORLD.playRadius) {
       const s = WORLD.playRadius / r;
@@ -149,7 +189,24 @@ export function playerDodge(world: World): void {
 export interface InteractionPrompt {
   key: string;
   label: string;
-  action: 'gather' | 'offer';
+  action: 'gather' | 'offer' | 'talk';
+}
+
+/** Nearest settler Emerson could speak with right now. */
+export function nearestTalkable(world: World): Settler | null {
+  const p = world.player;
+  if (p.dead) return null;
+  let best: Settler | null = null;
+  let bestD = PLAYER.talkRange;
+  for (const s of world.settlers) {
+    if (s.resting) continue;
+    const d = dist(s.pos, p.pos);
+    if (d < bestD) {
+      best = s;
+      bestD = d;
+    }
+  }
+  return best;
 }
 
 /** Compute the contextual prompt(s) shown in the Live HUD. */
@@ -162,6 +219,12 @@ export function getInteractions(world: World): InteractionPrompt[] {
   );
   if (bush && p.berries < PLAYER.maxBerries) {
     out.push({ key: 'E', label: 'Gather glowberries', action: 'gather' });
+  } else {
+    const talkable = nearestTalkable(world);
+    // Only offer conversation when they are not already mid-exchange with us.
+    if (talkable && world.timeSec >= talkable.talkingUntil) {
+      out.push({ key: 'E', label: `Talk to ${talkable.name}`, action: 'talk' });
+    }
   }
   if (p.berries > 0) {
     const lumi = world.creatures.find((c) => c.lumi && dist(c.pos, p.pos) < PLAYER.offerRange);
@@ -170,19 +233,88 @@ export function getInteractions(world: World): InteractionPrompt[] {
   return out;
 }
 
-export function playerGather(world: World): void {
+/**
+ * Speak with a nearby settler. Produces a real social interaction: the settler
+ * stops and turns, relationship and social need move, a memory is formed, and
+ * a first meeting is recorded in the Chronicle.
+ */
+export function playerTalk(world: World): DialogueExchange | null {
+  const s = nearestTalkable(world);
+  if (!s || world.timeSec < s.talkingUntil) return null;
+
+  const exchange = buildExchange(world, s);
+
+  // Hold them in conversation and face Emerson.
+  s.talkingUntil = world.timeSec + PLAYER.talkDuration;
+  s.goal = {
+    type: 'talk-emerson',
+    label: 'Speaking with Emerson',
+    phase: 'act',
+    timer: PLAYER.talkDuration,
+    startedAt: world.timeSec,
+    deadline: s.talkingUntil,
+  };
+  s.goalReason = {
+    summary: ['Emerson approached and spoke', 'Social goals are paused while they talk'],
+    scores: [],
+  };
+  s.socialTimer = PLAYER.talkDuration;
+
+  // Real relationship effects.
+  let rel = s.relationships.emerson;
+  if (!rel) rel = s.relationships.emerson = { affinity: 0, interactions: 0, lastInteractionAt: -999 };
+  const before = rel.affinity;
+  const gain = 3 + s.personality.sociability * 4 + s.personality.empathy * 2;
+  rel.affinity = Math.max(-100, Math.min(100, rel.affinity + gain));
+  rel.interactions++;
+  rel.lastInteractionAt = world.timeSec;
+  s.needs.social = Math.max(0, s.needs.social - RATES.socialReduces * 0.6);
+
+  remember(s, {
+    type: 'talked_to_emerson',
+    subjectId: 'emerson',
+    subjectName: 'Emerson',
+    place: placeName(s.pos),
+    t: world.timeSec,
+    emotionalWeight: 0.45,
+  });
+
+  if (exchange.firstMeeting) {
+    chronicle(world, 'emerson', `Emerson spoke with ${s.name} for the first time.`, {
+      actorIds: [s.id, 'emerson'],
+      actorNames: [s.name, 'Emerson'],
+      pos: { ...s.pos },
+      place: placeName(s.pos),
+      cause: [
+        'Emerson approached and initiated contact',
+        `${s.name} sociability: ${Math.round(s.personality.sociability * 100)}`,
+        `${s.name} was: ${s.goalReason.summary[0] ?? 'going about their day'}`,
+      ],
+      effects: [
+        `Affinity toward Emerson ${before >= 0 ? '+' : ''}${Math.round(before)} → +${Math.round(rel.affinity)}`,
+        'Memory created',
+      ],
+    });
+  }
+  exchange.affinity = rel.affinity;
+  return exchange;
+}
+
+/** Returns true if a bush was actually harvested (so E can fall through to Talk). */
+export function playerGather(world: World): boolean {
   const p = world.player;
-  if (p.dead || p.berries >= PLAYER.maxBerries) return;
+  if (p.dead || p.berries >= PLAYER.maxBerries) return false;
   const bush = world.resources.find(
     (r) => r.type === 'glowberry' && r.quantity >= 1 && dist(r.pos, p.pos) < PLAYER.interactRange,
   );
-  if (!bush) return;
+  if (!bush) return false;
   bush.quantity -= 1;
   p.berries += 1;
   if (!world.flags.firstGather) {
     world.flags.firstGather = true;
     world.ariQueue.push('Glowberries. Edible for most native fauna. Potentially useful for making friends.');
   }
+  return true;
 }
 
 export function playerOfferFood(world: World): void {

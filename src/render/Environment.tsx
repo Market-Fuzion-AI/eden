@@ -4,6 +4,8 @@ import { Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { getWorld } from '../sim';
 import { DAY_SEC } from '../sim/config';
+import { useUI } from '../state/store';
+import { registerFog } from '../game/debugBridge';
 
 /**
  * Sky, sun, fog and ambient light driven directly by sim time each frame —
@@ -28,6 +30,9 @@ const key = (sky: string, fog: string, sun: string, sunIntensity: number, hemi: 
   ambient,
 });
 
+/** Fixed sun distance keeps the shadow frustum stable across the whole day. */
+const SUN_DISTANCE = 240;
+
 // Keyframes at 0h, 6h, 12h, 18h, 24h.
 const KEYS: SkyKey[] = [
   key('#070b1e', '#0a1226', '#5f7fbf', 0.12, 0.22, 0.1),
@@ -44,9 +49,14 @@ export function EdenEnvironment() {
   const ambientRef = useRef<THREE.AmbientLight>(null);
   const starsRef = useRef<THREE.Group>(null);
 
-  const fog = useMemo(() => new THREE.FogExp2('#9fd4da', 0.004), []);
+  const fog = useMemo(() => {
+    const f = new THREE.FogExp2('#9fd4da', 0.004);
+    registerFog(f);
+    return f;
+  }, []);
   const bg = useMemo(() => new THREE.Color('#6fbede'), []);
   const tmpA = useMemo(() => new THREE.Color(), []);
+  const sunDir = useMemo(() => new THREE.Vector3(), []);
 
   useFrame(() => {
     const world = getWorld();
@@ -60,15 +70,27 @@ export function EdenEnvironment() {
     bg.copy(a.sky).lerp(b.sky, t);
     scene.background = bg;
     fog.color.copy(tmpA.copy(a.fog).lerp(b.fog, t));
-    fog.density = world.weather === 'mist' ? 0.016 : 0.0038;
+
+    // Creator Mode is an inspection tool: weather must stay *recognizable*
+    // without ever making the world unreadable from the god camera, which
+    // sits far enough back that Live-Mode fog density would erase everything.
+    const creator = useUI.getState().mode === 'creator';
+    const misty = world.weather === 'mist';
+    if (creator) fog.density = misty ? 0.0042 : 0.0016;
+    else fog.density = misty ? 0.0105 : 0.0038;
     scene.fog = fog;
 
     const sun = sunRef.current;
     if (sun) {
-      // Sun arcs across the sky; below horizon at night a dim moonlight remains.
+      // The sun arcs across the sky, but its distance from the valley is held
+      // constant so the orthographic shadow frustum always frames the same
+      // volume. A varying distance made shadows pop in and out at low sun
+      // angles, which read as the landscape itself changing shape.
       const angle = (dayFrac - 0.25) * Math.PI * 2;
-      const elev = Math.sin(angle);
-      sun.position.set(Math.cos(angle) * 180, Math.max(0.08, elev) * 160 + 12, 60);
+      const elev = Math.max(0.12, Math.sin(angle));
+      const horiz = Math.cos(angle);
+      sunDir.set(horiz, elev, 0.34).normalize().multiplyScalar(SUN_DISTANCE);
+      sun.position.copy(sunDir);
       sun.intensity = a.sunIntensity + (b.sunIntensity - a.sunIntensity) * t;
       sun.color.copy(tmpA.copy(a.sun).lerp(b.sun, t));
     }
@@ -89,8 +111,8 @@ export function EdenEnvironment() {
         intensity={1.5}
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
-        shadow-camera-near={10}
-        shadow-camera-far={500}
+        shadow-camera-near={1}
+        shadow-camera-far={620}
         shadow-camera-left={-160}
         shadow-camera-right={160}
         shadow-camera-top={160}

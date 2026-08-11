@@ -3,7 +3,9 @@ import { formatClock } from '../sim/chronicle';
 import { creatorSetHour, creatorToggleWeather } from '../sim/creator';
 import { useUI, type SimSpeed } from '../state/store';
 import { ChroniclePanel } from './ChroniclePanel';
+import { EventDetail } from './EventDetail';
 import { Inspector } from './Inspector';
+import { SummaryPanel } from './SummaryPanel';
 
 /** Creator Mode: sovereign view. Inspection first, interventions second. */
 export function CreatorUI() {
@@ -13,6 +15,8 @@ export function CreatorUI() {
   const seed = useUI((s) => s.seed);
   const spawnArmed = useUI((s) => s.spawnFoodArmed);
   const chronicleOpen = useUI((s) => s.chronicleOpen);
+  const selectedEvent = useUI((s) => s.selectedEvent);
+  const summary = useUI((s) => s.summary);
   const setPaused = useUI((s) => s.setPaused);
   const setSpeed = useUI((s) => s.setSpeed);
   const setSpawnFoodArmed = useUI((s) => s.setSpawnFoodArmed);
@@ -83,7 +87,9 @@ export function CreatorUI() {
         </div>
       </div>
 
-      <Inspector />
+      {summary && <SummaryPanel summary={summary} />}
+
+      {selectedEvent ? <EventDetail event={selectedEvent} /> : <Inspector />}
 
       <div className={`chronicle-dock ${chronicleOpen ? 'open' : ''}`}>
         <button className="btn chronicle-toggle" onClick={toggleChronicle}>

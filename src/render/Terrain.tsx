@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import * as THREE from 'three';
 import { WORLD } from '../sim/config';
 import { fbm, heightAt, riverX, slopeAt } from '../sim/terrain';
+import { registerTerrainGeometry } from '../game/debugBridge';
 import { getGradientMap } from './toon';
 
 /** Heightfield terrain mesh with hand-tinted vertex colors. Geometry derives
@@ -50,6 +51,9 @@ export function Terrain() {
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
+    // Built exactly once and never mutated afterwards: the valley's shape is
+    // fixed unless an explicit world-changing system alters it.
+    registerTerrainGeometry(geo);
     return geo;
   }, []);
 

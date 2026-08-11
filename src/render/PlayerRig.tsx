@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { getWorld } from '../sim';
 import { heightAt } from '../sim/terrain';
 import { useUI } from '../state/store';
-import { inputState } from '../game/input';
+import { inputState, isPointerLocked, releasePointerLock } from '../game/input';
 import { buildSettlerRig } from './factories';
 
 /**
@@ -25,15 +25,18 @@ export function PlayerRig() {
   }, []);
 
   const slashRef = useRef<THREE.Mesh>(null);
+  const needsCamSnap = useRef(true);
   const camTarget = useMemo(() => new THREE.Vector3(), []);
   const camPos = useMemo(() => new THREE.Vector3(), []);
 
-  // Pointer lock on click while in live mode.
+  // Mouse-look is opt-in: only an explicit click on the viewport engages it,
+  // and only in Live Mode. Returning from Creator Mode never re-grabs the
+  // cursor on its own.
   useEffect(() => {
     const canvas = gl.domElement;
     const onClick = () => {
       const ui = useUI.getState();
-      if (ui.mode === 'live' && !ui.helpOpen && !document.pointerLockElement) {
+      if (ui.mode === 'live' && !ui.helpOpen && !ui.dialogue && !isPointerLocked()) {
         canvas.requestPointerLock();
       }
     };
@@ -41,11 +44,9 @@ export function PlayerRig() {
     return () => canvas.removeEventListener('click', onClick);
   }, [gl]);
 
-  // Release pointer lock when leaving live mode or opening help.
+  // Give the cursor back whenever the world stops being directly playable.
   useEffect(() => {
-    if ((mode !== 'live' || helpOpen) && document.pointerLockElement) {
-      document.exitPointerLock();
-    }
+    if (mode !== 'live' || helpOpen) releasePointerLock();
   }, [mode, helpOpen]);
 
   useFrame((state, dt) => {
@@ -77,7 +78,10 @@ export function PlayerRig() {
       }
     }
 
-    if (useUI.getState().mode !== 'live') return;
+    if (useUI.getState().mode !== 'live') {
+      needsCamSnap.current = true;
+      return;
+    }
 
     // Third-person chase camera.
     const yaw = inputState.camYaw;
@@ -94,8 +98,14 @@ export function PlayerRig() {
     const groundAtCam = heightAt(camPos.x, camPos.z) + 0.4;
     if (camPos.y < groundAtCam) camPos.y = groundAtCam;
 
-    const k = 1 - Math.exp(-dt * 14);
-    camera.position.lerp(camPos, k);
+    if (needsCamSnap.current) {
+      // Coming back from the god camera: take the shot immediately rather than
+      // sweeping the camera across the valley through the terrain.
+      needsCamSnap.current = false;
+      camera.position.copy(camPos);
+    } else {
+      camera.position.lerp(camPos, 1 - Math.exp(-dt * 14));
+    }
     camera.lookAt(camTarget);
   });
 

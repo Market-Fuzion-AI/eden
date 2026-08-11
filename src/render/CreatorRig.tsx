@@ -7,7 +7,6 @@ import { getEntity, getWorld } from '../sim';
 import { creatorSpawnFood } from '../sim/creator';
 import { groundY } from '../sim/terrain';
 import { useUI } from '../state/store';
-import { entityGroups } from './Agents';
 
 /**
  * Creator Mode: god camera (pan/orbit/zoom) + click selection of entities,
@@ -17,6 +16,7 @@ export function CreatorRig() {
   const { camera, gl, scene } = useThree();
   const controlsRef = useRef<MapControlsImpl>(null);
   const ringRef = useRef<THREE.Mesh>(null);
+  const flyTarget = useRef<{ x: number; y: number; z: number; t: number } | null>(null);
   const raycaster = useMemo(() => new THREE.Raycaster(), []);
   const pointer = useMemo(() => new THREE.Vector2(), []);
 
@@ -31,6 +31,13 @@ export function CreatorRig() {
       controls.update();
     }
   }, [camera]);
+
+  // Fly to a requested world position (Chronicle event click).
+  const focus = useUI((s) => s.focusRequest);
+  useEffect(() => {
+    if (!focus) return;
+    flyTarget.current = { x: focus.x, z: focus.z, y: groundY(focus.x, focus.z), t: 0 };
+  }, [focus, flyTarget]);
 
   // Click-to-select with drag rejection.
   useEffect(() => {
@@ -49,41 +56,29 @@ export function CreatorRig() {
       pointer.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
       raycaster.setFromCamera(pointer, camera);
 
-      // Entities first.
-      const groups = [...entityGroups.values()];
-      const emerson = scene.getObjectByName('__emerson_probe__');
-      const hits = raycaster.intersectObjects(groups, true);
+      // Walk the scene front-to-back: the first tagged entity wins; the first
+      // terrain hit either places an armed intervention or clears selection.
       let pickedId: string | null = null;
-      if (hits.length > 0) {
-        let obj: THREE.Object3D | null = hits[0].object;
-        while (obj && !obj.userData.eid) obj = obj.parent;
-        if (obj?.userData.eid) pickedId = obj.userData.eid as string;
-      }
-      if (!pickedId && emerson) {
-        // noop — Emerson is picked via scene fallback below.
-      }
-      if (!pickedId) {
-        // Try the whole scene so Emerson (and only tagged objects) can be picked.
-        const sceneHits = raycaster.intersectObjects(scene.children, true);
-        for (const h of sceneHits) {
-          let obj: THREE.Object3D | null = h.object;
-          while (obj && !obj.userData.eid && !obj.userData.terrain) obj = obj.parent;
-          if (obj?.userData.eid) {
-            pickedId = obj.userData.eid as string;
-            break;
+      const hits = raycaster.intersectObjects(scene.children, true);
+      for (const h of hits) {
+        let obj: THREE.Object3D | null = h.object;
+        while (obj && !obj.userData.eid && !obj.userData.terrain) obj = obj.parent;
+        if (obj?.userData.eid) {
+          pickedId = obj.userData.eid as string;
+          break;
+        }
+        if (obj?.userData.terrain) {
+          if (ui.spawnFoodArmed) {
+            const ok = creatorSpawnFood(getWorld(), { x: h.point.x, z: h.point.z });
+            if (ok) ui.setSpawnFoodArmed(false);
+            return;
           }
-          if (obj?.userData.terrain) {
-            // Terrain hit: place armed intervention or deselect.
-            if (ui.spawnFoodArmed) {
-              const ok = creatorSpawnFood(getWorld(), { x: h.point.x, z: h.point.z });
-              if (ok) ui.setSpawnFoodArmed(false);
-              return;
-            }
-            break;
-          }
+          break;
         }
       }
       ui.select(pickedId);
+      // A direct click on the world supersedes whatever event was being read.
+      ui.selectEvent(null);
     };
     canvas.addEventListener('pointerdown', onDown);
     canvas.addEventListener('pointerup', onUp);
@@ -93,8 +88,27 @@ export function CreatorRig() {
     };
   }, [camera, gl, pointer, raycaster, scene]);
 
-  // Selection ring follows the selected entity.
-  useFrame(({ clock }) => {
+  // Camera flight + selection ring.
+  useFrame(({ clock }, dt) => {
+    // Ease the god camera toward a requested event location, preserving the
+    // player's current viewing angle and distance so the move never disorients.
+    const fly = flyTarget.current;
+    const controls = controlsRef.current;
+    if (fly && controls) {
+      fly.t += dt;
+      const k = 1 - Math.exp(-dt * 3.2);
+      const offX = camera.position.x - controls.target.x;
+      const offY = camera.position.y - controls.target.y;
+      const offZ = camera.position.z - controls.target.z;
+      controls.target.x += (fly.x - controls.target.x) * k;
+      controls.target.y += (fly.y - controls.target.y) * k;
+      controls.target.z += (fly.z - controls.target.z) * k;
+      camera.position.set(controls.target.x + offX, controls.target.y + offY, controls.target.z + offZ);
+      controls.update();
+      const remaining = Math.hypot(fly.x - controls.target.x, fly.z - controls.target.z);
+      if (remaining < 0.6 || fly.t > 3) flyTarget.current = null;
+    }
+
     const ring = ringRef.current;
     if (!ring) return;
     const id = useUI.getState().selectedId;

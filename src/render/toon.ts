@@ -37,6 +37,53 @@ function makeCanvasTexture(draw: (ctx: CanvasRenderingContext2D, size: number) =
 }
 
 const spriteCache = new Map<string, THREE.SpriteMaterial>();
+const bubbleCache = new Map<string, THREE.SpriteMaterial>();
+
+/**
+ * A small world-space speech bubble. Used sparingly — only for conversations
+ * happening near the player — so the valley never fills with floating text.
+ */
+export function speechBubbleMaterial(text: string): THREE.SpriteMaterial {
+  const cached = bubbleCache.get(text);
+  if (cached) return cached;
+  const pad = 18;
+  const font = '500 30px "Segoe UI", system-ui, sans-serif';
+  const measure = document.createElement('canvas').getContext('2d')!;
+  measure.font = font;
+  const w = Math.ceil(measure.measureText(text).width) + pad * 2;
+  const h = 74;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = 'rgba(8, 18, 26, 0.82)';
+  ctx.strokeStyle = 'rgba(127, 231, 255, 0.55)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(1, 1, w - 2, h - 22, 12);
+  ctx.fill();
+  ctx.stroke();
+  // Tail.
+  ctx.beginPath();
+  ctx.moveTo(w / 2 - 10, h - 23);
+  ctx.lineTo(w / 2 + 10, h - 23);
+  ctx.lineTo(w / 2, h - 4);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(8, 18, 26, 0.82)';
+  ctx.fill();
+  ctx.fillStyle = '#d8e8ee';
+  ctx.font = font;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, w / 2, (h - 22) / 2);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false });
+  mat.userData.aspect = w / h;
+  bubbleCache.set(text, mat);
+  return mat;
+}
 
 export function statusSpriteMaterial(kind: 'social' | 'sleep' | 'alert'): THREE.SpriteMaterial {
   let mat = spriteCache.get(kind);

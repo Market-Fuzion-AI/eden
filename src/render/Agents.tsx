@@ -7,8 +7,12 @@ import { WORLD } from '../sim/config';
 import { groundY } from '../sim/terrain';
 import type { Entity, IntelligentSpeciesId } from '../sim/types';
 import { useUI } from '../state/store';
+import { ambientChatter } from '../sim/dialogue';
 import { buildCreatureRig, buildLumiRig, buildSettlerRig, type Rig } from './factories';
-import { statusSpriteMaterial } from './toon';
+import { speechBubbleMaterial, statusSpriteMaterial } from './toon';
+
+/** Ambient conversation bubbles only appear within earshot of Emerson. */
+const BUBBLE_RANGE = 26;
 
 /**
  * Presentation adapter: each sim entity gets a rig whose transform is
@@ -38,6 +42,7 @@ function AgentView({ id }: { id: string }) {
   }, [id]);
 
   const spriteRef = useRef<THREE.Sprite>(null);
+  const bubbleRef = useRef<THREE.Sprite>(null);
   const visualPos = useRef(new THREE.Vector3());
   const initialized = useRef(false);
 
@@ -109,12 +114,44 @@ function AgentView({ id }: { id: string }) {
         sprite.visible = false;
       }
     }
+
+    // Ambient speech bubble for autonomous conversations happening near the
+    // player, so a Chronicle line about a conversation has something visible
+    // behind it. Only the alphabetically-first speaker shows it, and only
+    // within earshot, so the world never fills with text.
+    const bubble = bubbleRef.current;
+    if (bubble) {
+      let show = false;
+      if (
+        e.kind === 'settler' &&
+        e.goal.type === 'socialize' &&
+        e.goal.phase === 'act' &&
+        e.goal.targetId &&
+        e.id < e.goal.targetId
+      ) {
+        const dx = e.pos.x - world.player.pos.x;
+        const dz = e.pos.z - world.player.pos.z;
+        if (dx * dx + dz * dz < BUBBLE_RANGE * BUBBLE_RANGE) {
+          const topic = ambientChatter(e.id, e.goal.targetId, e.goal.startedAt);
+          const mat = speechBubbleMaterial(`…${topic}`);
+          if (bubble.material !== mat) {
+            bubble.material = mat;
+            const aspect = (mat.userData.aspect as number) ?? 3;
+            bubble.scale.set(0.62 * aspect, 0.62, 1);
+          }
+          bubble.position.set(0, rig.height + 1.05, 0);
+          show = true;
+        }
+      }
+      bubble.visible = show;
+    }
   });
 
   if (!rig) return null;
   return (
     <primitive object={rig.group}>
       <sprite ref={spriteRef} scale={[0.55, 0.55, 1]} visible={false} />
+      <sprite ref={bubbleRef} visible={false} renderOrder={10} />
     </primitive>
   );
 }

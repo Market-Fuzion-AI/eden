@@ -6,8 +6,16 @@
 /** Fixed simulation timestep in sim-seconds. Sim correctness never depends on render FPS. */
 export const SIM_DT = 1 / 30;
 
-/** Max sim ticks processed per rendered frame (spiral-of-death guard at 20x). */
-export const MAX_TICKS_PER_FRAME = 48;
+/**
+ * Spiral-of-death guards for the fixed-timestep loop.
+ *
+ * A fixed tick *count* silently throttles the requested speed on slow
+ * machines (a 20x request quietly becoming 3x), so the primary guard is a
+ * wall-clock budget: keep stepping until the backlog is drained or we have
+ * spent this long inside the tick loop. The count cap is only a backstop.
+ */
+export const TICK_BUDGET_MS = 12;
+export const MAX_TICKS_PER_FRAME = 400;
 
 /** One in-world day, expressed in sim-seconds (12 real minutes at 1x speed). */
 export const DAY_SEC = 720;
@@ -43,9 +51,15 @@ export const RATES = {
 
 export const SETTLER = {
   walkSpeed: 2.3,
+  /** Physical presence radius used for character separation. */
+  bodyRadius: 0.42,
   eatDuration: 6,
-  socialDuration: 10,
+  /** Long enough that a player walking past can actually watch it happen. */
+  socialDuration: 14,
   socialRange: 2.8,
+  /** Conversational spacing held during the exchange. */
+  socialHoldMin: 1.5,
+  socialHoldMax: 2.6,
   socialSearchRadius: 48,
   socialPairCooldown: 90,
   perceptionRadius: 15,
@@ -57,6 +71,9 @@ export const SETTLER = {
 
 export const PLAYER = {
   walkSpeed: 3.4,
+  bodyRadius: 0.45,
+  talkRange: 3.4,
+  talkDuration: 9,
   sprintSpeed: 6.2,
   jumpVel: 5.6,
   gravity: 14,
