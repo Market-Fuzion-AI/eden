@@ -823,6 +823,74 @@
   flex: 1;
 }
 .cat-settlement { color: #ffd76a; border: 1px solid rgba(255, 215, 106, 0.45); }
+.cat-norm { color: #ff9ad6; border: 1px solid rgba(255, 154, 214, 0.45); }
+
+/* --- claims -------------------------------------------------------------- */
+
+.claim-personal { color: #ff8fa8; }
+.claim-shared { color: #6fd0e8; }
+.claim-public { color: #6fe89f; }
+.claim-none { color: var(--text-dim); }
+
+.contested-tag {
+  margin-left: 8px;
+  color: var(--warn);
+  border: 1px solid rgba(255, 176, 63, 0.5);
+  padding: 1px 6px;
+  letter-spacing: 0.16em;
+}
+
+.claim-block {
+  border-left: 2px solid rgba(255, 255, 255, 0.09);
+  padding-left: 8px;
+  margin: 6px 0;
+}
+.claim-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 3px 2px;
+  cursor: pointer;
+}
+.claim-head:hover { background: rgba(89, 214, 230, 0.1); }
+.claim-why {
+  padding-left: 2px;
+}
+.claim-why .why-line {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+.claim-why .why-line.dim { font-style: italic; }
+
+.tendency { margin: 7px 0; }
+.tendency-group {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  margin-bottom: 3px;
+}
+.tendency-bar {
+  display: flex;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+.tendency-seg { height: 100%; background: currentColor; }
+.tendency-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 9.5px;
+  margin-top: 3px;
+}
+.tendency-note { font-size: 10px; margin: 4px 0 8px; }
 
 .scarcity-note {
   font-size: 10.5px;

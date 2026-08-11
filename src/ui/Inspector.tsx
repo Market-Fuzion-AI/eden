@@ -1,4 +1,4 @@
-import { inspect, type InspectorBar } from '../sim/inspect';
+import { inspect, structureExpectationsOf, type InspectorBar } from '../sim/inspect';
 import { useUI } from '../state/store';
 
 function Bar({ bar }: { bar: InspectorBar }) {
@@ -19,6 +19,7 @@ export function Inspector() {
   const selectedId = useUI((s) => s.selectedId);
   const select = useUI((s) => s.select);
   const openRelationship = useUI((s) => s.openRelationship);
+  const selectStructure = useUI((s) => s.selectStructure);
 
   if (!selectedId) {
     return (
@@ -30,6 +31,7 @@ export function Inspector() {
   }
 
   const data = inspect(selectedId);
+  const expectations = structureExpectationsOf(selectedId);
   if (!data) {
     return (
       <div className="creator-right panel empty-inspector">
@@ -121,6 +123,31 @@ export function Inspector() {
               </span>
               <span className="rel-chevron">›</span>
             </button>
+          ))}
+        </>
+      )}
+
+      {expectations.length > 0 && (
+        <>
+          <div className="section-title">STRUCTURES</div>
+          {expectations.map((e) => (
+            <div key={e.structureId} className="claim-block">
+              <button className="claim-head" onClick={() => selectStructure(e.structureId)}>
+                <span className="rel-name">
+                  {e.name} · {e.place}
+                </span>
+                <span className={`rel-state claim-${e.kind}`}>{e.label}</span>
+                <span className="rel-chevron">›</span>
+              </button>
+              <div className="claim-why">
+                {e.why.slice(0, 4).map((w, i) => (
+                  <div key={i} className="why-line">
+                    {w}
+                  </div>
+                ))}
+                {e.permissionNote && <div className="why-line dim">{e.permissionNote}</div>}
+              </div>
+            </div>
           ))}
         </>
       )}

@@ -1,8 +1,10 @@
-import { PLAYER, RATES, SETTLER, WILDLIFE, WORLD } from './config';
+import { NORM, PLAYER, RATES, SETTLER, WILDLIFE, WORLD } from './config';
 import { chronicle } from './chronicle';
 import { buildExchange, type DialogueExchange } from './dialogue';
 import { placeName } from './landmarks';
 import { remember } from './memory';
+import { emersonBlocker } from './normEvents';
+import { attitudeFor, decidePermission, permissionLine } from './norms';
 import { applyRelationship, peekRelationship, relationshipState } from './relationships';
 import { missingResources } from './structures';
 import { groundY, isWater } from './terrain';
@@ -191,7 +193,7 @@ export function playerDodge(world: World): void {
 export interface InteractionPrompt {
   key: string;
   label: string;
-  action: 'gather' | 'offer' | 'talk' | 'harvest' | 'contribute';
+  action: 'gather' | 'offer' | 'talk' | 'harvest' | 'contribute' | 'ask';
 }
 
 /** A material node Emerson is standing at. */
@@ -257,8 +259,78 @@ export function getInteractions(world: World): InteractionPrompt[] {
     const lumi = world.creatures.find((c) => c.lumi && dist(c.pos, p.pos) < PLAYER.offerRange);
     if (lumi) out.push({ key: 'F', label: 'Offer a glowberry', action: 'offer' });
   }
+
+  // Standing at a shelter somebody considers theirs.
+  const shelter = shelterAtHand(world);
+  if (shelter) {
+    const blocker = emersonBlocker(world, shelter);
+    if (blocker && dist(blocker.settler.pos, p.pos) < NORM.askRange) {
+      out.push({ key: 'R', label: `Ask ${blocker.settler.name} to use the shelter`, action: 'ask' });
+    }
+  }
   return out;
 }
+
+/** A completed shelter Emerson is standing in. */
+export function shelterAtHand(world: World): Structure | null {
+  const p = world.player;
+  if (p.dead) return null;
+  return (
+    world.structures.find(
+      (s) => s.type === 'shelter' && s.state === 'complete' && dist(s.pos, p.pos) < PLAYER.interactRange + 1.5,
+    ) ?? null
+  );
+}
+
+/**
+ * Emerson asks a claimant for leave to use their shelter. Resolved by exactly
+ * the same machinery the settlers use on each other.
+ */
+export function playerAskPermission(world: World): { name: string; line: string; outcome: string } | null {
+  const p = world.player;
+  const shelter = shelterAtHand(world);
+  if (!shelter) return null;
+  const blocker = emersonBlocker(world, shelter);
+  if (!blocker) return null;
+  const claimant = blocker.settler;
+  if (dist(claimant.pos, p.pos) > NORM.askRange) return null;
+
+  const emerson = { id: 'emerson', name: 'Emerson' };
+  const urgency = 100 - p.stamina;
+  const { outcome, reasons } = decidePermission(world, claimant, emerson, shelter, urgency);
+  const att = attitudeFor(claimant, shelter.id);
+
+  if (outcome === 'refuse') {
+    // Remembered on the world so ignoring a refusal has consequences.
+    world.flags[`refusedEmerson_${shelter.id}_${claimant.id}`] = true;
+  } else {
+    if (!att.allowed.includes('emerson')) att.allowed.push('emerson');
+    att.sharedDrift = Math.min(NORM.maxDrift, att.sharedDrift + NORM.sharedDriftPerPermission);
+  }
+
+  chronicle(
+    world,
+    'norm',
+    outcome === 'refuse'
+      ? `${claimant.name} refused Emerson the use of the shelter at ${shelter.place}.`
+      : `${claimant.name} allowed Emerson to use the shelter at ${shelter.place}.`,
+    {
+      actorIds: ['emerson', claimant.id],
+      actorNames: ['Emerson', claimant.name],
+      pos: { ...shelter.pos },
+      place: shelter.place,
+      structureId: shelter.id,
+      cause: ['Emerson asked rather than walking in', ...reasons],
+      effects:
+        outcome === 'refuse'
+          ? ['Emerson was turned away', 'The refusal is remembered']
+          : ['Emerson may use it freely', "The claimant's grip loosened slightly"],
+    },
+  );
+
+  return { name: claimant.name, line: permissionLine(outcome, claimant, emerson), outcome };
+}
+
 
 /**
  * Speak with a nearby settler. Produces a real social interaction: the settler

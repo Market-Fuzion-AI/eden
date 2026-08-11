@@ -106,6 +106,13 @@ function makeSettler(
     socialTimer: 0,
     resting: false,
     home: { ...camp.pos },
+    // Values vary far more widely than the cultural bias, so a settler's
+    // people never predicts what they believe about property.
+    values: {
+      individualism: clamp01(INTELLIGENT_SPECIES[speciesId].valueBias.individualism + (rng.next() - 0.5) * 0.8),
+      territoriality: clamp01(INTELLIGENT_SPECIES[speciesId].valueBias.territoriality + (rng.next() - 0.5) * 0.8),
+    },
+    structureAttitudes: {},
     personality: {
       curiosity: trait(bias.curiosity),
       sociability: trait(bias.sociability),

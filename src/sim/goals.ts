@@ -1,4 +1,4 @@
-import { RATES, REL, SETTLER, STRUCT, WORLD } from './config';
+import { NORM, RATES, REL, SETTLER, STRUCT, WORLD } from './config';
 import { chronicle, daylight01, isNight } from './chronicle';
 import { landmarkAt, placeName } from './landmarks';
 import { remember } from './memory';
@@ -29,6 +29,13 @@ import {
   STRUCTURE_DEFS,
   structureById,
 } from './structures';
+import {
+  assessAccess,
+  evaluateClaim,
+  peekAttitude,
+  type AccessAssessment,
+} from './norms';
+import { noticeUse, noteSharedUse, resolveAsk, restUrgency } from './normEvents';
 import { heightAt, isWater } from './terrain';
 import type {
   Goal,
@@ -339,6 +346,39 @@ export function nextMaterialNeed(
   return { type: 'stone', needed: missing.stone };
 }
 
+export interface ShelterChoice {
+  structure: Structure;
+  d: number;
+  score: number;
+  access: AccessAssessment;
+}
+
+/**
+ * Which shelter to sleep in, weighing other people's expectations.
+ *
+ * A settler may still choose a place someone else considers theirs — urgency
+ * and trust trade against that claim rather than forbidding it outright.
+ */
+export function bestRestShelter(world: World, s: Settler): ShelterChoice | null {
+  const urgency = restUrgency(s);
+  let best: ShelterChoice | null = null;
+  for (const st of knownCompleteStructures(world, s, 'shelter')) {
+    const d = dist(s.pos, st.pos);
+    const access = assessAccess(world, s, st, urgency);
+    // A shelter already full of sleepers is no use to anyone else.
+    const occupants = world.settlers.filter(
+      (o) => o !== s && o.resting && dist(o.pos, st.pos) < STRUCT.occupancyRadius,
+    ).length;
+    const crowding = Math.max(0, occupants - STRUCT.shelterCapacity + 1) * 30;
+    if (crowding > 0) access.reasons.push(`Already ${occupants} sleeping here −${crowding}`);
+    const score = 40 - d * 0.25 + access.modifier - crowding;
+    if (!best || score > best.score) best = { structure: st, d, score, access };
+  }
+  // A shelter everyone would resent them using is worse than sleeping rough.
+  if (best && best.score < 0) return null;
+  return best;
+}
+
 export interface FireCandidate {
   structure: Structure;
   d: number;
@@ -598,6 +638,10 @@ export function settlerThink(world: World, s: Settler): void {
     eat = s.hunger * (food ? 1.0 : 0.55);
     if (food && food.d < 40) eat += 8;
     if (s.hunger > 80) eat += 15;
+    // Starvation overrides everything, including exhaustion. Without this a
+    // settler who knows no stocked patch scores foraging at roughly half of
+    // hunger, loses to the rest urge, and sleeps until their health collapses.
+    if (s.hunger > 88) eat = Math.max(eat, 140);
   }
   add('eat', eat);
 
@@ -671,8 +715,13 @@ export function settlerThink(world: World, s: Settler): void {
   const top = scores[0].goal as GoalType;
 
   const ctx: ThinkContext = { food, best, confront, threatening, project, projectIdea, help, fire };
-  if (top !== s.goal.type || s.goal.phase === 'done') {
+  // Compare against the intent that produced the current goal, not the goal
+  // itself: otherwise any substitute (ask-to-use, forage) is restarted on
+  // every think and can never finish.
+  const currentIntent = s.goal.sourceType ?? s.goal.type;
+  if (top !== currentIntent || s.goal.phase === 'done') {
     startGoal(world, s, top, ctx);
+    s.goal.sourceType = top;
   }
   s.goalReason = buildReason(world, s, s.goal.type, scores, ctx);
   s.nextThinkAt = t + rng.range(SETTLER.thinkMin, SETTLER.thinkMax);
@@ -726,11 +775,29 @@ function startGoal(world: World, s: Settler, type: GoalType, ctx: ThinkContext):
       break;
     }
     case 'rest': {
-      // A built shelter is better than a bare hollow, and worth walking past
-      // a nearer one for — this is where construction changes daily behaviour.
-      const shelter = nearestKnownStructure(world, s, 'shelter');
+      // A built shelter is better than a bare hollow — but somebody else may
+      // consider that shelter theirs, and that expectation is weighed here
+      // alongside trust, permission, fear and how badly rest is needed.
+      const shelter = bestRestShelter(world, s);
       const spot = nearestKnownRest(world, s);
       if (shelter && (!spot || shelter.d < spot.d + 45)) {
+        // Ask first when the claim is strong and there is time to be polite.
+        if (shelter.access.shouldAsk && shelter.access.blocker) {
+          const claimant = shelter.access.blocker.settler;
+          const att = peekAttitude(s, shelter.structure.id);
+          // Reachable either from here or from the shelter itself.
+          const reachable =
+            Math.min(dist(s.pos, claimant.pos), dist(shelter.structure.pos, claimant.pos)) < NORM.askRange;
+          const canAsk = reachable && t - (att?.lastAskedAt ?? -9999) > NORM.askCooldown;
+          if (canAsk) {
+            s.goal = mkGoal('ask-to-use', `Ask ${claimant.name} about the shelter`, t, {
+              targetId: claimant.id,
+              structureId: shelter.structure.id,
+              deadline: t + 90,
+            });
+            break;
+          }
+        }
         s.goal = mkGoal('rest', `Rest in the shelter at ${shelter.structure.place}`, t, {
           structureId: shelter.structure.id,
           targetPos: { ...shelter.structure.pos },
@@ -910,11 +977,34 @@ function buildReason(
       lines.push(food ? `Knows ${food.node.label}, ${Math.round(food.d)}m away` : 'No food source known — foraging');
       lines.push(`Energy sufficient (${Math.round(s.energy)})`);
       break;
-    case 'rest':
+    case 'rest': {
       lines.push(`Energy low (${Math.round(s.energy)} / 100)`);
       if (isNight(t)) lines.push('It is night');
-      lines.push('Knows a safe place to rest');
+      const shelterChoice = bestRestShelter(world, s);
+      if (shelterChoice && s.goal.structureId === shelterChoice.structure.id) {
+        lines.push(`Shelter rest bonus +${Math.round((STRUCT.shelterRestBonus - 1) * 45)}`);
+        // The social calculation behind sleeping there.
+        lines.push(...shelterChoice.access.reasons);
+      } else {
+        lines.push('Knows a safe place to rest');
+      }
       break;
+    }
+    case 'ask-to-use': {
+      const st = structureById(world, s.goal.structureId);
+      const claimant = world.settlers.find((o) => o.id === s.goal.targetId);
+      if (st && claimant) {
+        const theirClaim = evaluateClaim(world, claimant, st);
+        lines.push(`Wants to use the shelter at ${st.place}`);
+        lines.push(`${claimant.name} holds it: ${theirClaim.label}`);
+        const rel = peekRelationship(s, claimant.id);
+        if (rel) lines.push(`Trust with ${claimant.name} ${Math.round(rel.trust)}`);
+        lines.push(`Sociable enough to ask rather than simply walk in`);
+      } else {
+        lines.push('Asking about a shelter');
+      }
+      break;
+    }
     case 'socialize':
     case 'seek-friend': {
       const partner = best?.other ?? null;
@@ -1640,6 +1730,23 @@ export function settlerExecute(world: World, s: Settler, dt: number): void {
     return;
   }
 
+  // Anti-stuck: if a journey stops making progress — wedged against terrain,
+  // or blocked by a crowd already occupying the destination — abandon it
+  // rather than standing there until some other need becomes critical.
+  if (g.phase === 'travel') {
+    const dest = g.targetPos ?? structureById(world, g.structureId)?.pos;
+    if (dest) {
+      const d = dist(s.pos, dest);
+      if (g.lastDist === undefined || d < g.lastDist - STRUCT.stuckProgress) {
+        g.lastDist = d;
+        g.lastProgressAt = t;
+      } else if (t - (g.lastProgressAt ?? t) > STRUCT.stuckTimeout) {
+        g.phase = 'done';
+        return;
+      }
+    }
+  }
+
   switch (g.type) {
     case 'eat': {
       const node = world.resources.find((r) => r.id === g.targetId);
@@ -1687,7 +1794,13 @@ export function settlerExecute(world: World, s: Settler, dt: number): void {
         if (d < SETTLER.arriveDist + 0.6) {
           g.phase = 'act';
           s.resting = true;
-          if (shelterUsed && shelterUsed.state === 'complete') recordUse(world, shelterUsed, s);
+          if (shelterUsed && shelterUsed.state === 'complete') {
+            recordUse(world, shelterUsed, s);
+            // Sleeping in a place is the moment anyone who considers it theirs
+            // finds out — and the moment permitted use starts softening a claim.
+            noticeUse(world, s, shelterUsed);
+            noteSharedUse(world, s, shelterUsed);
+          }
         }
       } else {
         stand(s);
@@ -1914,6 +2027,31 @@ export function settlerExecute(world: World, s: Settler, dt: number): void {
           // Stalled for want of materials — go and fetch some.
           g.phase = 'done';
         } else if (g.timer <= 0) {
+          g.phase = 'done';
+        }
+      }
+      break;
+    }
+    case 'ask-to-use': {
+      const claimant = world.settlers.find((o) => o.id === g.targetId);
+      const st = structureById(world, g.structureId);
+      if (!claimant || !st || claimant.resting) {
+        g.phase = 'done';
+        return;
+      }
+      if (g.phase === 'travel') {
+        const d = stepToward(world, s, claimant.pos, dt, { speed: SETTLER.walkSpeed });
+        if (d < SETTLER.socialRange) {
+          g.phase = 'act';
+          g.timer = NORM.askDuration;
+          s.socialTimer = NORM.askDuration;
+          claimant.socialTimer = NORM.askDuration;
+        }
+      } else {
+        holdConversation(world, s, claimant, dt);
+        g.timer -= dt;
+        if (g.timer <= 0) {
+          resolveAsk(world, s, claimant, st);
           g.phase = 'done';
         }
       }

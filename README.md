@@ -34,6 +34,18 @@ shelters get slept in; finished campfires pull people together after dark, and *
 walks to depends on who is already sitting at it. Within a week or so, the valley grows two or three
 small clusters of buildings that people keep returning to.
 
+**v0.5** gave those places contested meaning —
+
+> *Expectation before law.*
+
+There is no `ownerId` anywhere in EDEN, and there never will be. Instead each settler forms their own
+reading of a structure from what they actually did — staked it, hauled for it, slept in it — who else
+did, how they feel about those people, and what they personally believe about property. Three settlers
+can look at one shelter and see a private room, a joint effort and a common resource, and the
+simulation stores all three without deciding between them. They ask each other for permission, grant
+it or refuse it, notice intrusions or let them pass, and their expectations harden or soften with what
+they live through.
+
 ## Running it
 
 ```bash
@@ -70,6 +82,10 @@ node scripts/smoke.mjs   # browser smoke test with screenshots (needs preview/de
   how much of the labour each person did, when it was finished, why *there*, and who keeps coming
   back to it. Every line is read from the structure's own record.
 
+  The same panel shows **how each person reads the place**, with the reasoning behind every claim, and
+  flags it CONTESTED when they disagree. The left panel tallies each people's shelter expectations —
+  descriptive only; it is not law and not culture, just a count of what individuals happen to believe.
+
 Skip ahead at 5× or 20× and drop back to 1×, and the world reports what changed while you were not
 watching — population, new relationships, discoveries, budding events, deaths, conflicts. Every figure
 is counted from real simulation state; nothing is invented.
@@ -89,6 +105,7 @@ the existing needs, utility and relationship systems decide to do.
 | `Space` | Jump |
 | `E` | Gather glowberries or materials · contribute to a build · talk to a settler |
 | `F` | Offer a glowberry (Lumi decides whether to take it) |
+| `R` | Ask a settler's permission to use their shelter |
 | Left click | Attack |
 | Right click | Dodge |
 | `Tab` | Toggle Creator Mode |
@@ -109,7 +126,8 @@ src/sim/      Pure TypeScript simulation. No Three.js, no React.
               World, agents, needs, utility-AI goals + reasons, memories,
               structured relationships (affinity/trust/familiarity/fear with
               recorded history), structures and construction with full
-              provenance, wildlife, Lumi, chronicle (with structured
+              provenance, agent-relative claims and informal norms,
+              wildlife, Lumi, chronicle (with structured
               who/where/why/effects payloads), landmarks, deterministic
               dialogue, temporal summaries, terrain math, seeded RNG,
               creator interventions.

@@ -69,6 +69,27 @@ export function StructureDetail({ id }: { id: string }) {
         </button>
       ))}
 
+      <div className="section-title">
+        HOW PEOPLE SEE IT{data.contested && <span className="contested-tag">CONTESTED</span>}
+      </div>
+      {data.claimants.length === 0 && <div className="creator-note">Nobody has formed a view of this place.</div>}
+      {data.claimants.map((c) => (
+        <div key={c.id} className="claim-block">
+          <button className="claim-head" onClick={() => select(c.id)}>
+            <span className="rel-name">{c.name}</span>
+            <span className={`rel-state claim-${c.kind}`}>{c.label}</span>
+            <span className="rel-chevron">›</span>
+          </button>
+          <div className="claim-why">
+            {c.why.map((w, i) => (
+              <div key={i} className="why-line">
+                {w}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
       <div className="section-title">MATERIALS</div>
       {data.materials.map((m) => (
         <div key={m} className="known-row">

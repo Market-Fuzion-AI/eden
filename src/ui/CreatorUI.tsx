@@ -1,6 +1,7 @@
 import { getWorld } from '../sim';
 import { formatClock } from '../sim/chronicle';
 import { creatorSetHour, creatorSetYield, creatorToggleWeather } from '../sim/creator';
+import { normTendencies } from '../sim/inspect';
 import { useUI, type SimSpeed } from '../state/store';
 import { ChroniclePanel } from './ChroniclePanel';
 import { EventDetail } from './EventDetail';
@@ -30,6 +31,7 @@ export function CreatorUI() {
   const setMode = useUI((s) => s.setMode);
 
   const world = getWorld();
+  const tendencies = normTendencies();
 
   const speedBtn = (s: SimSpeed, label: string) => (
     <button className={`btn ${!paused && speed === s ? 'active' : ''}`} onClick={() => setSpeed(s)}>
@@ -113,6 +115,30 @@ export function CreatorUI() {
           <span>{world.settlers.length} settlers</span>
           <span>{world.creatures.length} native lifeforms</span>
         </div>
+
+        {tendencies.length > 0 && (
+          <>
+            <div className="section-title">SHELTER EXPECTATIONS</div>
+            <div className="creator-note tendency-note">
+              How each people currently reads shelters. Descriptive only — not law, not culture.
+            </div>
+            {tendencies.map((t) => (
+              <div key={t.group} className="tendency">
+                <div className="tendency-group">{t.group}</div>
+                <div className="tendency-bar">
+                  <div className="tendency-seg claim-personal" style={{ width: `${t.personal}%` }} />
+                  <div className="tendency-seg claim-shared" style={{ width: `${t.shared}%` }} />
+                  <div className="tendency-seg claim-public" style={{ width: `${t.public}%` }} />
+                </div>
+                <div className="tendency-legend">
+                  <span className="claim-personal">Personal {t.personal}%</span>
+                  <span className="claim-shared">Shared {t.shared}%</span>
+                  <span className="claim-public">Public {t.public}%</span>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
       </div>
 
       {summary && <SummaryPanel summary={summary} />}

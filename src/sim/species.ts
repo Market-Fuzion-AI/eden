@@ -19,6 +19,15 @@ export interface IntelligentSpeciesDef {
     empathy: number;
     initiative: number;
   };
+  /**
+   * Cultural starting tendencies about property, NOT determinism. Individual
+   * variance is deliberately wide enough that communal Caelari and possessive
+   * Veyra both occur — a settler's people is a hint, never a rule.
+   */
+  valueBias: {
+    individualism: number;
+    territoriality: number;
+  };
   palette: {
     skin: string[];
     hair: string[];
@@ -37,6 +46,7 @@ export const INTELLIGENT_SPECIES: Record<IntelligentSpeciesId, IntelligentSpecie
     name: 'Human',
     plural: 'Humans',
     bias: { curiosity: 0.5, sociability: 0.5, caution: 0.5, aggression: 0.45, empathy: 0.55, initiative: 0.5 },
+    valueBias: { individualism: 0.54, territoriality: 0.5 },
     palette: {
       skin: ['#e8b98d', '#c68a5e', '#8a5a3b', '#f0cba6', '#6e4529'],
       hair: ['#2b2118', '#5b3b22', '#111318', '#a56a35', '#8c8f96'],
@@ -51,6 +61,7 @@ export const INTELLIGENT_SPECIES: Record<IntelligentSpeciesId, IntelligentSpecie
     name: 'Veyra',
     plural: 'Veyra',
     bias: { curiosity: 0.45, sociability: 0.62, caution: 0.55, aggression: 0.45, empathy: 0.65, initiative: 0.5 },
+    valueBias: { individualism: 0.34, territoriality: 0.38 },
     palette: {
       skin: ['#5d8a5f', '#4f7d70', '#6f9358', '#54806b', '#638a4e'],
       hair: ['#2e5540', '#1e4a45', '#3d5a28'],
@@ -65,6 +76,7 @@ export const INTELLIGENT_SPECIES: Record<IntelligentSpeciesId, IntelligentSpecie
     name: 'Caelari',
     plural: 'Caelari',
     bias: { curiosity: 0.68, sociability: 0.4, caution: 0.38, aggression: 0.5, empathy: 0.48, initiative: 0.62 },
+    valueBias: { individualism: 0.66, territoriality: 0.58 },
     palette: {
       skin: ['#cfd7e8', '#b9c8de', '#dcd2e8', '#c2d8d4', '#e3d9c8'],
       hair: ['#7f5fd0', '#4f7fd0', '#d06fa0', '#50b5b0'],

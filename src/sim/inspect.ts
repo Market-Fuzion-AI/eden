@@ -9,9 +9,10 @@ import {
   socialModifiers,
   type RelationshipState,
 } from './relationships';
+import { claimantsOf, evaluateClaim, peekAttitude } from './norms';
 import { CREATURE_SPECIES_BY_ID, INTELLIGENT_SPECIES } from './species';
 import { constructionStage, frequentUsers, STAGE_LABEL, STRUCTURE_DEFS } from './structures';
-import type { IntelligentSpeciesId, Relationship } from './types';
+import type { ClaimKind, IntelligentSpeciesId, Relationship } from './types';
 import { dist } from './vec';
 
 /**
@@ -83,6 +84,107 @@ export interface StructureDetail {
   startedLabel: string;
   recentUsers: { id: string; name: string; line: string }[];
   useCount: number;
+  /** How each involved settler independently reads this place. */
+  claimants: {
+    id: string;
+    name: string;
+    kind: ClaimKind;
+    label: string;
+    attachment: number;
+    why: string[];
+  }[];
+  /** True when at least two people read it differently. */
+  contested: boolean;
+}
+
+/** One settler's stance toward one structure, for the agent inspector. */
+export interface StructureExpectation {
+  structureId: string;
+  name: string;
+  place: string;
+  kind: ClaimKind;
+  label: string;
+  attachment: number;
+  why: string[];
+  permissionNote: string | null;
+}
+
+export function structureExpectationsOf(settlerId: string): StructureExpectation[] {
+  const world = getWorld();
+  const s = getEntity(settlerId);
+  if (!s || s.kind !== 'settler') return [];
+  const out: StructureExpectation[] = [];
+  for (const st of world.structures) {
+    if (st.state !== 'complete') continue;
+    const involved =
+      st.initiatorId === s.id ||
+      st.contributions.some((c) => c.id === s.id) ||
+      st.usage.some((u) => u.id === s.id) ||
+      Boolean(peekAttitude(s, st.id));
+    if (!involved) continue;
+    const claim = evaluateClaim(world, s, st);
+    if (claim.kind === 'none') continue;
+    const att = peekAttitude(s, st.id);
+    const notes: string[] = [];
+    if (att?.allowed.length) notes.push(`has allowed ${att.allowed.length}`);
+    if (att?.allowedBy.length) notes.push(`allowed by ${att.allowedBy.length}`);
+    if (att?.refusedBy.length) notes.push(`refused by ${att.refusedBy.length}`);
+    out.push({
+      structureId: st.id,
+      name: STRUCTURE_DEFS[st.type].name,
+      place: st.place,
+      kind: claim.kind,
+      label: claim.label,
+      attachment: Math.round(claim.attachment),
+      why: claim.factors
+        .filter((f) => f.value !== 0)
+        .map((f) => `${f.label} ${f.value > 0 ? '+' : ''}${f.value}`),
+      permissionNote: notes.length ? notes.join(' · ') : null,
+    });
+  }
+  const rank: Record<ClaimKind, number> = { personal: 3, shared: 2, public: 1, none: 0 };
+  out.sort((a, b) => rank[b.kind] - rank[a.kind] || b.attachment - a.attachment);
+  return out;
+}
+
+/**
+ * Descriptive aggregation of how each people currently reads shelters.
+ * Not culture, not law — just a tally of individual expectations.
+ */
+export interface NormTendency {
+  group: string;
+  personal: number;
+  shared: number;
+  public: number;
+  sample: number;
+}
+
+export function normTendencies(): NormTendency[] {
+  const world = getWorld();
+  const out: NormTendency[] = [];
+  for (const speciesId of ['human', 'veyra', 'caelari'] as IntelligentSpeciesId[]) {
+    const counts = { personal: 0, shared: 0, public: 0 };
+    let sample = 0;
+    for (const s of world.settlers) {
+      if (s.speciesId !== speciesId) continue;
+      for (const st of world.structures) {
+        if (st.type !== 'shelter' || st.state !== 'complete') continue;
+        const claim = evaluateClaim(world, s, st);
+        if (claim.kind === 'none') continue;
+        counts[claim.kind]++;
+        sample++;
+      }
+    }
+    if (sample === 0) continue;
+    out.push({
+      group: INTELLIGENT_SPECIES[speciesId].plural,
+      personal: Math.round((counts.personal / sample) * 100),
+      shared: Math.round((counts.shared / sample) * 100),
+      public: Math.round((counts.public / sample) * 100),
+      sample,
+    });
+  }
+  return out;
 }
 
 export function inspectStructure(id: string): StructureDetail | null {
@@ -127,6 +229,18 @@ export function inspectStructure(id: string): StructureDetail | null {
       line: `${u.count} visit${u.count === 1 ? '' : 's'} · last ${formatClockShort(u.lastAt)}`,
     })),
     useCount: st.useCount,
+    claimants: claimantsOf(world, st).map((c) => ({
+      id: c.settler.id,
+      name: c.settler.name,
+      kind: c.claim.kind,
+      label: c.claim.label,
+      attachment: Math.round(c.claim.attachment),
+      why: c.claim.factors
+        .filter((f) => f.value !== 0)
+        .slice(0, 5)
+        .map((f) => `${f.label} ${f.value > 0 ? '+' : ''}${f.value}`),
+    })),
+    contested: new Set(claimantsOf(world, st).map((c) => c.claim.kind)).size > 1,
   };
 }
 

@@ -453,6 +453,87 @@ if (settlement.firstStructureId) {
   await page.screenshot({ path: `${SHOT_DIR}/09-structure.png` });
 }
 
+// ---------------------------------------------------------------------------
+console.log('\nTHE FIRST NORM');
+// ---------------------------------------------------------------------------
+const norms = await page.evaluate(() => {
+  const { getWorld, norms: n } = window.__EDEN__;
+  const world = getWorld();
+  // Give the settlement time to develop expectations about itself.
+  for (let i = 0; i < 720 * 5 * 30; i++) window.__EDEN__.stepSim(1 / 30);
+
+  const complete = world.structures.filter((s) => s.state === 'complete');
+  const contested = [];
+  let anyPersonal = false;
+  let anyPublic = false;
+  for (const st of complete) {
+    const kinds = n.claimantsOf(world, st).map((c) => c.claim.kind);
+    if (kinds.includes('personal')) anyPersonal = true;
+    if (kinds.includes('public')) anyPublic = true;
+    if (new Set(kinds).size > 1) contested.push(st.id);
+  }
+  let granted = 0;
+  let refused = 0;
+  let drift = 0;
+  for (const s of world.settlers) {
+    for (const a of Object.values(s.structureAttitudes)) {
+      granted += a.allowed.length;
+      refused += a.refusedBy.length;
+      drift += a.sharedDrift;
+    }
+  }
+  // No structure may carry an owner.
+  const hasOwner = complete.some((s) => 'ownerId' in s || 'owner' in s);
+  return {
+    complete: complete.length,
+    contested: contested.length,
+    contestedId: contested[0] ?? null,
+    anyPersonal,
+    anyPublic,
+    granted,
+    refused,
+    drift: Number(drift.toFixed(2)),
+    normEvents: world.chronicle.filter((e) => e.category === 'norm').length,
+    hasOwner,
+  };
+});
+console.log(`    (${norms.complete} structures, ${norms.contested} contested, ${norms.granted} permissions, ${norms.refused} refusals, ${norms.normEvents} norm events)`);
+check('structures carry no owner field', !norms.hasOwner);
+check('settlers disagree about the same place', norms.contested > 0, `${norms.contested}`);
+check('both personal and public readings exist', norms.anyPersonal && norms.anyPublic);
+check('permission is actually exchanged', norms.granted + norms.refused > 0, `${norms.granted}/${norms.refused}`);
+check('expectations drift with lived experience', norms.drift > 0, `${norms.drift}`);
+check('norm events reach the chronicle', norms.normEvents > 0, `${norms.normEvents}`);
+
+if (norms.contestedId) {
+  await page.evaluate((id) => window.__EDEN__.useUI.getState().selectStructure(id), norms.contestedId);
+  await page.waitForTimeout(700);
+  const panel = await page.locator('.creator-right').innerText();
+  check('claim inspector shows how people see it', /HOW PEOPLE SEE IT/.test(panel));
+  check('contested places are marked', /CONTESTED/.test(panel));
+  check('each claim is explained', /building effort|Initiated it|Used it|common|yours/.test(panel));
+  check('claim panel has no placeholders', !/undefined|NaN/.test(panel));
+  await page.screenshot({ path: `${SHOT_DIR}/12-claims.png` });
+
+  // Agent-side view of the same disagreement.
+  const claimantId = await page.evaluate((id) => {
+    const { getWorld, norms: n } = window.__EDEN__;
+    const world = getWorld();
+    const st = world.structures.find((s) => s.id === id);
+    return n.claimantsOf(world, st)[0]?.settler.id ?? null;
+  }, norms.contestedId);
+  if (claimantId) {
+    await page.evaluate((id) => window.__EDEN__.useUI.getState().select(id), claimantId);
+    await page.waitForTimeout(600);
+    const agent = await page.locator('.creator-right').innerText();
+    check('agent inspector lists structure expectations', /STRUCTURES/.test(agent));
+    await page.screenshot({ path: `${SHOT_DIR}/13-expectations.png` });
+  }
+}
+
+const tendencyPanel = await page.locator('.creator-left').innerText();
+check('creator shows descriptive norm tendencies', /SHELTER EXPECTATIONS/.test(tendencyPanel));
+
 const worldState = await page.evaluate(() => {
   const w = window.__EDEN__.getWorld();
   const lumi = w.creatures.find((c) => c.id === 'lumi');

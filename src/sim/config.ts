@@ -188,12 +188,88 @@ export const STRUCT = {
 
   /** Shelter rest bonus multiplier. */
   shelterRestBonus: 1.7,
+  /**
+   * How many can comfortably sleep in one shelter. Beyond this the place is
+   * strongly discouraged — without it the whole settlement converged on a
+   * single shelter and latecomers were physically blocked out of it while
+   * their rest goal kept them standing there, starving.
+   */
+  shelterCapacity: 4,
+  /** Radius counted as "inside" a structure. */
+  occupancyRadius: 4.5,
+
+  /**
+   * Travel is abandoned after this long without meaningful progress. A general
+   * safety net: no goal may pin an agent in place indefinitely.
+   */
+  stuckTimeout: 22,
+  stuckProgress: 0.4,
 
   /** Proto-settlement detection (observation only). */
   settlementRadius: 34,
   settlementMinStructures: 2,
   settlementMinRegulars: 3,
   settlementMinUses: 2,
+} as const;
+
+/**
+ * Informal norms. These numbers decide how readily lived history hardens into
+ * an expectation — and how readily an expectation softens again.
+ */
+export const NORM = {
+  /** Stances tracked per settler before the least-invested is forgotten. */
+  maxAttitudes: 10,
+
+  /**
+   * Where each structure type starts on the private↔communal axis.
+   * Kept low: a high base swamped everything else and made anyone who touched
+   * a shelter read it as exclusively theirs.
+   */
+  shelterExclusivityBase: 0.36,
+  campfireExclusivityBase: 0.18,
+  /**
+   * How much held values pull exclusivity around. Large on purpose — what
+   * someone believes about property must be able to outweigh the bare facts
+   * of who did the work, or two people with identical histories could never
+   * reach different conclusions.
+   */
+  valuesWeight: 0.75,
+
+  /** Below this attachment a settler has no personal stake worth speaking of. */
+  attachmentFloor: 18,
+  personalThreshold: 0.6,
+  sharedThreshold: 0.34,
+  /** Distinct users after which a campfire reads as everyone's. */
+  publicUserThreshold: 5,
+
+  /** How heavily another's personal claim discourages use. */
+  blockerWeight: 0.55,
+  urgencyWeight: 0.45,
+  /** Above this urgency a settler stops asking and simply goes in. */
+  desperationUrgency: 72,
+
+  /** Permission decision thresholds. */
+  allowThreshold: 18,
+  reluctantThreshold: -4,
+
+  /** Share of the building effort that makes someone a genuine co-builder. */
+  coBuilderShare: 0.15,
+
+  /** Asking. */
+  askRange: 58,
+  askDuration: 7,
+  askCooldown: 420,
+
+  /** Norm drift per event. */
+  sharedDriftPerPermission: 0.06,
+  sharedDriftPerPeacefulUse: 0.015,
+  grudgePerViolation: 0.09,
+  /** Enough that sustained sharing can genuinely flip even a firm claim. */
+  maxDrift: 0.55,
+
+  /** A violation is only noticed if the claimant is within sight of it. */
+  noticeRange: 62,
+  violationCooldown: 240,
 } as const;
 
 /** Glowberry abundance, adjustable from Creator Mode. */

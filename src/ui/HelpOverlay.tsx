@@ -7,6 +7,7 @@ const CONTROLS: [string, string][] = [
   ['Shift', 'Sprint'],
   ['E', 'Interact · gather · talk · help build'],
   ['F', 'Offer a glowberry'],
+  ['R', 'Ask permission to use a shelter'],
   ['Tab', 'Creator Mode'],
   ['Esc', 'Release the mouse · this screen'],
 ];

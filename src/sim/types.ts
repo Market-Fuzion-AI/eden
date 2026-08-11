@@ -28,7 +28,8 @@ export type GoalType =
   | 'gather-stone'
   | 'build'
   | 'help-build'
-  | 'gather-at-fire';
+  | 'gather-at-fire'
+  | 'ask-to-use';
 
 export type GoalPhase = 'travel' | 'act' | 'done';
 
@@ -47,6 +48,17 @@ export interface Goal {
   deadline: number;
   /** For two-party exchanges: true on the side that started it. */
   initiator?: boolean;
+  /**
+   * The scored intent this goal came from, when it differs from the goal
+   * actually adopted — deciding to rest can produce an "ask to use" errand,
+   * and wanting to eat with no known food produces a foraging trip. Re-planning
+   * compares against this, so a substitute goal is not torn down and rebuilt
+   * every think.
+   */
+  sourceType?: GoalType;
+  /** Anti-stuck bookkeeping for the travel phase. */
+  lastDist?: number;
+  lastProgressAt?: number;
 }
 
 /** Why the current goal was selected — surfaced verbatim in Creator Mode. */
@@ -78,7 +90,13 @@ export interface MemoryEntry {
     | 'helped_build'
     | 'rested_in_shelter'
     | 'used_structure'
-    | 'resented_material';
+    | 'resented_material'
+    | 'granted_permission'
+    | 'received_permission'
+    | 'refused_permission'
+    | 'was_refused'
+    | 'expectation_violated'
+    | 'used_claimed_structure';
   subjectId?: EntityId;
   subjectName?: string;
   place?: string;
@@ -97,7 +115,9 @@ export interface RelationshipEvent {
     | 'gift'
     | 'sought'
     | 'resentment'
-    | 'cooperation';
+    | 'cooperation'
+    | 'permission'
+    | 'violation';
   text: string;
   withName: string;
   /** Values after the change, for a readable running record. */
@@ -125,6 +145,42 @@ export interface Personality {
   aggression: number;
   empathy: number;
   initiative: number;
+}
+
+/**
+ * Lightweight held values. These are not personality traits but beliefs about
+ * how things *ought* to work, and they are what turn identical histories into
+ * different expectations about the same shelter.
+ */
+export interface Values {
+  /** Belief that what you make is yours rather than everyone's. 0..1 */
+  individualism: number;
+  /** Preference for exclusive personal space. 0..1 */
+  territoriality: number;
+}
+
+export type ClaimKind = 'none' | 'public' | 'shared' | 'personal';
+
+/**
+ * One settler's evolving stance toward one structure.
+ *
+ * Deliberately stored on the *agent*, never on the structure: two people can
+ * hold flatly contradictory views of the same shelter and neither is right.
+ */
+export interface StructureAttitude {
+  structureId: EntityId;
+  /** Drift toward accepting shared use, earned by peaceful shared history. */
+  sharedDrift: number;
+  /** Drift toward exclusivity, earned by use they considered inappropriate. */
+  grudge: number;
+  /** People this settler has allowed to use it. */
+  allowed: EntityId[];
+  /** People who have allowed this settler to use it. */
+  allowedBy: EntityId[];
+  /** People who have refused this settler. */
+  refusedBy: EntityId[];
+  lastViolationAt: number;
+  lastAskedAt: number;
 }
 
 export interface AgentCommon {
@@ -157,6 +213,9 @@ export interface Settler extends AgentCommon {
   kind: 'settler';
   speciesId: IntelligentSpeciesId;
   personality: Personality;
+  values: Values;
+  /** Stances toward structures, keyed by structure id. Bounded. */
+  structureAttitudes: Record<EntityId, StructureAttitude>;
   needs: { social: number; curiosity: number; safety: number };
   relationships: Record<EntityId, Relationship>;
   knownResourceIds: EntityId[];
@@ -317,7 +376,8 @@ export type ChronicleCategory =
   | 'wildlife'
   | 'emerson'
   | 'creator'
-  | 'settlement';
+  | 'settlement'
+  | 'norm';
 
 export interface ChronicleEvent {
   id: number;

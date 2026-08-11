@@ -1,5 +1,7 @@
 import { isNight } from './chronicle';
 import { landmarkAt } from './landmarks';
+import { emersonBlocker } from './normEvents';
+import { shelterAtHand } from './player';
 import { dist } from './vec';
 import type { World } from './types';
 
@@ -69,6 +71,19 @@ export function ariTick(world: World): void {
     f.lumiFollowSignal = false;
     f.lumiStoppedFollowing = false;
   }
+  // Social expectation warning: ARI reads the room so Emerson can too.
+  if (!world.player.dead) {
+    const shelter = shelterAtHand(world);
+    if (shelter) {
+      const blocker = emersonBlocker(world, shelter);
+      const key = `ariClaim_${shelter.id}`;
+      if (blocker && !f[key]) {
+        f[key] = true;
+        say(`${blocker.settler.name} appears to consider this shelter personally controlled.`);
+      }
+    }
+  }
+
   // Health warning.
   if (world.player.health < 35 && !world.player.dead) {
     if (!f.ariHealthWarnAt || t - (f.ariHealthWarnAt as number) > 60) {

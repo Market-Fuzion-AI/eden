@@ -1,6 +1,13 @@
 import { getWorld } from '../sim';
 import { ariCreatorToggle } from '../sim/ari';
-import { playerAttack, playerDodge, playerGather, playerOfferFood, playerTalk } from '../sim/player';
+import {
+  playerAskPermission,
+  playerAttack,
+  playerDodge,
+  playerGather,
+  playerOfferFood,
+  playerTalk,
+} from '../sim/player';
 import { useUI } from '../state/store';
 
 /**
@@ -101,6 +108,19 @@ export function installInput(): void {
         }
       }
       if (e.code === 'KeyF') playerOfferFood(getWorld());
+      if (e.code === 'KeyR') {
+        const reply = playerAskPermission(getWorld());
+        if (reply) {
+          ui.openDialogue({
+            settlerId: 'permission',
+            name: reply.name,
+            speciesLabel: reply.outcome === 'refuse' ? 'refused' : 'gave permission',
+            affinity: 0,
+            firstMeeting: false,
+            lines: [{ speaker: reply.name, text: reply.line }],
+          });
+        }
+      }
     }
     inputState.keys.add(e.code);
   });

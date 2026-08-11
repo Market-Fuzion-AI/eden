@@ -4,6 +4,7 @@ import { findHelpCandidate, nextMaterialNeed } from './goals';
 import { applyRelationship } from './relationships';
 import { simTick } from './simulation';
 import {
+  applyWork,
   chooseBuildSite,
   createProject,
   deliveredFraction,
@@ -89,14 +90,22 @@ describe('construction consumes real resources', () => {
     const st = createProject(world, s, 'campfire', site.pos, ['test'], site.reason);
     expect(deliveredFraction(st)).toBe(0);
 
-    // Half the materials means at most half-built, no matter how long they work.
+    // Wood delivered but no stone: at most a partial build, however long
+    // anyone labours. Applied directly so the invariant is tested rather than
+    // the surrounding world's willingness to leave the site alone.
     st.contributed.wood = st.required.wood;
     const cap = deliveredFraction(st);
     expect(cap).toBeGreaterThan(0);
     expect(cap).toBeLessThan(1);
 
-    run(world, 600);
-    expect(st.progress).toBeLessThanOrEqual(cap + 0.001);
+    for (let i = 0; i < 5000; i++) applyWork(world, st, s, SIM_DT);
+    expect(st.progress).toBeLessThanOrEqual(cap + 1e-9);
+
+    // Delivering the rest lifts the ceiling.
+    st.contributed.stone = st.required.stone;
+    expect(deliveredFraction(st)).toBe(1);
+    for (let i = 0; i < 5000; i++) applyWork(world, st, s, SIM_DT);
+    expect(st.progress).toBeCloseTo(1, 5);
   });
 
   it('draws material out of the world, not from nowhere', () => {
@@ -119,13 +128,18 @@ describe('construction consumes real resources', () => {
     const st = createProject(world, s, 'shelter', site.pos, ['test'], site.reason);
     st.lastWorkAt = world.timeSec;
     const id = st.id;
+    // Make it far too large to finish inside the window, so this measures
+    // persistence rather than how industrious the settlers happen to be.
+    st.required = { wood: 5000, stone: 5000 };
     // Keep it "touched" so the abandonment sweep leaves it alone.
     for (let i = 0; i < 40; i++) {
       run(world, 60);
       st.lastWorkAt = world.timeSec;
+      const live = world.structures.find((o) => o.id === id);
+      expect(live, 'an in-progress site must never silently disappear').toBeDefined();
+      expect(live!.state).toBe('under-construction');
+      expect(live!.progress).toBeLessThan(1);
     }
-    expect(world.structures.some((o) => o.id === id)).toBe(true);
-    expect(world.structures.find((o) => o.id === id)!.state).toBe('under-construction');
   });
 });
 

@@ -3,6 +3,7 @@ import { getWorld } from '../sim';
 import * as creator from '../sim/creator';
 import * as goals from '../sim/goals';
 import * as rel from '../sim/relationships';
+import * as norms from '../sim/norms';
 import * as structures from '../sim/structures';
 import { getInteractions, updatePlayer } from '../sim/player';
 import { simTick } from '../sim/simulation';
@@ -61,6 +62,7 @@ export function installDebugBridge(): void {
     goals,
     rel,
     structures,
+    norms,
     perf,
     terrainHash,
     fogDensity: () => activeFog?.density ?? -1,
