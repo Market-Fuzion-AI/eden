@@ -1,4 +1,4 @@
-import { formatClockShort } from './chronicle';
+import { formatClock, formatClockShort } from './chronicle';
 import { getEntity, getWorld } from './index';
 import { LANDMARKS, placeName } from './landmarks';
 import { memoryText } from './memory';
@@ -10,6 +10,7 @@ import {
   type RelationshipState,
 } from './relationships';
 import { CREATURE_SPECIES_BY_ID, INTELLIGENT_SPECIES } from './species';
+import { constructionStage, frequentUsers, STAGE_LABEL, STRUCTURE_DEFS } from './structures';
 import type { IntelligentSpeciesId, Relationship } from './types';
 import { dist } from './vec';
 
@@ -61,6 +62,72 @@ export interface InspectorData {
   relationships: RelationshipSummary[];
   memories: { text: string; ago: string }[];
   known: string[];
+}
+
+/** Everything Creator Mode shows about a structure — all of it recorded. */
+export interface StructureDetail {
+  id: string;
+  name: string;
+  place: string;
+  pos: { x: number; z: number };
+  status: string;
+  progressPct: number;
+  stageLabel: string;
+  initiatorId: string;
+  initiatorName: string;
+  reason: string[];
+  locationReason: string[];
+  contributors: { id: string; name: string; line: string }[];
+  materials: string[];
+  builtLabel: string;
+  startedLabel: string;
+  recentUsers: { id: string; name: string; line: string }[];
+  useCount: number;
+}
+
+export function inspectStructure(id: string): StructureDetail | null {
+  const world = getWorld();
+  const st = world.structures.find((s) => s.id === id);
+  if (!st) return null;
+  const def = STRUCTURE_DEFS[st.type];
+  const stage = constructionStage(st);
+
+  const contributors = [...st.contributions]
+    .sort((a, b) => b.work + b.wood + b.stone - (a.work + a.wood + a.stone))
+    .map((c) => {
+      const parts: string[] = [];
+      if (c.wood >= 0.5) parts.push(`${Math.round(c.wood)} wood`);
+      if (c.stone >= 0.5) parts.push(`${Math.round(c.stone)} stone`);
+      if (c.work > 0.005) parts.push(`${Math.round(c.work * 100)}% of the labour`);
+      return { id: c.id, name: c.name, line: parts.length ? parts.join(' · ') : 'present at the site' };
+    });
+
+  return {
+    id: st.id,
+    name: def.name,
+    place: st.place,
+    pos: { x: st.pos.x, z: st.pos.z },
+    status: st.state === 'complete' ? 'Complete' : `Under construction — ${STAGE_LABEL[stage]}`,
+    progressPct: Math.round(st.progress * 100),
+    stageLabel: STAGE_LABEL[stage],
+    initiatorId: st.initiatorId,
+    initiatorName: st.initiatorName,
+    reason: st.reason,
+    locationReason: st.locationReason,
+    contributors,
+    materials: [
+      `Wood ${Math.round(st.contributed.wood)} / ${st.required.wood}`,
+      `Stone ${Math.round(st.contributed.stone)} / ${st.required.stone}`,
+    ],
+    builtLabel: st.completedAt !== null ? formatClock(st.completedAt) : 'Not yet complete',
+    startedLabel: formatClock(st.startedAt),
+    recentUsers: frequentUsers(st).map((u) => ({
+      id: u.id,
+      name: u.name,
+      line: `${u.count} visit${u.count === 1 ? '' : 's'} · last ${formatClockShort(u.lastAt)}`,
+    })),
+    useCount: st.useCount,
+  };
 }
 
 function nameOf(id: string): string {
@@ -159,7 +226,11 @@ export function inspect(id: string): InspectorData | null {
       needs: [],
       relationships: [],
       memories: [],
-      known: [`Carrying ${p.berries} glowberr${p.berries === 1 ? 'y' : 'ies'}`],
+      known: [
+        `Carrying ${p.berries} glowberr${p.berries === 1 ? 'y' : 'ies'}`,
+        ...(p.wood > 0 ? [`Carrying ${Math.round(p.wood)} wood`] : []),
+        ...(p.stone > 0 ? [`Carrying ${Math.round(p.stone)} stone`] : []),
+      ],
     };
   }
 
@@ -183,8 +254,8 @@ export function inspect(id: string): InspectorData | null {
       .filter((r) => r && r.type !== 'restspot')
       .slice(0, 5)
       .map((r) => r!.label);
-    if (e.carriedFood > 0) {
-      known.unshift(`Carrying ${e.carriedFood} glowberr${e.carriedFood === 1 ? 'y' : 'ies'}`);
+    if (e.inventory.glowberry > 0) {
+      known.unshift(`Carrying ${e.inventory.glowberry} glowberr${e.inventory.glowberry === 1 ? 'y' : 'ies'}`);
     }
     if (e.knownLandmarkIds.length > 0) {
       const places = e.knownLandmarkIds

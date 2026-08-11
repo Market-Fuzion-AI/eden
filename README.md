@@ -23,6 +23,17 @@ who once fed them, refuse to approach someone they fear, share scarce food, rese
 last of it, and confront a standing grievance — or, given the right temperament, make peace instead.
 None of it is scripted; it all falls out of needs, personality and recorded history.
 
+**v0.4** turned that into geography —
+
+> *Needs + relationships + resources create place.*
+
+Settlers harvest wood and stone, decide on their own to build a campfire or a shelter, choose a site,
+and haul materials to it. Others join the work, more readily for someone they trust. Construction
+takes real time and real resources, and a half-supplied site visibly stalls half-built. Finished
+shelters get slept in; finished campfires pull people together after dark, and *which* fire someone
+walks to depends on who is already sitting at it. Within a week or so, the valley grows two or three
+small clusters of buildings that people keep returning to.
+
 ## Running it
 
 ```bash
@@ -55,6 +66,10 @@ node scripts/smoke.mjs   # browser smoke test with screenshots (needs preview/de
   choices right now. Selecting a settler also draws their social graph in the world, coloured by
   relationship state.
 
+  Click a structure for its full provenance — who staked it and why, who carried which materials,
+  how much of the labour each person did, when it was finished, why *there*, and who keeps coming
+  back to it. Every line is read from the structure's own record.
+
 Skip ahead at 5× or 20× and drop back to 1×, and the world reports what changed while you were not
 watching — population, new relationships, discoveries, budding events, deaths, conflicts. Every figure
 is counted from real simulation state; nothing is invented.
@@ -72,7 +87,7 @@ the existing needs, utility and relationship systems decide to do.
 | Mouse | Look around — click the world to enable, `Esc` to release |
 | `Shift` | Sprint |
 | `Space` | Jump |
-| `E` | Gather glowberries · talk to a settler |
+| `E` | Gather glowberries or materials · contribute to a build · talk to a settler |
 | `F` | Offer a glowberry (Lumi decides whether to take it) |
 | Left click | Attack |
 | Right click | Dodge |
@@ -93,7 +108,8 @@ The non-negotiable rule: **simulation state is fully separated from rendering.**
 src/sim/      Pure TypeScript simulation. No Three.js, no React.
               World, agents, needs, utility-AI goals + reasons, memories,
               structured relationships (affinity/trust/familiarity/fear with
-              recorded history), wildlife, Lumi, chronicle (with structured
+              recorded history), structures and construction with full
+              provenance, wildlife, Lumi, chronicle (with structured
               who/where/why/effects payloads), landmarks, deterministic
               dialogue, temporal summaries, terrain math, seeded RNG,
               creator interventions.

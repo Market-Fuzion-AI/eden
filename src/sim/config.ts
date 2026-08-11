@@ -78,6 +78,7 @@ export const PLAYER = {
   jumpVel: 5.6,
   gravity: 14,
   maxBerries: 6,
+  maxMaterials: 10,
   attackRange: 2.4,
   attackArcCos: 0.2, // ~78 degrees each side
   attackDamage: 26,
@@ -143,6 +144,56 @@ export const REL = {
   shareDuration: 5,
   shareHungerGap: 28,
   shareCooldown: 300,
+} as const;
+
+/**
+ * Construction. Caps here exist to keep settlement emergence *readable*:
+ * without them every settler independently stakes their own shelter and the
+ * valley fills with half-built boxes instead of forming a place.
+ */
+export const STRUCT = {
+  /** Hard ceiling on structures in the world. */
+  globalCap: 12,
+  /** How many projects may be under construction at once. */
+  maxActiveProjects: 4,
+  /** A settler must wait this long before starting another project. */
+  projectCooldown: 1400,
+  /** Minimum initiative to be the sort of person who starts something. */
+  minInitiative: 0.42,
+
+  /** Harvest rate and trip capacity. */
+  harvestPerSec: 1.1,
+  carryCapacity: 12,
+  /** Distance at which a settler can work on a site. */
+  buildRange: 2.6,
+  /**
+   * How far away a structure is recognisable. Buildings are large, lit at
+   * night, and stand in the open — using the ordinary perception radius meant
+   * settlers a short walk away never learned a shelter existed and each built
+   * their own, turning settlement into sprawl.
+   */
+  visibleRange: 78,
+  /** Abandon a project after this long with no delivery or labour at all. */
+  projectAbandonAfter: 2600,
+
+  /** Helping. */
+  helpRange: 95,
+  helpMinScore: 26,
+
+  /** Campfire social gravity. */
+  fireGatherRadius: 4.2,
+  fireAttractRange: 90,
+  fireLingerMin: 25,
+  fireLingerMax: 70,
+
+  /** Shelter rest bonus multiplier. */
+  shelterRestBonus: 1.7,
+
+  /** Proto-settlement detection (observation only). */
+  settlementRadius: 34,
+  settlementMinStructures: 2,
+  settlementMinRegulars: 3,
+  settlementMinUses: 2,
 } as const;
 
 /** Glowberry abundance, adjustable from Creator Mode. */

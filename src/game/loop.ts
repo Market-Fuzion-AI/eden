@@ -98,6 +98,10 @@ function frame(now: number): void {
     world.dirty.resources = false;
     ui.bumpResources();
   }
+  if (world.dirty.structures) {
+    world.dirty.structures = false;
+    ui.bumpStructures();
+  }
 
   // ARI line display: one at a time, ~6.5s each.
   if (world.ariQueue.length > 0 && now - ariShownAt > 6500) {

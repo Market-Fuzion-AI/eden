@@ -4,9 +4,10 @@ import { buildExchange, type DialogueExchange } from './dialogue';
 import { placeName } from './landmarks';
 import { remember } from './memory';
 import { applyRelationship, peekRelationship, relationshipState } from './relationships';
+import { missingResources } from './structures';
 import { groundY, isWater } from './terrain';
 import { damageCreature } from './wildlife';
-import type { Settler, World } from './types';
+import type { ResourceNode, Settler, Structure, World } from './types';
 import { clamp100, dist, v2 } from './vec';
 
 /**
@@ -190,7 +191,25 @@ export function playerDodge(world: World): void {
 export interface InteractionPrompt {
   key: string;
   label: string;
-  action: 'gather' | 'offer' | 'talk';
+  action: 'gather' | 'offer' | 'talk' | 'harvest' | 'contribute';
+}
+
+/** A material node Emerson is standing at. */
+function materialAtHand(world: World): ResourceNode | null {
+  const p = world.player;
+  return (
+    world.resources.find(
+      (r) => (r.type === 'wood' || r.type === 'stone') && r.quantity >= 1 && dist(r.pos, p.pos) < PLAYER.interactRange + 1.2,
+    ) ?? null
+  );
+}
+
+/** An unfinished structure Emerson could contribute to. */
+function siteAtHand(world: World): Structure | null {
+  const p = world.player;
+  return (
+    world.structures.find((s) => s.state !== 'complete' && dist(s.pos, p.pos) < PLAYER.interactRange + 1.5) ?? null
+  );
 }
 
 /** Nearest settler Emerson could speak with right now. */
@@ -218,7 +237,14 @@ export function getInteractions(world: World): InteractionPrompt[] {
   const bush = world.resources.find(
     (r) => r.type === 'glowberry' && r.quantity >= 1 && dist(r.pos, p.pos) < PLAYER.interactRange,
   );
-  if (bush && p.berries < PLAYER.maxBerries) {
+  const site = siteAtHand(world);
+  const material = materialAtHand(world);
+  if (site && (p.wood > 0 || p.stone > 0)) {
+    // Emerson can carry materials to a settler's project like anyone else.
+    out.push({ key: 'E', label: `Contribute to the ${site.type}`, action: 'contribute' });
+  } else if (material && p.wood + p.stone < PLAYER.maxMaterials) {
+    out.push({ key: 'E', label: `Gather ${material.type}`, action: 'harvest' });
+  } else if (bush && p.berries < PLAYER.maxBerries) {
     out.push({ key: 'E', label: 'Gather glowberries', action: 'gather' });
   } else {
     const talkable = nearestTalkable(world);
@@ -306,10 +332,67 @@ export function playerTalk(world: World): DialogueExchange | null {
   return exchange;
 }
 
-/** Returns true if a bush was actually harvested (so E can fall through to Talk). */
+/**
+ * The E key, in priority order: contribute carried materials to a nearby
+ * project, harvest a material seam, or pick glowberries. Returns true when
+ * something happened, so E can fall through to Talk.
+ */
 export function playerGather(world: World): boolean {
   const p = world.player;
-  if (p.dead || p.berries >= PLAYER.maxBerries) return false;
+  if (p.dead) return false;
+
+  // Contributing to someone's build records Emerson in its provenance exactly
+  // like any settler — the player is part of the settlement, not above it.
+  const site = siteAtHand(world);
+  if (site && (p.wood > 0 || p.stone > 0)) {
+    const missing = missingResources(site);
+    const wood = Math.min(missing.wood, p.wood);
+    const stone = Math.min(missing.stone, p.stone);
+    if (wood > 0 || stone > 0) {
+      p.wood -= wood;
+      p.stone -= stone;
+      site.contributed.wood += wood;
+      site.contributed.stone += stone;
+      let c = site.contributions.find((x) => x.id === 'emerson');
+      if (!c) {
+        c = { id: 'emerson', name: 'Emerson', wood: 0, stone: 0, work: 0 };
+        site.contributions.push(c);
+      }
+      c.wood += wood;
+      c.stone += stone;
+      site.lastWorkAt = world.timeSec;
+      world.dirty.structures = true;
+      if (!world.flags.emersonContributed) {
+        world.flags.emersonContributed = true;
+        chronicle(world, 'settlement', `Emerson carried materials to ${site.initiatorName}'s ${site.type} at ${site.place}.`, {
+          actorIds: ['emerson', site.initiatorId],
+          actorNames: ['Emerson', site.initiatorName],
+          pos: { ...site.pos },
+          place: site.place,
+          structureId: site.id,
+          cause: ['Emerson chose to help'],
+          effects: [`Delivered ${Math.round(wood)} wood and ${Math.round(stone)} stone`],
+        });
+      }
+      return true;
+    }
+  }
+
+  // Harvesting a seam.
+  const material = materialAtHand(world);
+  if (material && p.wood + p.stone < PLAYER.maxMaterials) {
+    const take = Math.min(2, material.quantity);
+    material.quantity -= take;
+    if (material.type === 'wood') p.wood += take;
+    else p.stone += take;
+    if (!world.flags.firstMaterial) {
+      world.flags.firstMaterial = true;
+      world.ariQueue.push('Construction material. The settlers are already using it — you could help, if you wanted.');
+    }
+    return true;
+  }
+
+  if (p.berries >= PLAYER.maxBerries) return false;
   const bush = world.resources.find(
     (r) => r.type === 'glowberry' && r.quantity >= 1 && dist(r.pos, p.pos) < PLAYER.interactRange,
   );

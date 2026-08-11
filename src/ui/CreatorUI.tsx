@@ -6,6 +6,7 @@ import { ChroniclePanel } from './ChroniclePanel';
 import { EventDetail } from './EventDetail';
 import { Inspector } from './Inspector';
 import { RelationshipDetail } from './RelationshipDetail';
+import { StructureDetail } from './StructureDetail';
 import { SummaryPanel } from './SummaryPanel';
 
 /** Creator Mode: sovereign view. Inspection first, interventions second. */
@@ -18,6 +19,7 @@ export function CreatorUI() {
   const chronicleOpen = useUI((s) => s.chronicleOpen);
   const selectedEvent = useUI((s) => s.selectedEvent);
   const relationshipPair = useUI((s) => s.relationshipPair);
+  const selectedStructureId = useUI((s) => s.selectedStructureId);
   const showSocialLinks = useUI((s) => s.showSocialLinks);
   const toggleSocialLinks = useUI((s) => s.toggleSocialLinks);
   const summary = useUI((s) => s.summary);
@@ -115,7 +117,9 @@ export function CreatorUI() {
 
       {summary && <SummaryPanel summary={summary} />}
 
-      {relationshipPair ? (
+      {selectedStructureId ? (
+        <StructureDetail id={selectedStructureId} />
+      ) : relationshipPair ? (
         <RelationshipDetail subjectId={relationshipPair[0]} otherId={relationshipPair[1]} />
       ) : selectedEvent ? (
         <EventDetail event={selectedEvent} />

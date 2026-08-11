@@ -34,6 +34,9 @@ interface UIState {
   uiPulse: number;
   entitiesVersion: number;
   resourcesVersion: number;
+  structuresVersion: number;
+  /** Structure open in the Creator inspector. */
+  selectedStructureId: string | null;
   ariLine: string | null;
   dialogue: DialogueExchange | null;
   summary: TemporalSummary | null;
@@ -58,6 +61,8 @@ interface UIState {
   bumpPulse(): void;
   bumpEntities(): void;
   bumpResources(): void;
+  bumpStructures(): void;
+  selectStructure(id: string | null): void;
   setAriLine(line: string | null): void;
   openDialogue(d: DialogueExchange): void;
   closeDialogue(): void;
@@ -85,6 +90,8 @@ export const useUI = create<UIState>((set) => ({
   uiPulse: 0,
   entitiesVersion: 0,
   resourcesVersion: 0,
+  structuresVersion: 0,
+  selectedStructureId: null,
   ariLine: null,
   dialogue: null,
   summary: null,
@@ -101,7 +108,8 @@ export const useUI = create<UIState>((set) => ({
   setSpeed: (speed) => set({ speed, paused: false }),
   // Choosing a new subject supersedes whatever was being read about the old
   // one — both the relationship drill-down and any open event.
-  select: (selectedId) => set({ selectedId, relationshipPair: null, selectedEvent: null }),
+  select: (selectedId) =>
+    set({ selectedId, relationshipPair: null, selectedEvent: null, selectedStructureId: null }),
   selectEvent: (selectedEvent) => set({ selectedEvent }),
   openRelationship: (subjectId, otherId) => set({ relationshipPair: [subjectId, otherId], selectedEvent: null }),
   closeRelationship: () => set({ relationshipPair: null }),
@@ -110,6 +118,9 @@ export const useUI = create<UIState>((set) => ({
   bumpPulse: () => set((s) => ({ uiPulse: s.uiPulse + 1 })),
   bumpEntities: () => set((s) => ({ entitiesVersion: s.entitiesVersion + 1 })),
   bumpResources: () => set((s) => ({ resourcesVersion: s.resourcesVersion + 1 })),
+  bumpStructures: () => set((s) => ({ structuresVersion: s.structuresVersion + 1 })),
+  selectStructure: (selectedStructureId) =>
+    set({ selectedStructureId, selectedId: null, selectedEvent: null, relationshipPair: null }),
   setAriLine: (ariLine) => set({ ariLine }),
   openDialogue: (dialogue) => set({ dialogue }),
   closeDialogue: () => set({ dialogue: null }),

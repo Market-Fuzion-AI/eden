@@ -340,7 +340,7 @@ describe('scarcity, sharing and resentment', () => {
   it('sharing food transfers real resources and builds trust', () => {
     const world = createWorld(42);
     const [donor, receiver] = isolatePair(world);
-    donor.carriedFood = 2;
+    donor.inventory.glowberry = 2;
     donor.hunger = 10;
     donor.personality.empathy = 0.95;
     receiver.hunger = 95;
@@ -348,7 +348,7 @@ describe('scarcity, sharing and resentment', () => {
 
     run(world, 120);
 
-    expect(donor.carriedFood, 'the donor gives up real food').toBeLessThan(2);
+    expect(donor.inventory.glowberry, 'the donor gives up real food').toBeLessThan(2);
     expect(receiver.hunger).toBeLessThan(95);
     const rel = receiver.relationships[donor.id];
     expect(rel, 'receiving food creates a relationship').toBeDefined();
@@ -360,7 +360,7 @@ describe('scarcity, sharing and resentment', () => {
   it('a hostile settler will not give food away', () => {
     const world = createWorld(43);
     const [donor, receiver] = isolatePair(world);
-    donor.carriedFood = 2;
+    donor.inventory.glowberry = 2;
     donor.hunger = 10;
     donor.personality.empathy = 0.5;
     receiver.hunger = 95;
@@ -370,7 +370,7 @@ describe('scarcity, sharing and resentment', () => {
     });
 
     run(world, 120);
-    expect(donor.carriedFood).toBe(2);
+    expect(donor.inventory.glowberry).toBe(2);
   });
 
   it('resentment is possible but never guaranteed', () => {

@@ -40,6 +40,16 @@ export function memoryText(m: MemoryEntry): string {
       return `Made peace with ${m.subjectName ?? 'someone'}`;
     case 'sought_company':
       return `Went looking for ${m.subjectName ?? 'company'}`;
+    case 'built_structure':
+      return `Built ${m.place ?? 'something'}`;
+    case 'helped_build':
+      return `Helped ${m.subjectName ?? 'someone'} build ${m.place ?? 'something'}`;
+    case 'rested_in_shelter':
+      return `Slept properly in ${m.place ?? 'a shelter'}`;
+    case 'used_structure':
+      return `Spent time at ${m.place ?? 'a shared place'}`;
+    case 'resented_material':
+      return `${m.subjectName ?? 'Someone'} stripped ${m.place ?? 'the materials'} I needed`;
     case 'threatened':
       return `Was threatened by ${m.subjectName ?? 'something'}`;
     case 'explored':

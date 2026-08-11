@@ -6,6 +6,14 @@ import { smoothstep } from './vec';
  * (terrain mesh). Deterministic for a given seed so worlds are reproducible.
  */
 
+/**
+ * The terrain seed is module-global: the running game only ever has one world,
+ * and keeping it here lets `heightAt` stay a cheap pure function of position.
+ *
+ * The cost is that creating a second world re-seeds the landscape under the
+ * first. Anything holding two worlds at once (tests, tooling) must call
+ * `setTerrainSeed(world.seed)` before reading heights for a given world.
+ */
 let SEED = 1337;
 
 export function setTerrainSeed(seed: number): void {

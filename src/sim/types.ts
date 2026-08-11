@@ -23,7 +23,12 @@ export type GoalType =
   | 'seek-friend'
   | 'confront'
   | 'avoid'
-  | 'share-food';
+  | 'share-food'
+  | 'gather-wood'
+  | 'gather-stone'
+  | 'build'
+  | 'help-build'
+  | 'gather-at-fire';
 
 export type GoalPhase = 'travel' | 'act' | 'done';
 
@@ -31,6 +36,8 @@ export interface Goal {
   type: GoalType;
   label: string;
   targetId?: EntityId;
+  /** Set when the target is a structure rather than an agent or resource. */
+  structureId?: EntityId;
   targetPos?: V2;
   phase: GoalPhase;
   /** Seconds remaining in the current 'act' phase (when applicable). */
@@ -66,7 +73,12 @@ export interface MemoryEntry {
     | 'resented_food'
     | 'confronted'
     | 'reconciled'
-    | 'sought_company';
+    | 'sought_company'
+    | 'built_structure'
+    | 'helped_build'
+    | 'rested_in_shelter'
+    | 'used_structure'
+    | 'resented_material';
   subjectId?: EntityId;
   subjectName?: string;
   place?: string;
@@ -77,7 +89,15 @@ export interface MemoryEntry {
 /** One recorded change to a relationship — the source of inspector history. */
 export interface RelationshipEvent {
   t: number;
-  kind: 'meeting' | 'conversation' | 'conflict' | 'reconciliation' | 'gift' | 'sought' | 'resentment';
+  kind:
+    | 'meeting'
+    | 'conversation'
+    | 'conflict'
+    | 'reconciliation'
+    | 'gift'
+    | 'sought'
+    | 'resentment'
+    | 'cooperation';
   text: string;
   withName: string;
   /** Values after the change, for a readable running record. */
@@ -142,15 +162,30 @@ export interface Settler extends AgentCommon {
   knownResourceIds: EntityId[];
   /** Landmarks this settler has personally visited. */
   knownLandmarkIds: string[];
-  /** Glowberries carried, used for sharing under scarcity. */
-  carriedFood: number;
+  /** Everything this settler is physically carrying. */
+  inventory: { glowberry: number; wood: number; stone: number };
+  /** Structures this settler has seen. */
+  knownStructureIds: EntityId[];
+  /** The project they are currently pursuing, if any. */
+  buildPlan: BuildPlan | null;
   confrontCooldownUntil: number;
   shareCooldownUntil: number;
+  projectCooldownUntil: number;
   /** Conceptual knowledge carried from the homeworld (future tech system). */
   knowledge: string[];
   socialCooldownUntil: number;
   /** Sim time until which Emerson's conversation holds this settler in place. */
   talkingUntil: number;
+}
+
+/** A settler's intention to build or help build something. */
+export interface BuildPlan {
+  structureId: EntityId;
+  type: StructureType;
+  /** True when this settler staked the site rather than joining it. */
+  owner: boolean;
+  reason: string[];
+  startedAt: number;
 }
 
 export interface LumiState {
@@ -177,6 +212,58 @@ export interface Creature extends AgentCommon {
 export type Entity = Settler | Creature;
 
 export type ResourceType = 'glowberry' | 'wood' | 'stone' | 'restspot';
+export type CarriedResource = 'glowberry' | 'wood' | 'stone';
+
+export type StructureType = 'campfire' | 'shelter';
+export type StructureState = 'under-construction' | 'complete';
+
+/** One person's total contribution to one structure. */
+export interface StructureContribution {
+  id: EntityId;
+  name: string;
+  wood: number;
+  stone: number;
+  /** Fraction of total build progress they personally applied. */
+  work: number;
+}
+
+export interface StructureUsage {
+  id: EntityId;
+  name: string;
+  count: number;
+  lastAt: number;
+}
+
+/**
+ * A persistent shared place. Lives entirely in simulation state — the renderer
+ * only reads it, so a structure exists whether or not anything is drawing it.
+ */
+export interface Structure {
+  id: EntityId;
+  type: StructureType;
+  pos: V2;
+  /** Cached ground height so the renderer never has to guess. */
+  y: number;
+  place: string;
+  state: StructureState;
+  /** 0..1, and never ahead of the materials actually delivered. */
+  progress: number;
+  required: { wood: number; stone: number };
+  contributed: { wood: number; stone: number };
+  initiatorId: EntityId;
+  initiatorName: string;
+  /** Why it was started, captured at the moment of the decision. */
+  reason: string[];
+  /** Why here. */
+  locationReason: string[];
+  contributions: StructureContribution[];
+  startedAt: number;
+  /** Last time anyone delivered materials or applied labour here. */
+  lastWorkAt: number;
+  completedAt: number | null;
+  usage: StructureUsage[];
+  useCount: number;
+}
 
 export interface ResourceNode {
   id: EntityId;
@@ -229,7 +316,8 @@ export type ChronicleCategory =
   | 'lumi'
   | 'wildlife'
   | 'emerson'
-  | 'creator';
+  | 'creator'
+  | 'settlement';
 
 export interface ChronicleEvent {
   id: number;
@@ -242,6 +330,8 @@ export interface ChronicleEvent {
   actorNames?: string[];
   pos?: V2;
   place?: string;
+  /** The structure this event concerns, if any. */
+  structureId?: EntityId;
   /** Why it happened, as discrete readable facts captured at event time. */
   cause?: string[];
   /** What changed as a result. */
@@ -254,6 +344,7 @@ export interface ChronicleDetail {
   actorNames?: string[];
   pos?: V2;
   place?: string;
+  structureId?: EntityId;
   cause?: string[];
   effects?: string[];
 }
@@ -270,6 +361,9 @@ export interface PlayerState {
   health: number;
   stamina: number;
   berries: number;
+  /** Construction materials Emerson is carrying. */
+  wood: number;
+  stone: number;
   attackTimer: number;
   attackCooldown: number;
   dodgeTimer: number;
@@ -297,6 +391,7 @@ export interface World {
   creatures: Creature[];
   player: PlayerState;
   resources: ResourceNode[];
+  structures: Structure[];
   offeredFood: OfferedFood[];
   flora: FloraItem[];
   obstacles: Obstacle[];
@@ -310,5 +405,5 @@ export interface World {
   /** Pending ARI lines, drained by the game loop into the HUD. */
   ariQueue: string[];
   /** Set by sim when entities/resources are added or removed; loop bumps store versions. */
-  dirty: { entities: boolean; resources: boolean };
+  dirty: { entities: boolean; resources: boolean; structures: boolean };
 }

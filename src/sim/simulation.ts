@@ -1,4 +1,4 @@
-import { DAY_SEC, YIELD } from './config';
+import { DAY_SEC, STRUCT, YIELD } from './config';
 import { ariTick } from './ari';
 import { chronicle, clockOf } from './chronicle';
 import { settlerExecute, settlerNeedsTick, settlerThink } from './goals';
@@ -52,6 +52,32 @@ export function simTick(world: World, dt: number): void {
 
   // Resolve residual body overlap after everyone has moved.
   separateAgents(world, dt);
+
+  // Abandon projects nobody has touched in a long while, so a stalled site
+  // can never occupy a project slot forever.
+  if (world.structures.length > 0 && Math.floor(t) % 30 === 0) {
+    for (const st of world.structures) {
+      if (st.state === 'complete') continue;
+      // Real inactivity, not merely age: a site nobody has delivered to or
+      // worked on is reclaimed even if someone still nominally intends to.
+      const idle = t - st.lastWorkAt;
+      if (idle <= STRUCT.projectAbandonAfter) continue;
+      {
+        for (const s of world.settlers) {
+          if (s.buildPlan?.structureId === st.id) s.buildPlan = null;
+        }
+        world.structures = world.structures.filter((o) => o !== st);
+        world.dirty.structures = true;
+        chronicle(world, 'settlement', `The unfinished ${st.type} at ${st.place} was abandoned.`, {
+          pos: { ...st.pos },
+          place: st.place,
+          cause: ['Nobody returned to finish it', `Stalled at ${Math.round(st.progress * 100)}%`],
+          effects: ['The site was reclaimed by the valley'],
+        });
+        break;
+      }
+    }
+  }
 
   // ARI runs at ~2 Hz of sim time.
   const lastAri = (world.flags.lastAriTick as number) ?? 0;

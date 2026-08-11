@@ -28,6 +28,8 @@ function run(world: World, simSeconds: number): void {
 const VALID_GOALS = new Set([
   'idle', 'eat', 'rest', 'explore', 'socialize', 'wander', 'graze', 'flee',
   'investigate', 'watch-emerson', 'approach-food', 'follow-emerson', 'attack-player',
+  'talk-emerson', 'seek-friend', 'confront', 'avoid', 'share-food',
+  'gather-wood', 'gather-stone', 'build', 'help-build', 'gather-at-fire',
 ]);
 
 describe('EDEN simulation', () => {

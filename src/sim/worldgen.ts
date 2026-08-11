@@ -118,9 +118,12 @@ function makeSettler(
     relationships: {},
     knownResourceIds: [],
     knownLandmarkIds: [],
-    carriedFood: 0,
+    inventory: { glowberry: 0, wood: 0, stone: 0 },
+    knownStructureIds: [],
+    buildPlan: null,
     confrontCooldownUntil: 0,
     shareCooldownUntil: 0,
+    projectCooldownUntil: 0,
     knowledge,
     socialCooldownUntil: 0,
     talkingUntil: 0,
@@ -265,9 +268,12 @@ function placeResources(world: World, rng: Rng): void {
   // Wild rest spots (sheltered hollows).
   addResource('restspot', findLand(rng, ANCHORS.glade, 16), 99, 0);
   addResource('restspot', findLand(rng, ANCHORS.meadow, 20), 99, 0);
-  // Future-facing material nodes.
-  for (let i = 0; i < 4; i++) addResource('wood', findLand(rng, ANCHORS.forest, 45), 20, 0);
-  for (let i = 0; i < 4; i++) addResource('stone', findLand(rng, ANCHORS.rocks, 40), 20, 0);
+  // Harvestable materials. Timber regrows slowly; stone seams do not, so the
+  // valley has a finite supply of it and settlers must range further over time.
+  const woodSpots = [ANCHORS.forest, ANCHORS.forest, ANCHORS.forest, ANCHORS.glade, ANCHORS.riverbank, ANCHORS.meadow];
+  for (const spot of woodSpots) addResource('wood', findLand(rng, spot, 34), rng.int(26, 40), 1 / 110);
+  const stoneSpots = [ANCHORS.rocks, ANCHORS.rocks, ANCHORS.rocksSouth, ANCHORS.hill, ANCHORS.meadow];
+  for (const spot of stoneSpots) addResource('stone', findLand(rng, spot, 32), rng.int(24, 36), 1 / 300);
 }
 
 export function createWorld(seed: number): World {
@@ -287,6 +293,8 @@ export function createWorld(seed: number): World {
     health: 100,
     stamina: 100,
     berries: 0,
+    wood: 0,
+    stone: 0,
     attackTimer: 0,
     attackCooldown: 0,
     dodgeTimer: 0,
@@ -304,6 +312,7 @@ export function createWorld(seed: number): World {
     creatures: [],
     player,
     resources: [],
+    structures: [],
     offeredFood: [],
     flora: [],
     obstacles: [],
@@ -318,7 +327,7 @@ export function createWorld(seed: number): World {
     yieldMode: 'normal',
     flags: {},
     ariQueue: [],
-    dirty: { entities: false, resources: false },
+    dirty: { entities: false, resources: false, structures: false },
   };
 
   // Settlers. Each begins knowing the landmark their people camped in.

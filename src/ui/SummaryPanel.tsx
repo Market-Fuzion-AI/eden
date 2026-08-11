@@ -26,6 +26,14 @@ export function SummaryPanel({ summary }: { summary: TemporalSummary }) {
         </div>
       ))}
 
+      <div className="section-title">SETTLEMENT</div>
+      {summary.settlementLines.map((l) => (
+        <div key={l.label} className="summary-row">
+          <span>{l.label}</span>
+          <span className="summary-value">{l.value}</span>
+        </div>
+      ))}
+
       <div className="section-title">EVENTS</div>
       {summary.eventLines.map((l) => (
         <div key={l.label} className="summary-row">

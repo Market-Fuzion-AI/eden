@@ -11,6 +11,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   wildlife: 'WILDLIFE',
   emerson: 'EMERSON',
   creator: 'CREATOR',
+  settlement: 'SETTLEMENT',
 };
 
 /** True when an event carries enough structure to be worth opening. */
@@ -24,6 +25,7 @@ export function ChroniclePanel() {
   const selectedEvent = useUI((s) => s.selectedEvent);
   const selectEvent = useUI((s) => s.selectEvent);
   const select = useUI((s) => s.select);
+  const selectStructure = useUI((s) => s.selectStructure);
   const requestFocus = useUI((s) => s.requestFocus);
 
   const world = getWorld();
@@ -36,6 +38,7 @@ export function ChroniclePanel() {
     // the previous one, so the event has to be set last.
     const actor = e.actorIds?.find((id) => id === 'emerson' || world.settlers.some((s) => s.id === id) || world.creatures.some((c) => c.id === id));
     if (actor) select(actor);
+    else if (e.structureId) selectStructure(e.structureId);
     selectEvent(e);
     if (e.pos) requestFocus(e.pos.x, e.pos.z);
   };

@@ -10,6 +10,7 @@ import { useUI } from '../state/store';
 export function EventDetail({ event }: { event: ChronicleEvent }) {
   const selectEvent = useUI((s) => s.selectEvent);
   const select = useUI((s) => s.select);
+  const selectStructure = useUI((s) => s.selectStructure);
   const requestFocus = useUI((s) => s.requestFocus);
 
   return (
@@ -54,6 +55,15 @@ export function EventDetail({ event }: { event: ChronicleEvent }) {
             disabled={!event.pos}
           >
             ◎ {event.place}
+          </button>
+        </>
+      )}
+
+      {event.structureId && (
+        <>
+          <div className="section-title">STRUCTURE</div>
+          <button className="btn place-chip" onClick={() => selectStructure(event.structureId!)}>
+            ⌂ Open its full history
           </button>
         </>
       )}

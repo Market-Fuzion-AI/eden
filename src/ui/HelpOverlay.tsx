@@ -5,7 +5,7 @@ const CONTROLS: [string, string][] = [
   ['W A S D / ↑ ↓ ← →', 'Move'],
   ['Mouse', 'Look around (click the world first)'],
   ['Shift', 'Sprint'],
-  ['E', 'Interact · gather · talk'],
+  ['E', 'Interact · gather · talk · help build'],
   ['F', 'Offer a glowberry'],
   ['Tab', 'Creator Mode'],
   ['Esc', 'Release the mouse · this screen'],

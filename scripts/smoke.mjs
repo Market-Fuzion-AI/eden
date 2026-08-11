@@ -404,6 +404,55 @@ const linksVisible = await page.evaluate(() => window.__EDEN__.socialLinksVisibl
 check('social links render for the selected settler', linksVisible);
 await page.screenshot({ path: `${SHOT_DIR}/07-social-links.png` });
 
+// ---------------------------------------------------------------------------
+console.log('\nSETTLEMENT ZERO');
+// ---------------------------------------------------------------------------
+// Run the world forward until a settlement forms, then inspect what it built.
+const settlement = await page.evaluate(() => {
+  const { getWorld, structures } = window.__EDEN__;
+  const world = getWorld();
+  for (let i = 0; i < 720 * 8 * 30; i++) window.__EDEN__.stepSim(1 / 30);
+  const complete = world.structures.filter((s) => s.state === 'complete');
+  return {
+    total: world.structures.length,
+    complete: complete.length,
+    shelters: complete.filter((s) => s.type === 'shelter').length,
+    fires: complete.filter((s) => s.type === 'campfire').length,
+    cooperative: complete.filter((s) => s.contributions.length > 1).length,
+    firstStructureId: complete[0]?.id ?? null,
+    clusters: structures.detectSettlements(world).map((c) => c.place),
+    events: world.chronicle.filter((e) => e.category === 'settlement').length,
+    shelterUsed: complete.some((s) => s.type === 'shelter' && s.useCount > 0),
+    fireUsed: complete.some((s) => s.type === 'campfire' && s.usage.length >= 2),
+    materialsReal: complete.every((s) => s.contributed.wood >= s.required.wood),
+  };
+});
+console.log(`    (${settlement.complete} complete: ${settlement.shelters} shelters, ${settlement.fires} fires; clusters: ${settlement.clusters.join(', ') || 'none'})`);
+check('settlers autonomously completed structures', settlement.complete > 0, JSON.stringify(settlement));
+check('both structure types were built', settlement.shelters > 0 && settlement.fires > 0);
+check('at least one build was cooperative', settlement.cooperative > 0, `${settlement.cooperative}`);
+check('construction consumed real materials', settlement.materialsReal);
+check('shelters are used for rest', settlement.shelterUsed);
+check('campfires gather regulars', settlement.fireUsed);
+check('settlement events reached the chronicle', settlement.events > 0, `${settlement.events}`);
+check('structure count stayed bounded', settlement.total <= 12, `${settlement.total}`);
+
+// Structure provenance inspector.
+if (settlement.firstStructureId) {
+  await page.evaluate((id) => window.__EDEN__.useUI.getState().selectStructure(id), settlement.firstStructureId);
+  await page.waitForTimeout(700);
+  const detail = await page.locator('.creator-right').innerText();
+  check('structure inspector opens', /STRUCTURE/.test(detail));
+  check('provenance names the initiator', /INITIATED BY/.test(detail));
+  check('provenance explains why', /REASON/.test(detail));
+  check('provenance lists contributors', /CONTRIBUTORS/.test(detail));
+  check('provenance lists materials used', /MATERIALS/.test(detail) && /Wood \d+ \/ \d+/.test(detail));
+  check('provenance records when it was built', /BUILT/.test(detail));
+  check('provenance explains the location', /WHY HERE/.test(detail));
+  check('provenance contains no placeholders', !/undefined|NaN/.test(detail));
+  await page.screenshot({ path: `${SHOT_DIR}/09-structure.png` });
+}
+
 const worldState = await page.evaluate(() => {
   const w = window.__EDEN__.getWorld();
   const lumi = w.creatures.find((c) => c.id === 'lumi');

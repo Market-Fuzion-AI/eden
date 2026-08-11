@@ -75,19 +75,39 @@ export function ResourceNodes() {
         pillow.position.set(0, 0.2, -0.5);
         g.add(pillow);
       } else if (node.type === 'wood') {
+        // A stand of cut timber: readable as "wood you can take from here".
         for (let i = 0; i < 3; i++) {
-          const log = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 1.6, 7), woodMat);
+          const log = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 1.7, 7), woodMat);
           log.rotation.z = Math.PI / 2;
-          log.position.set(0, 0.18 + (i === 2 ? 0.32 : 0), i === 0 ? -0.2 : i === 1 ? 0.2 : 0);
+          log.position.set(0, 0.2 + (i === 2 ? 0.36 : 0), i === 0 ? -0.24 : i === 1 ? 0.24 : 0);
           log.castShadow = true;
           g.add(log);
         }
+        // Cut ends catch the light so the pile reads as worked, not fallen.
+        for (const sx of [-1, 1]) {
+          const face = new THREE.Mesh(new THREE.CircleGeometry(0.2, 8), toonMat('#c9a878'));
+          face.position.set(sx * 0.86, 0.2, 0);
+          face.rotation.y = (sx * Math.PI) / 2;
+          g.add(face);
+        }
+        const stump = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.4, 0.5, 8), toonMat('#5c3f28'));
+        stump.position.set(1.5, 0.25, 0.6);
+        stump.castShadow = true;
+        g.add(stump);
       } else {
-        for (let i = 0; i < 2; i++) {
-          const s = new THREE.Mesh(new THREE.DodecahedronGeometry(0.5 - i * 0.15, 0), stoneMat);
-          s.position.set(i * 0.5 - 0.2, 0.3 + i * 0.3, 0);
+        // A worked seam rather than scenery boulders.
+        for (let i = 0; i < 3; i++) {
+          const s = new THREE.Mesh(new THREE.DodecahedronGeometry(0.55 - i * 0.13, 0), stoneMat);
+          s.position.set(i * 0.52 - 0.35, 0.32 + i * 0.22, i * 0.14);
+          s.rotation.set(i, i * 1.7, i * 0.6);
           s.castShadow = true;
           g.add(s);
+        }
+        for (let i = 0; i < 4; i++) {
+          const chip = new THREE.Mesh(new THREE.TetrahedronGeometry(0.16), toonMat('#8f8b98'));
+          chip.position.set(Math.sin(i * 2.1) * 0.9, 0.1, Math.cos(i * 2.1) * 0.9);
+          chip.rotation.set(i, i * 2, i);
+          g.add(chip);
         }
       }
       groups.push(g);

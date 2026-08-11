@@ -1,4 +1,5 @@
 import { DAY_SEC } from './config';
+import { detectSettlements } from './structures';
 import type { World } from './types';
 
 /**
@@ -16,6 +17,10 @@ export interface WorldSnapshot {
   chronicleId: number;
   relationships: number;
   knownResources: number;
+  structuresComplete: number;
+  structuresTotal: number;
+  woodRemaining: number;
+  stoneRemaining: number;
 }
 
 export interface SummaryLine {
@@ -27,6 +32,8 @@ export interface TemporalSummary {
   elapsedLabel: string;
   populationLines: SummaryLine[];
   eventLines: SummaryLine[];
+  /** Construction and place-making during the period. */
+  settlementLines: SummaryLine[];
   /** Notable chronicle entries from the period, newest first. */
   highlights: { id: number; text: string }[];
 }
@@ -38,6 +45,8 @@ export function snapshot(world: World): WorldSnapshot {
     relationships += Object.keys(s.relationships).length;
     knownResources += s.knownResourceIds.length;
   }
+  const stock = (type: 'wood' | 'stone') =>
+    world.resources.filter((r) => r.type === type).reduce((sum, r) => sum + r.quantity, 0);
   return {
     t: world.timeSec,
     settlers: world.settlers.length,
@@ -45,6 +54,10 @@ export function snapshot(world: World): WorldSnapshot {
     chronicleId: world.chronicleCounter,
     relationships,
     knownResources,
+    structuresComplete: world.structures.filter((s) => s.state === 'complete').length,
+    structuresTotal: world.structures.length,
+    woodRemaining: stock('wood'),
+    stoneRemaining: stock('stone'),
   };
 }
 
@@ -96,8 +109,34 @@ export function buildSummary(
     .slice(0, 5)
     .map((e) => ({ id: e.id, text: e.text }));
 
+  // Settlement activity, counted from real events and real stock changes.
+  const started = fresh.filter((e) => e.category === 'settlement' && e.text.includes('began building')).length;
+  const completed = Math.max(0, now.structuresComplete - before.structuresComplete);
+  const cooperative = fresh.filter(
+    (e) => e.category === 'settlement' && e.text.includes('with help from'),
+  ).length;
+  const gatherings = fresh.filter((e) => e.category === 'settlement' && e.text.includes('gathered around')).length;
+  const woodUsed = Math.max(0, before.woodRemaining - now.woodRemaining);
+  const stoneUsed = Math.max(0, before.stoneRemaining - now.stoneRemaining);
+
+  const settlementLines: SummaryLine[] = [
+    { label: 'Structures completed', value: String(completed) },
+    { label: 'Structures started', value: String(started) },
+    { label: 'Cooperative builds', value: String(cooperative) },
+    { label: 'Wood harvested', value: String(Math.round(woodUsed)) },
+    { label: 'Stone harvested', value: String(Math.round(stoneUsed)) },
+    { label: 'Fireside gatherings', value: String(gatherings) },
+  ];
+  const clusters = detectSettlements(world);
+  if (clusters.length > 0) {
+    // Two clusters can sit inside one landmark; name each place once.
+    const places = [...new Set(clusters.map((c) => c.place))];
+    settlementLines.push({ label: 'Gathering places', value: places.join(', ') });
+  }
+
   return {
     elapsedLabel: elapsedLabel(elapsed),
+    settlementLines,
     populationLines: [
       { label: 'Settlers', value: arrow(before.settlers, now.settlers) },
       { label: 'Native life', value: arrow(before.creatures, now.creatures) },

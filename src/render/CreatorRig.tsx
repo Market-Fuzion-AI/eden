@@ -62,7 +62,11 @@ export function CreatorRig() {
       const hits = raycaster.intersectObjects(scene.children, true);
       for (const h of hits) {
         let obj: THREE.Object3D | null = h.object;
-        while (obj && !obj.userData.eid && !obj.userData.terrain) obj = obj.parent;
+        while (obj && !obj.userData.eid && !obj.userData.structureId && !obj.userData.terrain) obj = obj.parent;
+        if (obj?.userData.structureId) {
+          ui.selectStructure(obj.userData.structureId as string);
+          return;
+        }
         if (obj?.userData.eid) {
           pickedId = obj.userData.eid as string;
           break;

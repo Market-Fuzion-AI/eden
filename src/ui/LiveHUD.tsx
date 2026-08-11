@@ -72,6 +72,12 @@ export function LiveHUD() {
             </div>
           </div>
           {p.berries > 0 && <div className="berries">◉ Glowberries × {p.berries}</div>}
+          {(p.wood > 0 || p.stone > 0) && (
+            <div className="materials">
+              {p.wood > 0 && <span>▣ Wood × {Math.round(p.wood)}</span>}
+              {p.stone > 0 && <span>◆ Stone × {Math.round(p.stone)}</span>}
+            </div>
+          )}
         </div>
       </div>
 

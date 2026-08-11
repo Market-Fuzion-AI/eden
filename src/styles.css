@@ -184,6 +184,14 @@
   letter-spacing: 0.08em;
   margin-top: 5px;
 }
+.materials {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: #c9a878;
+  letter-spacing: 0.08em;
+  margin-top: 3px;
+}
 
 .ari {
   border-left: 3px solid var(--accent);
@@ -795,6 +803,26 @@
   gap: 6px;
   margin-top: 14px;
 }
+
+/* --- structures ---------------------------------------------------------- */
+
+.struct-status {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warn);
+}
+.struct-status.done { color: var(--good); }
+.struct-bar {
+  height: 8px;
+  margin-top: 5px;
+}
+.struct-contrib {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  text-align: right;
+  flex: 1;
+}
+.cat-settlement { color: #ffd76a; border: 1px solid rgba(255, 215, 106, 0.45); }
 
 .scarcity-note {
   font-size: 10.5px;

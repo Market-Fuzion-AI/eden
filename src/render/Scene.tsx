@@ -7,6 +7,7 @@ import { MistLayer } from './MistLayer';
 import { PlayerRig } from './PlayerRig';
 import { ResourceNodes } from './ResourceNodes';
 import { SocialLinks } from './SocialLinks';
+import { StructureVisuals } from './StructureVisuals';
 import { Terrain } from './Terrain';
 import { Vegetation } from './Vegetation';
 import { Water } from './Water';
@@ -21,6 +22,7 @@ export function Scene() {
       <Vegetation />
       <CampVisuals />
       <ResourceNodes />
+      <StructureVisuals />
       <MistLayer />
       <Agents />
       <PlayerRig />
