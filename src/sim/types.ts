@@ -19,7 +19,11 @@ export type GoalType =
   | 'approach-food'
   | 'follow-emerson'
   | 'attack-player'
-  | 'talk-emerson';
+  | 'talk-emerson'
+  | 'seek-friend'
+  | 'confront'
+  | 'avoid'
+  | 'share-food';
 
 export type GoalPhase = 'travel' | 'act' | 'done';
 
@@ -34,6 +38,8 @@ export interface Goal {
   startedAt: number;
   /** Give-up deadline for travel, in sim time. */
   deadline: number;
+  /** For two-party exchanges: true on the side that started it. */
+  initiator?: boolean;
 }
 
 /** Why the current goal was selected — surfaced verbatim in Creator Mode. */
@@ -53,7 +59,14 @@ export interface MemoryEntry {
     | 'threatened'
     | 'explored'
     | 'saw_emerson'
-    | 'talked_to_emerson';
+    | 'talked_to_emerson'
+    | 'given_food'
+    | 'shared_food'
+    | 'yielded_food'
+    | 'resented_food'
+    | 'confronted'
+    | 'reconciled'
+    | 'sought_company';
   subjectId?: EntityId;
   subjectName?: string;
   place?: string;
@@ -61,10 +74,28 @@ export interface MemoryEntry {
   emotionalWeight: number; // -1..1
 }
 
+/** One recorded change to a relationship — the source of inspector history. */
+export interface RelationshipEvent {
+  t: number;
+  kind: 'meeting' | 'conversation' | 'conflict' | 'reconciliation' | 'gift' | 'sought' | 'resentment';
+  text: string;
+  withName: string;
+  /** Values after the change, for a readable running record. */
+  affinity: number;
+  trust: number;
+  delta: { affinity: number; trust: number; familiarity: number; fear: number };
+}
+
 export interface Relationship {
-  affinity: number; // -100..100
+  affinity: number; // -100..100 liking
+  trust: number; // 0..100 reliability
+  familiarity: number; // 0..100 how well known
+  fear: number; // 0..100 reluctance to be near
   interactions: number;
   lastInteractionAt: number;
+  firstMetAt: number;
+  lastConflictAt: number;
+  history: RelationshipEvent[];
 }
 
 export interface Personality {
@@ -96,6 +127,8 @@ export interface AgentCommon {
   nextThinkAt: number;
   /** >0 while in a social exchange (renderer shows an indicator). */
   socialTimer: number;
+  /** True while the exchange is a confrontation — drives distinct visuals. */
+  confronting?: boolean;
   resting: boolean;
   home: V2;
 }
@@ -109,6 +142,10 @@ export interface Settler extends AgentCommon {
   knownResourceIds: EntityId[];
   /** Landmarks this settler has personally visited. */
   knownLandmarkIds: string[];
+  /** Glowberries carried, used for sharing under scarcity. */
+  carriedFood: number;
+  confrontCooldownUntil: number;
+  shareCooldownUntil: number;
   /** Conceptual knowledge carried from the homeworld (future tech system). */
   knowledge: string[];
   socialCooldownUntil: number;
@@ -244,6 +281,7 @@ export interface PlayerState {
 }
 
 export type Weather = 'clear' | 'mist';
+export type YieldMode = 'normal' | 'low';
 
 export interface WorldFlags {
   [key: string]: number | boolean;
@@ -266,6 +304,8 @@ export interface World {
   chronicle: ChronicleEvent[];
   chronicleCounter: number;
   weather: Weather;
+  /** Glowberry abundance — the single controlled scarcity lever. */
+  yieldMode: YieldMode;
   flags: WorldFlags;
   /** Pending ARI lines, drained by the game loop into the HUD. */
   ariQueue: string[];

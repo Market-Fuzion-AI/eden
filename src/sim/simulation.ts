@@ -1,4 +1,4 @@
-import { DAY_SEC } from './config';
+import { DAY_SEC, YIELD } from './config';
 import { ariTick } from './ari';
 import { chronicle, clockOf } from './chronicle';
 import { settlerExecute, settlerNeedsTick, settlerThink } from './goals';
@@ -15,10 +15,20 @@ export function simTick(world: World, dt: number): void {
   world.timeSec += dt;
   const t = world.timeSec;
 
-  // Resource regeneration.
+  // Resource regeneration, scaled by the world's glowberry yield. Under low
+  // yield patches hold less and refill slowly, which is the only pressure the
+  // simulation needs — competition emerges from the existing needs and
+  // relationship systems rather than being scripted.
+  const yieldCfg = YIELD[world.yieldMode];
   for (const r of world.resources) {
-    if (r.regenPerSec > 0 && r.quantity < r.maxQuantity) {
-      r.quantity = Math.min(r.maxQuantity, r.quantity + r.regenPerSec * dt);
+    const scarce = r.type === 'glowberry';
+    const cap = scarce ? Math.max(1, r.maxQuantity * yieldCfg.capScale) : r.maxQuantity;
+    const regen = scarce ? r.regenPerSec * yieldCfg.regenScale : r.regenPerSec;
+    if (regen > 0 && r.quantity < cap) {
+      r.quantity = Math.min(cap, r.quantity + regen * dt);
+    } else if (r.quantity > cap) {
+      // Yield was just lowered: existing berries dwindle rather than vanish.
+      r.quantity = Math.max(cap, r.quantity - 0.05 * dt);
     }
   }
   tickOfferedFood(world);

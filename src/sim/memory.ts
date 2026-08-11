@@ -26,6 +26,20 @@ export function memoryText(m: MemoryEntry): string {
       return 'Emerson gave me food';
     case 'talked_to_emerson':
       return `Spoke with Emerson${m.place ? ` at ${m.place}` : ''}`;
+    case 'given_food':
+      return `${m.subjectName ?? 'Someone'} gave me food when I was hungry`;
+    case 'shared_food':
+      return `Shared my food with ${m.subjectName ?? 'someone'}`;
+    case 'yielded_food':
+      return `Stepped aside so ${m.subjectName ?? 'someone'} could eat`;
+    case 'resented_food':
+      return `${m.subjectName ?? 'Someone'} took the last of ${m.place ?? 'the food'} while I was hungry`;
+    case 'confronted':
+      return `Argued with ${m.subjectName ?? 'someone'}`;
+    case 'reconciled':
+      return `Made peace with ${m.subjectName ?? 'someone'}`;
+    case 'sought_company':
+      return `Went looking for ${m.subjectName ?? 'company'}`;
     case 'threatened':
       return `Was threatened by ${m.subjectName ?? 'something'}`;
     case 'explored':

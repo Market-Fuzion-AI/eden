@@ -97,14 +97,19 @@ function AgentView({ id }: { id: string }) {
       speed: e.speed,
       resting: e.resting,
       social: e.socialTimer > 0,
+      agitated: e.kind === 'settler' && Boolean(e.confronting),
     });
 
     // Status sprite: talking / sleeping / fleeing.
     const sprite = spriteRef.current;
     if (sprite) {
-      let kind: 'social' | 'sleep' | 'alert' | null = null;
-      if (e.socialTimer > 0) kind = 'social';
-      else if (e.resting) kind = 'sleep';
+      let kind: 'social' | 'sleep' | 'alert' | 'argue' | 'gift' | null = null;
+      if (e.socialTimer > 0) {
+        // Arguments and gifts read differently from ordinary conversation.
+        if (e.kind === 'settler' && e.confronting) kind = 'argue';
+        else if (e.kind === 'settler' && e.goal.type === 'share-food') kind = 'gift';
+        else kind = 'social';
+      } else if (e.resting) kind = 'sleep';
       else if (e.kind === 'creature' && e.threatUntil > world.timeSec) kind = 'alert';
       if (kind) {
         sprite.visible = true;

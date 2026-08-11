@@ -18,6 +18,7 @@ export function Inspector() {
   useUI((s) => s.uiPulse);
   const selectedId = useUI((s) => s.selectedId);
   const select = useUI((s) => s.select);
+  const openRelationship = useUI((s) => s.openRelationship);
 
   if (!selectedId) {
     return (
@@ -106,14 +107,20 @@ export function Inspector() {
         <>
           <div className="section-title">BONDS</div>
           {data.relationships.map((r) => (
-            <div key={r.name} className="rel-row">
+            <button
+              key={r.otherId}
+              className="rel-row clickable"
+              onClick={() => openRelationship(selectedId, r.otherId)}
+              title="Open relationship history"
+            >
               <span className="rel-name">{r.name}</span>
+              <span className={`rel-state state-${r.state.toLowerCase()}`}>{r.state}</span>
               <span className={`rel-affinity ${r.affinity >= 0 ? 'pos' : 'neg'}`}>
                 {r.affinity >= 0 ? '+' : ''}
                 {r.affinity}
               </span>
-              <span className="rel-count">{r.interactions}×</span>
-            </div>
+              <span className="rel-chevron">›</span>
+            </button>
           ))}
         </>
       )}

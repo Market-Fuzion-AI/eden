@@ -115,4 +115,40 @@ export const LUMI = {
   followDurationMax: 150,
 };
 
+/** Structured relationships — yesterday changing tomorrow. */
+export const REL = {
+  maxHistory: 12,
+  /** Seconds after a conflict during which the pair stays cold. */
+  conflictChill: 420,
+  /** Window in which a memory still colours social utility. */
+  memoryWindow: 900,
+  /** Idle time before a relationship starts drifting toward neutral. */
+  decayIdleDelay: 900,
+  decayPerSec: 0.0022,
+
+  /** Friend-seeking: how far a settler will travel for good company. */
+  seekRadius: 130,
+  /** Minimum relationship score before travelling counts as worthwhile. */
+  seekMinScore: 34,
+  seekMinSocialNeed: 55,
+
+  /** Confrontation. */
+  confrontRange: 26,
+  confrontDuration: 11,
+  confrontMinScore: 30,
+  confrontCooldown: 600,
+
+  /** Food sharing. */
+  shareRange: 9,
+  shareDuration: 5,
+  shareHungerGap: 28,
+  shareCooldown: 300,
+} as const;
+
+/** Glowberry abundance, adjustable from Creator Mode. */
+export const YIELD = {
+  normal: { regenScale: 1, capScale: 1, label: 'Normal' },
+  low: { regenScale: 0.22, capScale: 0.45, label: 'Low' },
+} as const;
+
 export const CHRONICLE_CAP = 250;

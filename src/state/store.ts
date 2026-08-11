@@ -26,6 +26,10 @@ interface UIState {
   speed: SimSpeed;
   selectedId: string | null;
   selectedEvent: ChronicleEvent | null;
+  /** Open relationship drill-down: [subject, other]. */
+  relationshipPair: [string, string] | null;
+  /** Draw relationship links from the selected settler in the 3D world. */
+  showSocialLinks: boolean;
   focusRequest: FocusRequest | null;
   uiPulse: number;
   entitiesVersion: number;
@@ -47,6 +51,9 @@ interface UIState {
   setSpeed(speed: SimSpeed): void;
   select(id: string | null): void;
   selectEvent(event: ChronicleEvent | null): void;
+  openRelationship(subjectId: string, otherId: string): void;
+  closeRelationship(): void;
+  toggleSocialLinks(): void;
   requestFocus(x: number, z: number): void;
   bumpPulse(): void;
   bumpEntities(): void;
@@ -72,6 +79,8 @@ export const useUI = create<UIState>((set) => ({
   speed: 1,
   selectedId: null,
   selectedEvent: null,
+  relationshipPair: null,
+  showSocialLinks: true,
   focusRequest: null,
   uiPulse: 0,
   entitiesVersion: 0,
@@ -90,8 +99,13 @@ export const useUI = create<UIState>((set) => ({
   setMode: (mode) => set({ mode, spawnFoodArmed: false, summary: null }),
   setPaused: (paused) => set({ paused }),
   setSpeed: (speed) => set({ speed, paused: false }),
-  select: (selectedId) => set({ selectedId }),
+  // Choosing a new subject supersedes whatever was being read about the old
+  // one — both the relationship drill-down and any open event.
+  select: (selectedId) => set({ selectedId, relationshipPair: null, selectedEvent: null }),
   selectEvent: (selectedEvent) => set({ selectedEvent }),
+  openRelationship: (subjectId, otherId) => set({ relationshipPair: [subjectId, otherId], selectedEvent: null }),
+  closeRelationship: () => set({ relationshipPair: null }),
+  toggleSocialLinks: () => set((s) => ({ showSocialLinks: !s.showSocialLinks })),
   requestFocus: (x, z) => set({ focusRequest: { x, z, nonce: ++focusNonce } }),
   bumpPulse: () => set((s) => ({ uiPulse: s.uiPulse + 1 })),
   bumpEntities: () => set((s) => ({ entitiesVersion: s.entitiesVersion + 1 })),

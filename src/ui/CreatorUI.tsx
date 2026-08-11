@@ -1,10 +1,11 @@
 import { getWorld } from '../sim';
 import { formatClock } from '../sim/chronicle';
-import { creatorSetHour, creatorToggleWeather } from '../sim/creator';
+import { creatorSetHour, creatorSetYield, creatorToggleWeather } from '../sim/creator';
 import { useUI, type SimSpeed } from '../state/store';
 import { ChroniclePanel } from './ChroniclePanel';
 import { EventDetail } from './EventDetail';
 import { Inspector } from './Inspector';
+import { RelationshipDetail } from './RelationshipDetail';
 import { SummaryPanel } from './SummaryPanel';
 
 /** Creator Mode: sovereign view. Inspection first, interventions second. */
@@ -16,6 +17,9 @@ export function CreatorUI() {
   const spawnArmed = useUI((s) => s.spawnFoodArmed);
   const chronicleOpen = useUI((s) => s.chronicleOpen);
   const selectedEvent = useUI((s) => s.selectedEvent);
+  const relationshipPair = useUI((s) => s.relationshipPair);
+  const showSocialLinks = useUI((s) => s.showSocialLinks);
+  const toggleSocialLinks = useUI((s) => s.toggleSocialLinks);
   const summary = useUI((s) => s.summary);
   const setPaused = useUI((s) => s.setPaused);
   const setSpeed = useUI((s) => s.setSpeed);
@@ -64,6 +68,25 @@ export function CreatorUI() {
           <button className="btn" onClick={() => creatorSetHour(world, 0, 'midnight')}>Night</button>
         </div>
 
+        <div className="section-title">GLOWBERRY YIELD</div>
+        <div className="btn-row">
+          <button
+            className={`btn ${world.yieldMode === 'normal' ? 'active' : ''}`}
+            onClick={() => creatorSetYield(world, 'normal')}
+          >
+            Normal
+          </button>
+          <button
+            className={`btn ${world.yieldMode === 'low' ? 'warn-active' : ''}`}
+            onClick={() => creatorSetYield(world, 'low')}
+          >
+            Low
+          </button>
+        </div>
+        {world.yieldMode === 'low' && (
+          <div className="scarcity-note">Food is scarce. Watch them compete.</div>
+        )}
+
         <div className="section-title">WORLD</div>
         <div className="btn-col">
           <button className="btn" onClick={() => creatorToggleWeather(world)}>
@@ -71,6 +94,9 @@ export function CreatorUI() {
           </button>
           <button className={`btn ${spawnArmed ? 'armed' : ''}`} onClick={() => setSpawnFoodArmed(!spawnArmed)}>
             {spawnArmed ? '◉ Click ground to place…' : 'Spawn glowberry patch'}
+          </button>
+          <button className={`btn ${showSocialLinks ? 'active' : ''}`} onClick={toggleSocialLinks}>
+            {showSocialLinks ? '◉ Social links on' : 'Social links off'}
           </button>
         </div>
 
@@ -89,7 +115,13 @@ export function CreatorUI() {
 
       {summary && <SummaryPanel summary={summary} />}
 
-      {selectedEvent ? <EventDetail event={selectedEvent} /> : <Inspector />}
+      {relationshipPair ? (
+        <RelationshipDetail subjectId={relationshipPair[0]} otherId={relationshipPair[1]} />
+      ) : selectedEvent ? (
+        <EventDetail event={selectedEvent} />
+      ) : (
+        <Inspector />
+      )}
 
       <div className={`chronicle-dock ${chronicleOpen ? 'open' : ''}`}>
         <button className="btn chronicle-toggle" onClick={toggleChronicle}>

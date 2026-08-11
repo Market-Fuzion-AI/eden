@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { getWorld } from '../sim';
 import * as creator from '../sim/creator';
+import * as goals from '../sim/goals';
+import * as rel from '../sim/relationships';
 import { getInteractions, updatePlayer } from '../sim/player';
 import { simTick } from '../sim/simulation';
 import { buildSummary, snapshot } from '../sim/summary';
@@ -29,6 +31,12 @@ export function registerFog(fog: THREE.FogExp2): void {
   activeFog = fog;
 }
 
+/** Set by SocialLinks.tsx so tests can confirm the graph actually draws. */
+let socialLinkMesh: THREE.Mesh | null = null;
+export function registerSocialLinks(mesh: THREE.Mesh | null): void {
+  socialLinkMesh = mesh;
+}
+
 /** Stable hash of the terrain's vertex positions — detects any geometry drift. */
 function terrainHash(): string {
   if (!terrainGeometry) return 'no-terrain';
@@ -49,9 +57,13 @@ export function installDebugBridge(): void {
     input,
     sim: { getInteractions },
     creator,
+    goals,
+    rel,
     perf,
     terrainHash,
     fogDensity: () => activeFog?.density ?? -1,
+    socialLinksVisible: () =>
+      Boolean(socialLinkMesh?.visible) && (socialLinkMesh?.geometry.drawRange.count ?? 0) > 0,
     /** Advance only Emerson, using current keyboard/camera state. */
     stepPlayer: (dt: number) =>
       updatePlayer(getWorld(), dt, { ...input.readMoveAxes(), camYaw: input.inputState.camYaw }),

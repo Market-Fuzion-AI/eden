@@ -85,7 +85,7 @@ export function speechBubbleMaterial(text: string): THREE.SpriteMaterial {
   return mat;
 }
 
-export function statusSpriteMaterial(kind: 'social' | 'sleep' | 'alert'): THREE.SpriteMaterial {
+export function statusSpriteMaterial(kind: 'social' | 'sleep' | 'alert' | 'argue' | 'gift'): THREE.SpriteMaterial {
   let mat = spriteCache.get(kind);
   if (mat) return mat;
   let tex: THREE.CanvasTexture;
@@ -105,6 +105,52 @@ export function statusSpriteMaterial(kind: 'social' | 'sleep' | 'alert'): THREE.
         ctx.arc(20 + i * 12, s / 2 - 4, 3.5, 0, Math.PI * 2);
         ctx.fill();
       }
+    });
+  } else if (kind === 'argue') {
+    // Jagged speech bubble — reads as conflict at a glance, no text needed.
+    tex = makeCanvasTexture((ctx, s) => {
+      ctx.fillStyle = 'rgba(46, 10, 14, 0.9)';
+      ctx.strokeStyle = '#ff5f6a';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      const cx = s / 2;
+      const cy = s / 2 - 4;
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2 - Math.PI / 2;
+        const r = i % 2 === 0 ? 26 : 18;
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r * 0.82;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#ff9a9f';
+      ctx.font = 'bold 30px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('!', cx, cy + 1);
+    });
+  } else if (kind === 'gift') {
+    tex = makeCanvasTexture((ctx, s) => {
+      ctx.fillStyle = 'rgba(10,24,18,0.85)';
+      ctx.beginPath();
+      ctx.roundRect(6, 10, s - 12, s - 28, 12);
+      ctx.fill();
+      ctx.strokeStyle = '#6fe89f';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // A small berry offered in an open palm.
+      ctx.fillStyle = '#ffd76a';
+      ctx.beginPath();
+      ctx.arc(s / 2, s / 2 - 6, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#6fe89f';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(s / 2, s / 2 + 4, 13, Math.PI * 0.1, Math.PI * 0.9);
+      ctx.stroke();
     });
   } else if (kind === 'sleep') {
     tex = makeCanvasTexture((ctx, s) => {

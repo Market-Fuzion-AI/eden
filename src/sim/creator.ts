@@ -1,8 +1,8 @@
-import { DAY_SEC } from './config';
+import { DAY_SEC, YIELD } from './config';
 import { chronicle } from './chronicle';
 import { placeName } from './landmarks';
 import { isWater } from './terrain';
-import type { World } from './types';
+import type { World, YieldMode } from './types';
 import type { V2 } from './vec';
 
 /**
@@ -28,6 +28,32 @@ export function creatorSetHour(world: World, hour: number, label: string): void 
     c.nextThinkAt = world.timeSec + world.rng.range(0.2, 2);
   }
   chronicle(world, 'creator', `The Creator turned the sky to ${label}.`);
+}
+
+/**
+ * The one controlled scarcity lever. Lowering the yield does not script
+ * conflict — it lets the existing needs, utility and relationship systems
+ * respond to genuine competition for food.
+ */
+export function creatorSetYield(world: World, mode: YieldMode): void {
+  if (world.yieldMode === mode) return;
+  world.yieldMode = mode;
+  const cfg = YIELD[mode];
+  chronicle(
+    world,
+    'creator',
+    mode === 'low'
+      ? 'The Creator thinned the glowberries across the valley.'
+      : 'The Creator restored the glowberry harvest.',
+    {
+      cause: ['Direct Creator intervention'],
+      effects: [
+        `Glowberry yield set to ${cfg.label}`,
+        `Patch capacity ×${cfg.capScale}, regrowth ×${cfg.regenScale}`,
+        mode === 'low' ? 'Settlers will begin competing for food' : 'Food pressure eases',
+      ],
+    },
+  );
 }
 
 export function creatorToggleWeather(world: World): void {

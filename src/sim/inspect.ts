@@ -1,8 +1,16 @@
+import { formatClockShort } from './chronicle';
 import { getEntity, getWorld } from './index';
 import { LANDMARKS, placeName } from './landmarks';
 import { memoryText } from './memory';
+import {
+  avoidanceOf,
+  modifierLines,
+  relationshipState,
+  socialModifiers,
+  type RelationshipState,
+} from './relationships';
 import { CREATURE_SPECIES_BY_ID, INTELLIGENT_SPECIES } from './species';
-import type { IntelligentSpeciesId } from './types';
+import type { IntelligentSpeciesId, Relationship } from './types';
 import { dist } from './vec';
 
 /**
@@ -14,6 +22,27 @@ export interface InspectorBar {
   label: string;
   value: number; // 0..100
   tone?: 'good' | 'warn' | 'bad' | 'accent';
+}
+
+export interface RelationshipSummary {
+  otherId: string;
+  name: string;
+  state: RelationshipState;
+  affinity: number;
+  trust: number;
+  familiarity: number;
+  fear: number;
+  interactions: number;
+}
+
+/** Full drill-down for one pair, built entirely from recorded history. */
+export interface RelationshipDetail extends RelationshipSummary {
+  subjectId: string;
+  subjectName: string;
+  firstMetAt: number;
+  history: { when: string; text: string; deltas: string[] }[];
+  /** How this relationship is currently biasing goal selection. */
+  influence: string[];
 }
 
 export interface InspectorData {
@@ -29,9 +58,71 @@ export interface InspectorData {
   personality: InspectorBar[];
   needs: InspectorBar[];
   trust?: { label: string; value: number };
-  relationships: { name: string; affinity: number; interactions: number }[];
+  relationships: RelationshipSummary[];
   memories: { text: string; ago: string }[];
   known: string[];
+}
+
+function nameOf(id: string): string {
+  return id === 'emerson' ? 'Emerson' : (getEntity(id)?.name ?? 'someone');
+}
+
+function summarizeRelationship(otherId: string, rel: Relationship): RelationshipSummary {
+  return {
+    otherId,
+    name: nameOf(otherId),
+    state: relationshipState(rel),
+    affinity: Math.round(rel.affinity),
+    trust: Math.round(rel.trust),
+    familiarity: Math.round(rel.familiarity),
+    fear: Math.round(rel.fear),
+    interactions: rel.interactions,
+  };
+}
+
+/**
+ * Drill-down for a single pair. History comes straight from the recorded
+ * relationship events — nothing here is invented or inferred after the fact.
+ */
+export function inspectRelationship(subjectId: string, otherId: string): RelationshipDetail | null {
+  const world = getWorld();
+  const subject = getEntity(subjectId);
+  if (!subject || subject.kind !== 'settler') return null;
+  const rel = subject.relationships[otherId];
+  if (!rel) return null;
+
+  const history = rel.history
+    .slice()
+    .reverse()
+    .map((h) => {
+      const deltas: string[] = [];
+      const push = (label: string, v: number) => {
+        if (v) deltas.push(`${label} ${v > 0 ? '+' : ''}${v}`);
+      };
+      push('Affinity', h.delta.affinity);
+      push('Trust', h.delta.trust);
+      push('Familiarity', h.delta.familiarity);
+      push('Fear', h.delta.fear);
+      return { when: formatClockShort(h.t), text: h.text, deltas };
+    });
+
+  // Show how the relationship is steering behaviour right now.
+  const influence: string[] = [];
+  const other = getEntity(otherId);
+  if (other && other.kind === 'settler') {
+    influence.push(...modifierLines(socialModifiers(world, subject, other)));
+    const avoid = avoidanceOf(world, subject, other);
+    if (avoid > 22) influence.push(`Actively avoiding (pressure ${Math.round(avoid)})`);
+  }
+
+  return {
+    ...summarizeRelationship(otherId, rel),
+    subjectId,
+    subjectName: subject.name,
+    firstMetAt: rel.firstMetAt,
+    history,
+    influence,
+  };
 }
 
 function agoText(now: number, t: number): string {
@@ -83,17 +174,18 @@ export function inspect(id: string): InspectorData | null {
   if (e.kind === 'settler') {
     const speciesDef = INTELLIGENT_SPECIES[e.speciesId as IntelligentSpeciesId];
     const rels = Object.entries(e.relationships)
-      .map(([otherId, rel]) => {
-        const name = otherId === 'emerson' ? 'Emerson' : (getEntity(otherId)?.name ?? 'someone');
-        return { name, affinity: Math.round(rel.affinity), interactions: rel.interactions };
-      })
-      .sort((a, b) => Math.abs(b.affinity) - Math.abs(a.affinity))
-      .slice(0, 5);
+      .map(([otherId, rel]) => summarizeRelationship(otherId, rel))
+      // Strongest feelings first, in either direction.
+      .sort((a, b) => Math.abs(b.affinity) + b.fear - (Math.abs(a.affinity) + a.fear))
+      .slice(0, 6);
     const known = e.knownResourceIds
       .map((rid) => world.resources.find((r) => r.id === rid))
       .filter((r) => r && r.type !== 'restspot')
       .slice(0, 5)
       .map((r) => r!.label);
+    if (e.carriedFood > 0) {
+      known.unshift(`Carrying ${e.carriedFood} glowberr${e.carriedFood === 1 ? 'y' : 'ies'}`);
+    }
     if (e.knownLandmarkIds.length > 0) {
       const places = e.knownLandmarkIds
         .map((id) => LANDMARKS.find((l) => l.id === id)?.name)

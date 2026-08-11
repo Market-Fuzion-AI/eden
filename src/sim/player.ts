@@ -3,6 +3,7 @@ import { chronicle } from './chronicle';
 import { buildExchange, type DialogueExchange } from './dialogue';
 import { placeName } from './landmarks';
 import { remember } from './memory';
+import { applyRelationship, peekRelationship, relationshipState } from './relationships';
 import { groundY, isWater } from './terrain';
 import { damageCreature } from './wildlife';
 import type { Settler, World } from './types';
@@ -260,14 +261,18 @@ export function playerTalk(world: World): DialogueExchange | null {
   };
   s.socialTimer = PLAYER.talkDuration;
 
-  // Real relationship effects.
-  let rel = s.relationships.emerson;
-  if (!rel) rel = s.relationships.emerson = { affinity: 0, interactions: 0, lastInteractionAt: -999 };
-  const before = rel.affinity;
+  // Real relationship effects, on the same structured model the settlers use.
+  const before = peekRelationship(s, 'emerson')?.affinity ?? 0;
   const gain = 3 + s.personality.sociability * 4 + s.personality.empathy * 2;
-  rel.affinity = Math.max(-100, Math.min(100, rel.affinity + gain));
-  rel.interactions++;
-  rel.lastInteractionAt = world.timeSec;
+  const rel = applyRelationship(
+    world,
+    s,
+    'emerson',
+    'Emerson',
+    exchange.firstMeeting ? 'meeting' : 'conversation',
+    exchange.firstMeeting ? 'First conversation with Emerson' : 'Spoke with Emerson',
+    { affinity: gain, trust: 2, familiarity: exchange.firstMeeting ? 14 : 6 },
+  );
   s.needs.social = Math.max(0, s.needs.social - RATES.socialReduces * 0.6);
 
   remember(s, {
@@ -292,6 +297,7 @@ export function playerTalk(world: World): DialogueExchange | null {
       ],
       effects: [
         `Affinity toward Emerson ${before >= 0 ? '+' : ''}${Math.round(before)} → +${Math.round(rel.affinity)}`,
+        `Now ${relationshipState(rel)}`,
         'Memory created',
       ],
     });

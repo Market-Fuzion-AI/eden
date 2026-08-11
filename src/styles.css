@@ -664,12 +664,150 @@
   align-items: baseline;
   gap: 8px;
   font-size: 12px;
-  margin: 3px 0;
+  margin: 2px 0;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  padding: 5px 4px;
+  font-family: inherit;
 }
+.rel-row.clickable { cursor: pointer; }
+.rel-row.clickable:hover { background: rgba(89, 214, 230, 0.12); }
 .rel-name { flex: 1; }
 .rel-affinity.pos { color: var(--good); }
 .rel-affinity.neg { color: var(--bad); }
 .rel-count { color: var(--text-dim); font-size: 10px; }
+.rel-chevron { color: var(--text-dim); font-size: 14px; }
+
+/* Relationship states share one colour language across UI and 3D links. */
+.rel-state {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  text-transform: uppercase;
+}
+.state-hostile { color: #ff5f6a; }
+.state-wary { color: #ff9a4a; }
+.state-neutral { color: #8fa3b0; }
+.state-familiar { color: #6fd0e8; }
+.state-friendly { color: #6fe89f; }
+.state-bonded { color: #c08bff; }
+
+/* --- relationship drill-down --------------------------------------------- */
+
+.rel-pair {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+}
+.rel-arrow { color: var(--text-dim); margin: 0 3px; }
+.rel-state-big {
+  font-size: 11px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  margin-top: 4px;
+  font-weight: 700;
+}
+.rel-meta {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  margin-top: 5px;
+}
+
+.reldim {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+.reldim-label {
+  width: 76px;
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+.reldim-bar {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.reldim-center {
+  position: absolute;
+  left: 50%;
+  top: -1px;
+  bottom: -1px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.28);
+}
+.reldim-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transition: width 0.25s ease, left 0.25s ease;
+}
+.reldim-fill.pos { background: var(--good); }
+.reldim-fill.neg { background: var(--bad); }
+.reldim-fill.plain { background: var(--accent); }
+.reldim-value {
+  width: 30px;
+  text-align: right;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.relhist {
+  border-left: 2px solid rgba(89, 214, 230, 0.3);
+  padding: 4px 0 6px 9px;
+  margin: 4px 0;
+}
+.relhist-when {
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+}
+.relhist-text {
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 1px 0 3px;
+}
+.relhist-deltas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.relhist-delta {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border: 1px solid currentColor;
+  font-variant-numeric: tabular-nums;
+}
+.relhist-delta.pos { color: var(--good); }
+.relhist-delta.neg { color: var(--bad); }
+
+.rel-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.scarcity-note {
+  font-size: 10.5px;
+  color: var(--warn);
+  letter-spacing: 0.06em;
+  margin: -4px 0 8px;
+}
+.btn.warn-active {
+  background: var(--warn);
+  color: #241503;
+  border-color: var(--warn);
+  font-weight: 700;
+}
 
 .mem-row {
   display: flex;

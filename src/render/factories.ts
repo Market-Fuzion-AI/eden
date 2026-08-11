@@ -18,6 +18,8 @@ export interface AnimCtx {
   speed: number; // m/s
   resting: boolean;
   social: boolean;
+  /** Mid-confrontation: sharper, larger gestures. */
+  agitated?: boolean;
 }
 
 export interface Rig {
@@ -259,14 +261,17 @@ export function buildSettlerRig(
 
       if (ctx.social) {
         // Conversational gesturing: hands rise and move while speaking, so a
-        // conversation is legible from across the valley.
-        gesture += ctx.dt * 2.6;
+        // conversation is legible from across the valley. An argument uses the
+        // same rig, faster and wider — visibly not a friendly chat.
+        const rate = ctx.agitated ? 5.4 : 2.6;
+        const reach = ctx.agitated ? 1.9 : 1;
+        gesture += ctx.dt * rate;
         const g1 = Math.sin(gesture * 1.7);
         const g2 = Math.sin(gesture * 1.1 + 1.3);
-        armL.rotation.x = -0.55 - g1 * 0.3;
-        armR.rotation.x = -0.45 - g2 * 0.35;
-        armL.rotation.z = 0.35 + g2 * 0.12;
-        armR.rotation.z = -0.3 - g1 * 0.12;
+        armL.rotation.x = (-0.55 - g1 * 0.3) * reach;
+        armR.rotation.x = (-0.45 - g2 * 0.35) * reach;
+        armL.rotation.z = 0.35 + g2 * 0.12 * reach;
+        armR.rotation.z = -0.3 - g1 * 0.12 * reach;
       } else {
         armL.rotation.x = -swing * 0.8;
         armR.rotation.x = swing * 0.8;
@@ -285,11 +290,13 @@ export function buildSettlerRig(
         body.position.y = Math.abs(Math.sin(phase)) * 0.05 * speedNorm + idleBreath;
       }
 
-      // Head: nods while talking, idle glances otherwise.
+      // Head: nods while talking, jabs forward while arguing.
       head.rotation.y = ctx.social
-        ? Math.sin(ctx.time * 1.6) * 0.14
+        ? Math.sin(ctx.time * (ctx.agitated ? 3.2 : 1.6)) * (ctx.agitated ? 0.22 : 0.14)
         : Math.sin(ctx.time * 0.4 + variant * 7) * 0.28;
-      head.rotation.x = ctx.social ? Math.sin(ctx.time * 3.1) * 0.09 : 0;
+      head.rotation.x = ctx.social
+        ? Math.sin(ctx.time * (ctx.agitated ? 5.5 : 3.1)) * (ctx.agitated ? 0.16 : 0.09) - (ctx.agitated ? 0.12 : 0)
+        : 0;
 
       if (tail) {
         tail.rotation.y = Math.sin(ctx.time * 1.8 + variant * 5) * 0.22;

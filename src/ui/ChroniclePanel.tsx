@@ -31,10 +31,12 @@ export function ChroniclePanel() {
 
   const open = (e: ChronicleEvent) => {
     if (!eventIsInspectable(e)) return;
-    selectEvent(e);
-    // Select the first participant that still exists, and fly to the scene.
+    // Select the first participant that still exists, then open the event.
+    // Order matters: selecting a subject clears whatever was being read about
+    // the previous one, so the event has to be set last.
     const actor = e.actorIds?.find((id) => id === 'emerson' || world.settlers.some((s) => s.id === id) || world.creatures.some((c) => c.id === id));
     if (actor) select(actor);
+    selectEvent(e);
     if (e.pos) requestFocus(e.pos.x, e.pos.z);
   };
 

@@ -34,8 +34,11 @@ export interface SimClock {
 }
 
 export function clockOf(timeSec: number): SimClock {
-  const totalDays = Math.floor(timeSec / DAY_SEC);
-  const dayFrac = (timeSec % DAY_SEC) / DAY_SEC;
+  // Clamp at the world's beginning: nothing can be recorded before Day 1, and
+  // a negative time would otherwise render as "D0 -20:-21".
+  const t = Math.max(0, timeSec);
+  const totalDays = Math.floor(t / DAY_SEC);
+  const dayFrac = (t % DAY_SEC) / DAY_SEC;
   const hourF = dayFrac * 24;
   return {
     year: Math.floor(totalDays / 120) + 1, // 120-day Eden year

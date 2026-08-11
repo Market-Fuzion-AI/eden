@@ -6,6 +6,7 @@ import { EdenEnvironment } from './Environment';
 import { MistLayer } from './MistLayer';
 import { PlayerRig } from './PlayerRig';
 import { ResourceNodes } from './ResourceNodes';
+import { SocialLinks } from './SocialLinks';
 import { Terrain } from './Terrain';
 import { Vegetation } from './Vegetation';
 import { Water } from './Water';
@@ -24,6 +25,7 @@ export function Scene() {
       <Agents />
       <PlayerRig />
       {mode === 'creator' && <CreatorRig />}
+      {mode === 'creator' && <SocialLinks />}
     </>
   );
 }

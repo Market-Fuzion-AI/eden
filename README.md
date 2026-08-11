@@ -13,7 +13,15 @@ memory — and Creator Mode lets you read exactly **why**.
 
 **v0.1** built the simulation. **v0.2** made it legible: camera-relative movement, conversations you
 can hold and conversations you can watch, a Chronicle that explains itself, named places, and a
-report of what changed while time ran fast.
+report of what changed while time ran fast. **v0.3** made it consequential —
+
+> *Yesterday changes tomorrow.*
+
+Relationships are now four dimensions (affinity, trust, familiarity, fear) that resolve to a readable
+state, and they feed straight back into goal selection. A settler will cross the valley for someone
+who once fed them, refuse to approach someone they fear, share scarce food, resent whoever took the
+last of it, and confront a standing grievance — or, given the right temperament, make peace instead.
+None of it is scripted; it all falls out of needs, personality and recorded history.
 
 ## Running it
 
@@ -40,11 +48,21 @@ node scripts/smoke.mjs   # browser smoke test with screenshots (needs preview/de
 - **CREATE** — press `Tab`. God camera, entity inspection (needs, personality, current goal and its
   reasoning, memories, relationships, Lumi's trust), a Chronicle where every entry can be clicked to
   fly to the scene and read *why it happened and what changed*, time control, and interventions
-  (time of day, mist, spawned food).
+  (time of day, mist, spawned food, glowberry yield).
+
+  Click any bond to open the relationship drill-down: the four dimensions, the derived state, the
+  recorded history of every change, and exactly how that relationship is steering the settler's
+  choices right now. Selecting a settler also draws their social graph in the world, coloured by
+  relationship state.
 
 Skip ahead at 5× or 20× and drop back to 1×, and the world reports what changed while you were not
 watching — population, new relationships, discoveries, budding events, deaths, conflicts. Every figure
 is counted from real simulation state; nothing is invented.
+
+Set the glowberry yield to **Low** and watch a society under pressure: settlers begin taking the last
+of a patch in front of hungry neighbours, grievances accumulate, and some of them are eventually said
+out loud. Others give food away instead. Nothing about that is scripted — scarcity simply changes what
+the existing needs, utility and relationship systems decide to do.
 
 ## Controls
 
@@ -74,7 +92,8 @@ The non-negotiable rule: **simulation state is fully separated from rendering.**
 ```
 src/sim/      Pure TypeScript simulation. No Three.js, no React.
               World, agents, needs, utility-AI goals + reasons, memories,
-              relationships, wildlife, Lumi, chronicle (with structured
+              structured relationships (affinity/trust/familiarity/fear with
+              recorded history), wildlife, Lumi, chronicle (with structured
               who/where/why/effects payloads), landmarks, deterministic
               dialogue, temporal summaries, terrain math, seeded RNG,
               creator interventions.

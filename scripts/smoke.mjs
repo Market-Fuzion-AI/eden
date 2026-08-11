@@ -107,9 +107,21 @@ console.log('\nNPC CONVERSATION');
 const talk = await page.evaluate(async () => {
   const { getWorld, sim } = window.__EDEN__;
   const world = getWorld();
+  // Pick a settler and make sure they are genuinely available to talk, and
+  // that nobody else is standing nearer to Emerson than they are.
   const target = world.settlers[3];
+  target.resting = false;
+  target.socialTimer = 0;
+  target.talkingUntil = 0;
+  target.confronting = false;
+  target.pos = { x: 20, z: -20 };
   world.player.pos.x = target.pos.x + 1.3;
   world.player.pos.z = target.pos.z;
+  for (const s of world.settlers) {
+    if (s === target) continue;
+    const d = Math.hypot(s.pos.x - world.player.pos.x, s.pos.z - world.player.pos.z);
+    if (d < 12) s.pos = { x: -150, z: 150 };
+  }
   const prompts = sim.getInteractions(world).map((p) => p.label);
   return { prompts, name: target.name, id: target.id };
 });
@@ -286,6 +298,111 @@ const overlap = await page.evaluate(() => {
   return worst;
 });
 check('settlers do not occupy the same space', overlap < 0.15, `worst overlap ${overlap.toFixed(3)}m`);
+
+// ---------------------------------------------------------------------------
+console.log('\nCONSEQUENTIAL RELATIONSHIPS');
+// ---------------------------------------------------------------------------
+await page.evaluate(() => window.__EDEN__.useUI.getState().setMode('creator'));
+await page.waitForTimeout(700);
+
+// Give one settler a real history with a distant one, then confirm the
+// relationship — not proximity — decides who they choose.
+const consequence = await page.evaluate(() => {
+  const { getWorld, rel: relApi, goals } = window.__EDEN__;
+  const world = getWorld();
+  const [subject, friend] = world.settlers;
+  const stranger = world.settlers[2];
+  // Build a controlled comparison out of a world that has already been living:
+  // clear the three participants' social state and any history between them.
+  for (const s of [subject, friend, stranger]) {
+    s.socialTimer = 0;
+    s.socialCooldownUntil = 0;
+    s.resting = false;
+    s.confronting = false;
+    s.goal = { type: 'idle', label: 'Waiting', phase: 'act', timer: 1, startedAt: world.timeSec, deadline: world.timeSec + 30 };
+    delete s.relationships[subject.id];
+    delete s.relationships[friend.id];
+    delete s.relationships[stranger.id];
+  }
+  subject.pos = { x: 0, z: 0 };
+  stranger.pos = { x: 5, z: 0 };
+  friend.pos = { x: 40, z: 0 };
+  for (let i = 3; i < world.settlers.length; i++) world.settlers[i].pos = { x: -150, z: 150 };
+  subject.needs.social = 92;
+
+  const before = goals.rankSocialCandidates(world, subject)[0]?.other?.name ?? null;
+
+  relApi.applyRelationship(world, subject, friend.id, friend.name, 'gift', 'Shared food when I was starving', {
+    affinity: 76,
+    trust: 70,
+    familiarity: 70,
+  });
+  // Push the history into the past so the re-engagement cooldown has lapsed.
+  const r = subject.relationships[friend.id];
+  r.lastInteractionAt -= 900;
+  for (const h of r.history) h.t -= 900;
+
+  const ranked = goals.rankSocialCandidates(world, subject);
+  return {
+    subjectId: subject.id,
+    friendId: friend.id,
+    beforeChoice: before,
+    afterChoice: ranked[0]?.other?.name ?? null,
+    friendName: friend.name,
+    strangerName: stranger.name,
+    state: relApi.relationshipState(r),
+    mods: (ranked[0]?.mods ?? []).map((m) => `${m.label} ${m.value}`),
+  };
+});
+check('without history, the nearer stranger is chosen', consequence.beforeChoice === consequence.strangerName, String(consequence.beforeChoice));
+check('with history, the distant friend is chosen instead', consequence.afterChoice === consequence.friendName, String(consequence.afterChoice));
+check('relationship reaches a readable state', consequence.state === 'Bonded' || consequence.state === 'Friendly', consequence.state);
+check('the deciding modifiers are named', consequence.mods.some((m) => /Trusted friend|Bonded companion/.test(m)), consequence.mods.join(' | '));
+
+// Inspector drill-down.
+await page.evaluate((ids) => {
+  window.__EDEN__.useUI.getState().select(ids.subjectId);
+}, consequence);
+await page.waitForTimeout(600);
+const bondRows = await page.locator('.rel-row.clickable').count();
+check('inspector lists bonds as drill-downs', bondRows > 0, `${bondRows} rows`);
+if (bondRows > 0) {
+  await page.locator('.rel-row.clickable').first().click();
+  await page.waitForTimeout(600);
+  const relText = await page.locator('.creator-right').innerText();
+  check('drill-down shows the four dimensions', /Affinity/.test(relText) && /Trust/.test(relText) && /Familiarity/.test(relText) && /Fear/.test(relText));
+  check('drill-down shows recorded history', /KEY HISTORY/.test(relText) && !/Nothing recorded yet/.test(relText));
+  check('drill-down explains current influence', /HOW IT STEERS THEM/.test(relText));
+  check('history contains no placeholders', !/undefined|NaN/.test(relText));
+  await page.screenshot({ path: `${SHOT_DIR}/06-relationship.png` });
+}
+
+// Scarcity intervention.
+const scarcity = await page.evaluate(async () => {
+  const { getWorld, creator } = window.__EDEN__;
+  const world = getWorld();
+  const total = () => world.resources.filter((r) => r.type === 'glowberry').reduce((s, r) => s + r.quantity, 0);
+  const before = total();
+  creator.creatorSetYield(world, 'low');
+  for (let i = 0; i < 30000; i++) window.__EDEN__.stepSim(1 / 30);
+  return { before, after: total(), mode: world.yieldMode };
+});
+check('low yield reduces available food', scarcity.after < scarcity.before, `${scarcity.before.toFixed(1)} → ${scarcity.after.toFixed(1)}`);
+check('yield mode is recorded on the world', scarcity.mode === 'low');
+await page.waitForTimeout(500);
+const leftPanel = await page.locator('.creator-left').innerText();
+check('creator UI exposes the yield control', /GLOWBERRY YIELD/.test(leftPanel) && /Low/.test(leftPanel));
+
+// Social link visualization.
+await page.evaluate((ids) => {
+  const ui = window.__EDEN__.useUI.getState();
+  ui.closeRelationship();
+  ui.select(ids.subjectId);
+}, consequence);
+await page.waitForTimeout(900);
+const linksVisible = await page.evaluate(() => window.__EDEN__.socialLinksVisible());
+check('social links render for the selected settler', linksVisible);
+await page.screenshot({ path: `${SHOT_DIR}/07-social-links.png` });
 
 const worldState = await page.evaluate(() => {
   const w = window.__EDEN__.getWorld();
