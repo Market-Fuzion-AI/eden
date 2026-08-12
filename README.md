@@ -1,15 +1,20 @@
 # EDEN
 
-An interactive artificial-life and civilization simulation, experienced from inside the world.
+A third-person sci-fi fantasy action RPG set on a newly colonised world in the far future.
 
-One bounded alien valley. Twenty-one autonomous intelligent settlers (7 Humans, 7 Veyra, 7 Caelari),
-nine native creature archetypes, and one very important small creature named **Lumi**. The question
-this prototype answers:
+You are **Emerson**, pathfinder for the human colony — not its ruler. You explore an alien valley,
+survey it, gather from it, meet the two other intelligent peoples who came down here with you, and
+help decide what this place becomes.
 
-> *Can a small 3D world full of autonomous individuals feel alive?*
+The differentiator is underneath:
 
-The world does not wait for you. Every inhabitant selects its own goals from needs, personality and
-memory — and Creator Mode lets you read exactly **why**.
+> *The world continues to think and act without you.*
+
+Twenty-one autonomous settlers (7 Humans, 7 Veyra, 7 Caelari), nine native creature archetypes, and
+one very important small creature named **Lumi**. Every inhabitant selects its own goals from needs,
+personality, memory and what it believes about everyone else. They build, argue, share food, form
+expectations and change their minds whether or not you are watching. Creator Mode lets you read
+exactly **why** — but you never have to open it.
 
 **v0.1** built the simulation. **v0.2** made it legible: camera-relative movement, conversations you
 can hold and conversations you can watch, a Chronicle that explains itself, named places, and a
@@ -64,12 +69,27 @@ nobody announces a change of heart. Hearsay arrives visibly weaker than what you
 settler who has learned nothing simply assumes everyone feels the way they do — which is how most
 misunderstandings start.
 
-Watch it long enough and individuals begin to generalize: *"people around Landing Meadow usually ask
+Watch it long enough and individuals begin to generalize: *"people around Human Landing usually ask
 before using someone else's shelter."* That takes several sightings, weakens when the evidence turns
 against it, and stays that person's opinion — two settlers in the same clearing can hold opposite ones.
 It is enough to change behaviour at a shelter they have never touched, belonging to someone they know
 nothing about. How much it sways them depends on how much they defer to local habit at all; the
 independent-minded are not rebellious, just unmoved.
+
+**v0.7A** turned all of that into somewhere worth walking around —
+
+> *Make being Emerson feel good.*
+
+The valley is now three readable regions inside one connected map. The **Human Riverlands** are low,
+green and threaded by a river that widens into a lake; the **Veyra Ashlands** are dry rust-coloured
+mesa and cut canyon; the **Caelari Skyreach** is a terraced plateau thirty metres up. Each people
+begins at home in its own region — initial geography, not a faction wall; within a week somebody has
+always crossed a border. You can tell all three apart from a hilltop without reading a single label.
+
+And the camera finally works on a laptop. **Looking around no longer requires pointer lock, or a
+click, or anything at all beyond a two-finger swipe.** Hold `W`, swipe to turn, keep running — the
+key stays down, which it did not before. Click-drag looks too, `C` sweeps the camera back behind you,
+and pointer lock is still there for mouse users who want it, as an option nobody has to find.
 
 ## Running it
 
@@ -90,7 +110,9 @@ node scripts/smoke.mjs   # browser smoke test with screenshots (needs preview/de
 ## The three experiences
 
 - **LIVE** — inhabit the world as Emerson, third person. Explore, gather glowberries, talk to settlers,
-  earn Lumi's trust. ARI names the places you enter and identifies what you look at.
+  earn Lumi's trust. The HUD tells you where you are, which way you are facing and what you can reach —
+  and nothing else. ARI names each region and landmark the first time you enter it, and identifies
+  whatever you look at. She only ever speaks about things Emerson was actually there to see.
 - **OBSERVE** — stand still. Settlers keep exploring, eating, resting and holding conversations you can
   actually watch: they stop, face each other, gesture, and part again.
 - **CREATE** — press `Tab`. God camera, entity inspection (needs, personality, current goal and its
@@ -133,7 +155,9 @@ the existing needs, utility and relationship systems decide to do.
 | Input | Action |
 | --- | --- |
 | `W A S D` / arrow keys | Move (camera-relative) |
-| Mouse | Look around — click the world to enable, `Esc` to release |
+| Trackpad swipe / click-drag | Look around — no clicking required |
+| `C` | Recenter the camera behind Emerson |
+| `[` `]` / pinch | Zoom the camera in and out |
 | `Shift` | Sprint |
 | `Space` | Jump |
 | `E` | Gather glowberries or materials · contribute to a build · talk to a settler |
@@ -144,11 +168,25 @@ the existing needs, utility and relationship systems decide to do.
 | `Tab` | Toggle Creator Mode |
 | `1 / 2 / 3` | Sim speed 1× / 5× / 20× |
 | `P` | Pause |
-| `Esc` | Release the mouse · help |
+| `Esc` | Help and camera settings |
 | `F3` | Debug overlay (fps, achieved sim rate, seed) |
 
-Mouse-look is *camera control only* — it never means taking control of anyone. Creator Mode always
-keeps your cursor.
+Camera look is *camera control only* — it never means taking control of anyone, and it never
+interrupts movement. Look speed, invert-Y and optional mouse capture live behind `Esc` and persist
+between sessions. Creator Mode always keeps your cursor.
+
+## The three regions
+
+| Region | Ground | Who settles there |
+| --- | --- | --- |
+| **Human Riverlands** | Low green plain, river, lake, landing wreck | Humans |
+| **Veyra Ashlands** | Dry rust mesa, cut canyons, mineral seams | Veyra |
+| **Caelari Skyreach** | Terraced plateau ~30m up, cliffs, vantage points | Caelari |
+
+Emerson starts at **Human Landing**: the drop pod, its scattered hull panels, a materials staging
+area, an inert fabrication platform waiting on a later milestone, and a hearth that was lit before
+the game began. Timber grows in the green and stone lies in the rock, so every people has one
+material at hand and must travel for the other.
 
 ## Architecture
 
@@ -164,9 +202,9 @@ src/sim/      Pure TypeScript simulation. No Three.js, no React.
               provenance, confidence and decay) and the private
               generalizations drawn from them,
               wildlife, Lumi, chronicle (with structured
-              who/where/why/effects payloads), landmarks, deterministic
-              dialogue, temporal summaries, terrain math, seeded RNG,
-              creator interventions.
+              who/where/why/effects payloads), landmarks, three biome
+              regions, deterministic dialogue, temporal summaries,
+              terrain math, seeded RNG, creator interventions.
 src/state/    Thin Zustand store for UI-reactive state (mode, speed,
               selection, ~5 Hz UI pulse). Never per-tick data.
 src/game/     Fixed-timestep loop (30 Hz sim steps × speed multiplier)

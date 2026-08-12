@@ -147,7 +147,9 @@ describe('claims are agent-relative', () => {
 
   it('treats campfires as more communal than shelters, all else equal', () => {
     const world = createWorld(205);
-    const s = world.settlers[0];
+    // Veyra, so the pre-built colony hearth at Human Landing does not occupy
+    // the only nearby campfire site.
+    const s = world.settlers.find((x) => x.speciesId === 'veyra')!;
     s.values = { individualism: 0.5, territoriality: 0.5, conformity: 0.5 };
     const shelterSite = chooseBuildSite(world, s, 'shelter')!;
     const shelter = createProject(world, s, 'shelter', shelterSite.pos, ['t'], shelterSite.reason);

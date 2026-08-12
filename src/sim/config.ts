@@ -70,11 +70,20 @@ export const SETTLER = {
 };
 
 export const PLAYER = {
-  walkSpeed: 3.4,
+  walkSpeed: 3.6,
+  /**
+   * Movement responsiveness. Acceleration is deliberately much faster than
+   * deceleration: starting must feel instant, while a short coast on stopping
+   * is what stops Emerson reading as a debug capsule that teleports to a halt.
+   */
+  accel: 14,
+  decel: 9,
+  /** Radians per second toward the travel direction, doubled on a reversal. */
+  turnRate: 12,
   bodyRadius: 0.45,
   talkRange: 3.4,
   talkDuration: 9,
-  sprintSpeed: 6.2,
+  sprintSpeed: 6.6,
   jumpVel: 5.6,
   gravity: 14,
   maxBerries: 6,

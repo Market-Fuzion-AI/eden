@@ -1187,3 +1187,125 @@
   text-transform: none;
   letter-spacing: 0.01em;
 }
+
+/* --- Live Mode location + compass (v0.7A) -------------------------------- */
+
+/*
+ * Live Mode's only persistent readouts. Everything diagnostic moved to Creator
+ * Mode: exploring a world should not feel like reading a dashboard.
+ */
+.place-card {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-left: 2px solid var(--accent);
+  padding: 8px 14px 9px;
+}
+.place-region {
+  font-size: 9.5px;
+  letter-spacing: 0.24em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+.place-name {
+  font-size: 15px;
+  letter-spacing: 0.03em;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.hud-topcenter {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+.compass {
+  width: 300px;
+  text-align: center;
+}
+.compass-cardinal {
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  color: var(--accent);
+  margin-bottom: 3px;
+}
+.compass-strip {
+  position: relative;
+  height: 15px;
+  border-top: 1px solid rgba(126, 151, 163, 0.35);
+  /* Fade the ends so the strip reads as a window onto a ring, not a bar. */
+  mask-image: linear-gradient(to right, transparent, #000 22%, #000 78%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 22%, #000 78%, transparent);
+}
+.compass-tick {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+}
+.compass-tick.major {
+  font-size: 10.5px;
+  color: var(--text);
+}
+
+.clock-chip {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  padding: 5px 10px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+}
+.hint-chip.warn {
+  color: var(--warn);
+  border-color: rgba(255, 176, 63, 0.45);
+}
+
+/* --- camera settings in the help overlay --------------------------------- */
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 7px 0;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.setting-label {
+  min-width: 108px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+.setting-options {
+  display: flex;
+  gap: 5px;
+}
+.setting-btn {
+  font-size: 10.5px;
+  padding: 4px 11px;
+  background: none;
+  border: 1px solid var(--panel-border);
+  color: var(--text-dim);
+  font-family: inherit;
+  cursor: pointer;
+  letter-spacing: 0.08em;
+}
+.setting-btn:hover { border-color: var(--accent); }
+.setting-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.help-note.dim-note {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  font-style: italic;
+  margin-top: 2px;
+}

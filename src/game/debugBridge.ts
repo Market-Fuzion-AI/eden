@@ -6,6 +6,9 @@ import * as goals from '../sim/goals';
 import * as rel from '../sim/relationships';
 import * as norms from '../sim/norms';
 import * as social from '../sim/socialKnowledge';
+import * as regions from '../sim/regions';
+import * as terrain from '../sim/terrain';
+import * as landmarks from '../sim/landmarks';
 import * as inspect from '../sim/inspect';
 import * as structures from '../sim/structures';
 import { getInteractions, updatePlayer } from '../sim/player';
@@ -13,6 +16,7 @@ import { simTick } from '../sim/simulation';
 import { buildSummary, snapshot } from '../sim/summary';
 import { useUI } from '../state/store';
 import * as input from './input';
+import * as camera from './camera';
 import { perf } from './loop';
 
 /**
@@ -61,6 +65,7 @@ export function installDebugBridge(): void {
     getWorld,
     config,
     input,
+    camera,
     sim: { getInteractions },
     creator,
     goals,
@@ -69,6 +74,9 @@ export function installDebugBridge(): void {
     norms,
     social,
     inspect,
+    regions,
+    terrain,
+    landmarks,
     perf,
     terrainHash,
     fogDensity: () => activeFog?.density ?? -1,

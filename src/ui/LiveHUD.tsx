@@ -1,5 +1,7 @@
 import { getWorld } from '../sim';
 import { formatClock } from '../sim/chronicle';
+import { placeName } from '../sim/landmarks';
+import { regionAt, regionShortName } from '../sim/regions';
 import { identifyFocus } from '../sim/identify';
 import { getInteractions } from '../sim/player';
 import { useUI } from '../state/store';
@@ -7,13 +9,26 @@ import { inputState } from '../game/input';
 import { DialoguePanel } from './DialoguePanel';
 import { SummaryPanel } from './SummaryPanel';
 
-/** Minimal in-world HUD. The 3D world dominates; panels stay out of the way. */
+/** Compass marks, laid out around the eight cardinal directions. */
+const CARDINALS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+const COMPASS_TICKS = Array.from({ length: 24 }, (_, i) => {
+  const deg = i * 15;
+  return { deg, label: deg % 45 === 0 ? CARDINALS[(deg / 45) % 8] : null };
+});
+
+/**
+ * Minimal in-world HUD.
+ *
+ * Six simulation-heavy milestones had quietly turned this into a readout. Live
+ * Mode now shows only what a person exploring a world needs — where they are,
+ * which way they are facing, what they can interact with, and what ARI has to
+ * say. Everything diagnostic belongs to Creator Mode.
+ */
 export function LiveHUD() {
   useUI((s) => s.uiPulse);
   const ariLine = useUI((s) => s.ariLine);
   const paused = useUI((s) => s.paused);
   const speed = useUI((s) => s.speed);
-  const locked = useUI((s) => s.pointerLocked);
   const learnedLook = useUI((s) => s.learnedLook);
   const helpOpen = useUI((s) => s.helpOpen);
   const dialogue = useUI((s) => s.dialogue);
@@ -26,19 +41,51 @@ export function LiveHUD() {
   // ARI identifies whatever Emerson is actually looking at.
   const ident = identifyFocus(world, Math.sin(inputState.camYaw), Math.cos(inputState.camYaw));
 
+  // Where Emerson is, and which way he is looking — the two things a
+  // third-person explorer actually needs on screen at all times.
+  const region = regionShortName(regionAt(p.pos.x, p.pos.z));
+  const place = placeName(p.pos);
+  const heading = ((-inputState.camYaw * 180) / Math.PI + 360 * 4) % 360;
+  const cardinal = CARDINALS[Math.round(heading / 45) % 8];
+
   return (
     <div className="hud">
-      <div className="hud-topleft panel">
-        <div className="wordmark">EDEN</div>
-        <div className="clock">{formatClock(world.timeSec)}</div>
-        <div className="env-status">
-          {world.weather === 'mist' ? 'MIST' : 'CLEAR'} · {paused ? 'PAUSED' : `${speed}×`}
+      {/* Live Mode is a game, not a simulation dashboard: location, compass and
+          time only. Sim speed, weather state and pause live in Creator Mode. */}
+      <div className="hud-topleft">
+        <div className="place-card">
+          <div className="place-region">{region}</div>
+          <div className="place-name">{place}</div>
+        </div>
+      </div>
+
+      <div className="hud-topcenter">
+        <div className="compass">
+          <div className="compass-cardinal">{cardinal}</div>
+          <div className="compass-strip">
+            {COMPASS_TICKS.map((tick) => {
+              // Position each mark relative to where the camera is facing.
+              let delta = (tick.deg - heading + 540) % 360 - 180;
+              if (Math.abs(delta) > 62) return null;
+              return (
+                <span
+                  key={tick.deg}
+                  className={`compass-tick ${tick.label ? 'major' : ''}`}
+                  style={{ left: `${50 + (delta / 62) * 50}%` }}
+                >
+                  {tick.label ?? '·'}
+                </span>
+              );
+            })}
+          </div>
         </div>
       </div>
 
       <div className="hud-topright">
-        <div className="hint-chip">TAB — Creator Mode</div>
-        <div className="hint-chip dim">ESC — Help</div>
+        <div className="clock-chip">{formatClock(world.timeSec)}</div>
+        {paused && <div className="hint-chip warn">PAUSED</div>}
+        {!paused && speed !== 1 && <div className="hint-chip">{speed}×</div>}
+        <div className="hint-chip dim">TAB Creator · ESC Help</div>
       </div>
 
       {ident && (
@@ -87,9 +134,10 @@ export function LiveHUD() {
             <span className="prompt-key">{pr.key}</span> {pr.label}
           </div>
         ))}
-        {/* Taught once, then retired for good. */}
-        {!locked && !learnedLook && !helpOpen && !dialogue && !p.dead && (
-          <div className="prompt look-hint">Click to look around · Esc releases the mouse</div>
+        {/* Taught once, then retired for good. Looking around needs no click
+            now, so this teaches the gesture rather than a mode. */}
+        {!learnedLook && !helpOpen && !dialogue && !p.dead && (
+          <div className="prompt look-hint">Swipe or drag to look · C recenters the camera</div>
         )}
       </div>
 

@@ -20,69 +20,107 @@ export interface Landmark {
   radius: number;
 }
 
+/**
+ * Landmark ids are stable across the v0.7A geography change. Several places
+ * were renamed and moved to sit inside their new region, but agents store
+ * landmark *ids* in `knownLandmarkIds`, so an existing settler who had visited
+ * `landing` still remembers Human Landing rather than losing the memory.
+ */
 export const LANDMARKS: Landmark[] = [
+  // --- Human Riverlands ---------------------------------------------------
   {
     id: 'landing',
-    name: 'Landing Meadow',
-    ariLine: 'Landing Meadow. Where we came down. It already feels smaller than it did this morning.',
-    pos: { x: 70, z: 20 },
-    radius: 40,
+    name: 'Human Landing',
+    ariLine: 'Human Landing. Where we came down. Everything we have is within a short walk of here.',
+    pos: { x: 95, z: 25 },
+    radius: 38,
   },
   {
-    id: 'glade',
-    name: 'the Glowing Glade',
-    ariLine: 'Bioluminescent density here is off my scale. Recording it as the Glowing Glade.',
-    pos: { x: -34, z: -26 },
-    radius: 34,
+    id: 'riverbend',
+    name: 'Riverbend',
+    ariLine: 'Riverbend. Fresh water, and something moving beneath the surface.',
+    pos: { x: 58, z: -30 },
+    radius: 32,
+  },
+  {
+    id: 'greenwater',
+    name: 'Greenwater Shore',
+    ariLine: 'Greenwater Shore. The lake is deeper than it looks. The colonists will want this ground.',
+    pos: { x: 60, z: 70 },
+    radius: 36,
   },
   {
     id: 'meadow',
     name: 'the Eastern Meadow',
     ariLine: 'The Eastern Meadow. Open grazing land — the larger native herbivores prefer it.',
-    pos: { x: 38, z: -42 },
-    radius: 38,
+    pos: { x: 112, z: 60 },
+    radius: 36,
+  },
+  // --- between the regions ------------------------------------------------
+  {
+    id: 'glade',
+    name: 'the Glowing Glade',
+    ariLine: 'Bioluminescent density here is off my scale. Recording it as the Glowing Glade.',
+    pos: { x: -6, z: -18 },
+    radius: 34,
   },
   {
     id: 'wood',
     name: 'the Western Wood',
     ariLine: 'Western Wood. Visibility drops sharply past the treeline — watch your footing.',
-    pos: { x: -98, z: 8 },
-    radius: 52,
+    pos: { x: -40, z: 22 },
+    radius: 44,
   },
+  // --- Veyra Ashlands -----------------------------------------------------
   {
-    id: 'ridge',
-    name: 'the Northern Ridge',
-    ariLine: 'The Northern Ridge. High ground — the Caelari chose it deliberately, I suspect.',
-    pos: { x: -48, z: -95 },
-    radius: 40,
-  },
-  {
-    id: 'riverbend',
-    name: 'the River Bend',
-    ariLine: 'River Bend. Fresh water, and something moving beneath the surface.',
-    pos: { x: 14, z: 44 },
+    id: 'ashpass',
+    name: 'Ash Pass',
+    ariLine: 'Ash Pass. The green stops here. Ground temperature is climbing.',
+    pos: { x: -58, z: 44 },
     radius: 32,
   },
   {
+    id: 'veyrahold',
+    name: 'the Veyra Basin',
+    ariLine: 'The Veyra Basin. They built around a shared hearth. Communal by instinct.',
+    pos: { x: -88, z: 86 },
+    radius: 30,
+  },
+  {
     id: 'rocks',
-    name: 'the Stone Fields',
-    ariLine: 'The Stone Fields. Exposed mineral seams — useful, eventually.',
-    pos: { x: -88, z: 58 },
-    radius: 36,
+    name: 'the Redstone Shelf',
+    ariLine: 'The Redstone Shelf. Exposed mineral seams — useful, eventually.',
+    pos: { x: -118, z: 52 },
+    radius: 34,
   },
   {
     id: 'crags',
     name: 'the Southern Crags',
     ariLine: 'The Southern Crags. Predator territory. I would not linger here, Emerson.',
-    pos: { x: -52, z: 112 },
-    radius: 38,
+    pos: { x: -46, z: 118 },
+    radius: 36,
+  },
+  // --- Caelari Skyreach ---------------------------------------------------
+  {
+    id: 'skyapproach',
+    name: 'Skyreach Approach',
+    ariLine: 'Skyreach Approach. The climb starts here. Mind your footing on the shelves.',
+    pos: { x: -34, z: -58 },
+    radius: 32,
   },
   {
-    id: 'veyrahold',
-    name: 'the Veyra Hold',
-    ariLine: 'The Veyra Hold. They built around a shared hearth. Communal by instinct.',
-    pos: { x: -62, z: 78 },
-    radius: 26,
+    id: 'ridge',
+    name: 'Highwind Ridge',
+    ariLine: 'Highwind Ridge. The wind up here never stops. You can see most of the valley from it.',
+    pos: { x: -96, z: -62 },
+    radius: 36,
+  },
+  {
+    id: 'heights',
+    name: 'the Caelari Heights',
+    ariLine: 'The Caelari Heights. High ground — they chose it deliberately, I suspect.',
+    pos: { x: -60, z: -102 },
+    radius: 38,
   },
 ];
 

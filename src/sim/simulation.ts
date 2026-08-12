@@ -3,6 +3,7 @@ import { ariTick } from './ari';
 import { chronicle, clockOf } from './chronicle';
 import { settlerExecute, settlerNeedsTick, settlerThink } from './goals';
 import { separateAgents } from './movement';
+import { setTerrainSeed, terrainSeed } from './terrain';
 import { tickOfferedFood } from './player';
 import { creatureExecute, creatureNeedsTick, creatureThink } from './wildlife';
 import type { World } from './types';
@@ -12,6 +13,13 @@ import type { World } from './types';
  * loop depending on sim speed — never tied to render FPS.
  */
 export function simTick(world: World, dt: number): void {
+  // Terrain answers for whichever world is currently being stepped. Without
+  // this, creating a second world silently re-seeded the landscape under the
+  // first and agents in world A began walking on world B's hills — the v0.4
+  // sharp edge. Re-asserting it here costs one comparison per tick and closes
+  // the hazard for anything that actually runs.
+  if (terrainSeed() !== (world.seed >>> 0)) setTerrainSeed(world.seed);
+
   world.timeSec += dt;
   const t = world.timeSec;
 

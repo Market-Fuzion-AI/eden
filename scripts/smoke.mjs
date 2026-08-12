@@ -47,12 +47,93 @@ if (helpVisible) await page.locator('.help-resume').click();
 await page.waitForTimeout(1500);
 
 // ---------------------------------------------------------------------------
+console.log('\nTHREE REGIONS');
+// ---------------------------------------------------------------------------
+const geo = await page.evaluate(() => {
+  const { getWorld, regions, terrain } = window.__EDEN__;
+  const world = getWorld();
+  const bands = { riverlands: [], ashlands: [], skyreach: [] };
+  const water = { riverlands: 0, other: 0 };
+  let walkable = 0;
+  let total = 0;
+  for (let x = -168; x <= 168; x += 6) {
+    for (let z = -168; z <= 168; z += 6) {
+      if (Math.hypot(x, z) > 164) continue;
+      total++;
+      if (terrain.isWalkable(x, z)) walkable++;
+      const r = regions.regionAt(x, z);
+      if (r !== 'wilds') bands[r].push(terrain.heightAt(x, z));
+      if (terrain.isWater(x, z)) {
+        if (r === 'riverlands') water.riverlands++;
+        else water.other++;
+      }
+    }
+  }
+  const mean = (a) => a.reduce((s, v) => s + v, 0) / Math.max(1, a.length);
+  const spawn = {};
+  for (const sp of ['human', 'veyra', 'caelari']) {
+    const group = world.settlers.filter((s) => s.speciesId === sp);
+    spawn[sp] = group.filter((s) => regions.regionAt(s.pos.x, s.pos.z) === regions.SPECIES_REGION[sp]).length;
+  }
+  return {
+    river: mean(bands.riverlands),
+    ash: mean(bands.ashlands),
+    sky: mean(bands.skyreach),
+    water,
+    walkablePct: walkable / total,
+    spawn,
+    landing: world.landmarksBuilt.map((b) => b.kind),
+    playerRegion: regions.regionAt(world.player.pos.x, world.player.pos.z),
+    playerPlace: window.__EDEN__.landmarks.placeName(world.player.pos),
+    playerInWater: terrain.isWater(world.player.pos.x, world.player.pos.z),
+  };
+});
+console.log(
+  `    (mean height — Riverlands ${geo.river.toFixed(1)}, Ashlands ${geo.ash.toFixed(1)}, Skyreach ${geo.sky.toFixed(1)})`,
+);
+check('the three regions occupy distinct elevation bands', geo.river < geo.ash && geo.ash < geo.sky);
+check('the Skyreach genuinely towers over the Riverlands', geo.sky - geo.river > 18, `${(geo.sky - geo.river).toFixed(1)}m`);
+check('water belongs to the Riverlands', geo.water.riverlands > geo.water.other, JSON.stringify(geo.water));
+check('the valley stays mostly walkable', geo.walkablePct > 0.6, `${Math.round(geo.walkablePct * 100)}%`);
+check('Humans start in the Riverlands', geo.spawn.human === 7, `${geo.spawn.human}/7`);
+check('Veyra start in the Ashlands', geo.spawn.veyra === 7, `${geo.spawn.veyra}/7`);
+check('Caelari start on the Skyreach', geo.spawn.caelari === 7, `${geo.spawn.caelari}/7`);
+check('Emerson starts at Human Landing', geo.playerRegion === 'riverlands' && /Landing/.test(geo.playerPlace), geo.playerPlace);
+check('Emerson does not start in the water', !geo.playerInWater);
+check('Human Landing has its landing infrastructure', geo.landing.includes('pod') && geo.landing.includes('fabricator'));
+
+// Live Mode should read as a game, not a dashboard.
+const hudText = await page.locator('.hud').innerText();
+check('the HUD names the current region', /RIVERLANDS|ASHLANDS|SKYREACH|OPEN VALLEY/i.test(hudText), hudText.slice(0, 80));
+check('the HUD shows a compass', (await page.locator('.compass').count()) > 0);
+check('Live Mode hides simulation diagnostics', !/uiPulse|goalReason|affinity|exclusivity/i.test(hudText));
+
+
+// ---------------------------------------------------------------------------
 console.log('\nMOVEMENT BASIS (camera-relative, in the live app)');
 // ---------------------------------------------------------------------------
 const move = await page.evaluate(async () => {
-  const { useUI, getWorld, input } = window.__EDEN__;
+  const { useUI, getWorld, input, terrain } = window.__EDEN__;
   const world = getWorld();
   useUI.getState().setPaused(true); // isolate player integration from the world
+
+  // Find open ground well clear of trees, boulders and the landing wreck. The
+  // basis under test is the mapping from key to direction; obstacle push-out
+  // and settler separation are separate systems and would otherwise deflect
+  // the probe into a false failure.
+  let clear = null;
+  for (let r = 0; r < 5000 && !clear; r++) {
+    const x = ((r * 37) % 240) - 120;
+    const z = ((r * 53) % 240) - 120;
+    if (!terrain.isWalkable(x, z)) continue;
+    if (world.obstacles.some((o) => Math.hypot(o.pos.x - x, o.pos.z - z) < o.radius + 14)) continue;
+    if (world.settlers.some((sx) => Math.hypot(sx.pos.x - x, sx.pos.z - z) < 14)) continue;
+    if (world.landmarksBuilt.some((b) => Math.hypot(b.pos.x - x, b.pos.z - z) < 20)) continue;
+    // Flat too, so a slope cannot slow one direction more than another.
+    if (terrain.slopeAt(x, z) > 0.25) continue;
+    clear = { x, z };
+  }
+  const home = clear ?? { x: world.player.pos.x, z: world.player.pos.z };
   const results = {};
   const yaws = [0, 1.2, Math.PI, -2.0];
   for (const yaw of yaws) {
@@ -64,12 +145,23 @@ const move = await page.evaluate(async () => {
     const fz = Math.cos(yaw);
     const probe = (code) => {
       const p = world.player;
-      const x0 = p.pos.x;
-      const z0 = p.pos.z;
+      // Every probe starts from the same clear spot, at rest.
+      p.pos.x = home.x;
+      p.pos.z = home.z;
+      p.moveSpeed = 0;
+      p.speed = 0;
       input.inputState.keys.clear();
       input.inputState.keys.add(code);
-      for (let i = 0; i < 12; i++) window.__EDEN__.stepPlayer(1 / 60);
+      // Emerson now accelerates and turns toward his travel direction rather
+      // than snapping to it, so let the heading settle before measuring the
+      // direction actually travelled.
+      for (let i = 0; i < 30; i++) window.__EDEN__.stepPlayer(1 / 60);
+      const x0 = p.pos.x;
+      const z0 = p.pos.z;
+      for (let i = 0; i < 20; i++) window.__EDEN__.stepPlayer(1 / 60);
       input.inputState.keys.clear();
+      // Let him coast to a stop so the next probe starts from rest.
+      for (let i = 0; i < 30; i++) window.__EDEN__.stepPlayer(1 / 60);
       const dx = p.pos.x - x0;
       const dz = p.pos.z - z0;
       const len = Math.hypot(dx, dz) || 1;
@@ -100,6 +192,105 @@ check('D moves screen-right at every camera yaw', dOk);
 check('A moves screen-left at every camera yaw', aOk);
 check('W moves forward at every camera yaw', wOk);
 check('arrow keys mirror WASD', arrowOk);
+
+// ---------------------------------------------------------------------------
+console.log('\nTRACKPAD CAMERA (no pointer lock)');
+// ---------------------------------------------------------------------------
+const camBefore = await page.evaluate(() => ({
+  yaw: window.__EDEN__.input.inputState.camYaw,
+  pitch: window.__EDEN__.input.inputState.camPitch,
+  locked: Boolean(document.pointerLockElement),
+}));
+
+// A two-finger trackpad swipe: a wheel event with no buttons and no ctrl key.
+// This is the gesture the whole milestone is built around.
+const canvas = page.locator('canvas');
+const box = await canvas.boundingBox();
+await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+await page.mouse.wheel(180, 0);
+await page.waitForTimeout(450);
+const afterSwipe = await page.evaluate(() => ({
+  yaw: window.__EDEN__.input.inputState.camYaw,
+  locked: Boolean(document.pointerLockElement),
+}));
+check('a trackpad swipe rotates the camera', Math.abs(afterSwipe.yaw - camBefore.yaw) > 0.05,
+  `${camBefore.yaw.toFixed(3)} -> ${afterSwipe.yaw.toFixed(3)}`);
+check('looking around never grabs the pointer', !afterSwipe.locked);
+
+// Vertical swipe drives pitch, and pitch stays inside its limits.
+await page.mouse.wheel(0, -200);
+await page.waitForTimeout(300);
+const pitched = await page.evaluate(() => window.__EDEN__.input.inputState.camPitch);
+check('a vertical swipe changes pitch', Math.abs(pitched - camBefore.pitch) > 0.02, `${pitched.toFixed(3)}`);
+await page.evaluate(() => {
+  for (let i = 0; i < 200; i++) window.__EDEN__.camera.addLook(0, -400, 'wheel');
+});
+await page.waitForTimeout(350);
+const clamped = await page.evaluate(() => window.__EDEN__.input.inputState.camPitch);
+check('pitch stays within its limits', clamped <= 0.51 && clamped >= -1.11, `${clamped.toFixed(3)}`);
+
+// THE acceptance test: hold W, look around, keep moving.
+const held = await page.evaluate(async () => {
+  const { getWorld, input, useUI } = window.__EDEN__;
+  const world = getWorld();
+  useUI.getState().setPaused(true);
+  const p = world.player;
+  input.inputState.keys.clear();
+  input.inputState.keys.add('KeyW');
+  for (let i = 0; i < 40; i++) window.__EDEN__.stepPlayer(1 / 60);
+  const x0 = p.pos.x;
+  const z0 = p.pos.z;
+  const yaw0 = input.inputState.camYaw;
+  // Swipe hard while the key stays down.
+  let moved = 0;
+  for (let i = 0; i < 60; i++) {
+    window.__EDEN__.camera.addLook(14, 0, 'wheel');
+    const px = p.pos.x;
+    const pz = p.pos.z;
+    // Emulate the camera's per-frame drain + damping.
+    const pending = window.__EDEN__.camera.drainLook();
+    input.inputState.camYaw += pending.yaw;
+    window.__EDEN__.stepPlayer(1 / 60);
+    moved += Math.hypot(p.pos.x - px, p.pos.z - pz);
+  }
+  const stillHeld = input.inputState.keys.has('KeyW');
+  const yaw1 = input.inputState.camYaw;
+  input.inputState.keys.clear();
+  useUI.getState().setPaused(false);
+  return { moved, stillHeld, turned: Math.abs(yaw1 - yaw0), travelled: Math.hypot(p.pos.x - x0, p.pos.z - z0) };
+});
+check('holding W keeps the key down while looking', held.stillHeld);
+check('the camera turns while running', held.turned > 0.5, `${held.turned.toFixed(2)} rad`);
+check('Emerson keeps moving throughout the turn', held.moved > 1.5, `${held.moved.toFixed(2)}m`);
+check('a full turn while running covers ground', held.travelled > 0.5, `${held.travelled.toFixed(2)}m`);
+
+// Recenter sweeps the camera behind Emerson rather than snapping.
+const recentered = await page.evaluate(async () => {
+  const { input, getWorld, camera } = window.__EDEN__;
+  const p = getWorld().player;
+  input.inputState.camYaw = p.heading + 2.2;
+  const start = input.inputState.camYaw;
+  camera.requestRecenter();
+  await new Promise((r) => setTimeout(r, 1400));
+  let err = (input.inputState.camYaw - p.heading) % (Math.PI * 2);
+  if (err > Math.PI) err -= Math.PI * 2;
+  if (err < -Math.PI) err += Math.PI * 2;
+  return { err: Math.abs(err), moved: Math.abs(input.inputState.camYaw - start) };
+});
+check('C recenters the camera behind Emerson', recentered.err < 0.25, `err ${recentered.err.toFixed(3)}`);
+check('recentering actually moves the camera', recentered.moved > 0.5);
+
+// Zoom is a pinch (ctrl+wheel), not an ordinary swipe.
+const zoom = await page.evaluate(async () => {
+  const { input } = window.__EDEN__;
+  const before = input.inputState.camDist;
+  const el = document.querySelector('canvas');
+  el.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, ctrlKey: true, bubbles: true, cancelable: true }));
+  await new Promise((r) => setTimeout(r, 120));
+  return { before, after: input.inputState.camDist };
+});
+check('pinch zooms instead of looking', Math.abs(zoom.after - zoom.before) > 0.5, `${zoom.before} -> ${zoom.after}`);
+await page.screenshot({ path: `${SHOT_DIR}/17-live-camera.png` });
 
 // ---------------------------------------------------------------------------
 console.log('\nNPC CONVERSATION');
@@ -160,11 +351,19 @@ const social = await page.evaluate(async () => {
     const other = world.settlers.find((o) => o.id === pair.goal.targetId);
     if (!other) continue;
 
-    // Let the exchange settle for ~3 sim-seconds — the pair closes the last
-    // step and turns to face. The conversation runs far longer than this, so
-    // this is squarely what a passing player would actually see.
-    for (let k = 0; k < 90; k++) window.__EDEN__.stepSim(1 / 30);
-    if (pair.goal.phase !== 'act') continue; // ended early; keep looking
+    // Let the exchange settle, then measure. A fixed delay is not enough:
+    // depending on how far apart the pair engaged, they may still be closing
+    // the last step. Poll until both have actually stopped, then sample what a
+    // passing player would see.
+    let settled = false;
+    for (let k = 0; k < 240 && pair.goal.phase === 'act'; k++) {
+      window.__EDEN__.stepSim(1 / 30);
+      if (k > 30 && pair.speed === 0 && other.speed === 0) {
+        settled = true;
+        break;
+      }
+    }
+    if (!settled || pair.goal.phase !== 'act') continue; // ended early; keep looking
 
     return {
       found: true,

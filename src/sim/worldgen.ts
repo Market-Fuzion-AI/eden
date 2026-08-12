@@ -1,4 +1,4 @@
-import { LUMI, START_TIME, WORLD } from './config';
+import { LUMI, START_TIME } from './config';
 import { makeRng, type Rng } from './rng';
 import {
   CREATURE_SPECIES,
@@ -8,7 +8,8 @@ import {
   type CreatureSpeciesDef,
 } from './species';
 import { landmarkAt, placeName } from './landmarks';
-import { heightAt, isWater, riverX, setTerrainSeed } from './terrain';
+import { isWalkable, isWater, riverX, setTerrainSeed } from './terrain';
+import { regionWeights } from './regions';
 import type {
   Camp,
   Creature,
@@ -21,23 +22,35 @@ import type {
   World,
 } from './types';
 import { chronicle } from './chronicle';
+import { createProject } from './structures';
 import { clamp01, v2, type V2 } from './vec';
 
 let idCounter = 0;
 const nextId = (prefix: string) => `${prefix}_${(idCounter++).toString(36)}`;
 
-/** Named regions used for spawning, wildlife home ranges and readable labels. */
+/**
+ * Named anchors used for spawning, wildlife home ranges and readable labels.
+ * These mirror `LANDMARKS` so the geography the player sees and the names they
+ * hear always agree.
+ */
 export const ANCHORS: Record<string, V2> = {
-  meadow: v2(38, -42),
-  forest: v2(-98, 8),
-  rocks: v2(-88, 58),
-  rocksSouth: v2(-52, 112),
-  riverbank: v2(14, 44),
-  glade: v2(-34, -26),
-  hill: v2(-48, -95),
-  humanCamp: v2(70, 20),
-  veyraCamp: v2(-62, 78),
-  caelariCamp: v2(-48, -95),
+  // Human Riverlands
+  humanCamp: v2(95, 25),
+  riverbank: v2(58, -30),
+  lake: v2(60, 70),
+  meadow: v2(112, 60),
+  // Between the regions
+  glade: v2(-6, -18),
+  forest: v2(-40, 22),
+  // Veyra Ashlands
+  veyraCamp: v2(-88, 86),
+  ashpass: v2(-58, 44),
+  rocks: v2(-118, 52),
+  rocksSouth: v2(-46, 118),
+  // Caelari Skyreach
+  caelariCamp: v2(-60, -102),
+  skyapproach: v2(-34, -58),
+  hill: v2(-96, -62),
 };
 
 /** Resource labels read as places in the world, e.g. "the glowberries at River Bend". */
@@ -59,16 +72,29 @@ export function idleGoal(t: number, label = 'Settling in'): Goal {
   return { type: 'idle', label, phase: 'act', timer: 2, startedAt: t, deadline: t + 30 };
 }
 
-function findLand(rng: Rng, center: V2, radius: number, tries = 24): V2 {
+/**
+ * A standable spot near `center`.
+ *
+ * Traversability is a question of steepness, not altitude. The old height cap
+ * would have declared the entire Caelari Skyreach uninhabitable the moment the
+ * plateau went in, leaving that whole people with nowhere to spawn.
+ */
+function findLand(rng: Rng, center: V2, radius: number, tries = 28): V2 {
   for (let i = 0; i < tries; i++) {
     const a = rng.next() * Math.PI * 2;
     const d = Math.sqrt(rng.next()) * radius;
     const p = v2(center.x + Math.sin(a) * d, center.z + Math.cos(a) * d);
-    const r = Math.hypot(p.x, p.z);
-    if (r > WORLD.playRadius - 6) continue;
-    if (isWater(p.x, p.z)) continue;
-    if (heightAt(p.x, p.z) > 14) continue;
+    if (!isWalkable(p.x, p.z)) continue;
     return p;
+  }
+  // Fall back to the anchor itself, nudged off any cliff it happens to sit on.
+  if (isWalkable(center.x, center.z)) return { ...center };
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    for (const d of [8, 16, 26]) {
+      const p = v2(center.x + Math.sin(a) * d, center.z + Math.cos(a) * d);
+      if (isWalkable(p.x, p.z)) return p;
+    }
   }
   return { ...center };
 }
@@ -190,41 +216,82 @@ function scatterFlora(world: World, rng: Rng): void {
   const clearOfCamps = (p: V2) =>
     world.camps.every((c) => Math.hypot(p.x - c.pos.x, p.z - c.pos.z) > 14);
 
-  // Forest band (west) + scattered trees everywhere.
-  for (let i = 0; i < 150; i++) {
-    const nearForest = i < 80;
-    const center = nearForest ? ANCHORS.forest : v2(0, 0);
-    const radius = nearForest ? 60 : 150;
-    const p = findLand(rng, center, radius);
-    if (!clearOfCamps(p)) continue;
-    if (Math.abs(p.x - riverX(p.z)) < 12) continue;
-    put(rng.chance(0.6) ? 'tree' : 'tree2', p, rng.range(0.8, 1.6), 0.9);
+  // Vegetation is region-aware: what grows where is most of what makes the
+  // three biomes readable on sight, before a single label is drawn.
+  const put2 = (type: FloraType, p: V2, scale: number, obstacleRadius = 0) => {
+    if (!clearOfCamps(p)) return;
+    put(type, p, scale, obstacleRadius);
+  };
+
+  // Trees: dense in the Western Wood, common through the green Riverlands,
+  // sparse and stunted in the Ashlands, wind-bent and rare up on the Skyreach.
+  for (let i = 0; i < 210; i++) {
+    let p: V2;
+    if (i < 70) p = findLand(rng, ANCHORS.forest, 58);
+    else if (i < 150) p = findLand(rng, ANCHORS.humanCamp, 110);
+    else if (i < 180) p = findLand(rng, ANCHORS.glade, 70);
+    else p = findLand(rng, v2(0, 0), 150);
+    const w = regionWeights(p.x, p.z);
+    // Thin them out sharply outside the green.
+    const density = 1 - w.ashlands * 0.88 - w.skyreach * 0.72;
+    if (!rng.chance(Math.max(0.05, density))) continue;
+    if (Math.abs(p.x - riverX(p.z)) < 11) continue;
+    const scale = rng.range(0.8, 1.6) * (1 - w.ashlands * 0.35 - w.skyreach * 0.28);
+    put2(rng.chance(0.6) ? 'tree' : 'tree2', p, scale, 0.9);
   }
-  // Rocks.
-  for (let i = 0; i < 55; i++) {
-    const center = rng.chance(0.5) ? ANCHORS.rocks : v2(0, 0);
-    const p = findLand(rng, center, i % 2 === 0 ? 45 : 150);
-    if (!clearOfCamps(p)) continue;
-    put('rock', p, rng.range(0.5, 2.2), 1.0);
+
+  // Rocks: the defining ground cover of the Ashlands and the Skyreach shelves.
+  for (let i = 0; i < 210; i++) {
+    let p: V2;
+    if (i < 50) p = findLand(rng, ANCHORS.rocks, 62);
+    else if (i < 85) p = findLand(rng, ANCHORS.veyraCamp, 78);
+    else if (i < 130) p = findLand(rng, ANCHORS.caelariCamp, 76);
+    else if (i < 165) p = findLand(rng, ANCHORS.hill, 62);
+    else if (i < 190) p = findLand(rng, ANCHORS.skyapproach, 54);
+    else p = findLand(rng, v2(0, 0), 150);
+    const w = regionWeights(p.x, p.z);
+    const density = 0.22 + w.ashlands * 0.75 + w.skyreach * 0.6;
+    if (!rng.chance(Math.min(0.95, density))) continue;
+    put2('rock', p, rng.range(0.6, 1.9), 1.0);
   }
-  // Glowplants — concentrated in the glade, sprinkled elsewhere.
-  for (let i = 0; i < 85; i++) {
-    const center = i < 40 ? ANCHORS.glade : v2(0, 0);
-    const p = findLand(rng, center, i < 40 ? 30 : 150);
-    if (!clearOfCamps(p)) continue;
-    put('glowplant', p, rng.range(0.7, 1.4));
+
+  // Highland scrub: sparse, low and hardy. The plateau read as an empty grey
+  // plain without it — nothing to walk between, nothing to judge scale by.
+  for (let i = 0; i < 90; i++) {
+    const anchor = i < 45 ? ANCHORS.caelariCamp : i < 70 ? ANCHORS.hill : ANCHORS.skyapproach;
+    const p = findLand(rng, anchor, 66);
+    const w = regionWeights(p.x, p.z);
+    if (w.skyreach < 0.3) continue;
+    put2(rng.chance(0.55) ? 'grass' : 'tree2', p, rng.range(0.4, 0.8), rng.chance(0.55) ? 0 : 0.6);
   }
-  // Crystals near rim edges.
-  for (let i = 0; i < 22; i++) {
-    const a = rng.next() * Math.PI * 2;
-    const d = rng.range(120, 155);
-    const p = v2(Math.sin(a) * d, Math.cos(a) * d);
+
+  // Glowplants — concentrated in the glade and the wet Riverlands.
+  for (let i = 0; i < 95; i++) {
+    const p = i < 40 ? findLand(rng, ANCHORS.glade, 30) : findLand(rng, v2(0, 0), 150);
+    const w = regionWeights(p.x, p.z);
+    if (!rng.chance(Math.max(0.08, 1 - w.ashlands * 0.8 - w.skyreach * 0.55))) continue;
+    put2('glowplant', p, rng.range(0.7, 1.4));
+  }
+
+  // Crystals: rim edges, and seeded through the mineral-rich Ashlands.
+  for (let i = 0; i < 34; i++) {
+    let p: V2;
+    if (i < 22) {
+      const a = rng.next() * Math.PI * 2;
+      const d = rng.range(120, 155);
+      p = v2(Math.sin(a) * d, Math.cos(a) * d);
+    } else {
+      p = findLand(rng, ANCHORS.rocks, 60);
+    }
     if (isWater(p.x, p.z)) continue;
     put('crystal', p, rng.range(0.8, 2.0));
   }
-  // Grass tufts.
-  for (let i = 0; i < 420; i++) {
-    const p = findLand(rng, v2(0, 0), 160, 6);
+
+  // Grass: thick in the Riverlands, all but gone in the Ashlands.
+  for (let i = 0; i < 520; i++) {
+    const p = i < 300 ? findLand(rng, ANCHORS.humanCamp, 120, 6) : findLand(rng, v2(0, 0), 160, 6);
+    const w = regionWeights(p.x, p.z);
+    if (!rng.chance(Math.max(0.04, 1 - w.ashlands * 0.94 - w.skyreach * 0.6))) continue;
     put('grass', p, rng.range(0.6, 1.5));
   }
 }
@@ -274,21 +341,93 @@ function placeResources(world: World, rng: Rng): void {
       }
     }
   }
-  // Wild berry patches to discover.
-  const wildSpots = [ANCHORS.meadow, ANCHORS.glade, ANCHORS.riverbank, ANCHORS.forest, v2(90, -70), v2(-10, 120), v2(110, 60), ANCHORS.hill];
+  // Wild berry patches to discover — spread so every region can feed itself.
+  const wildSpots = [
+    ANCHORS.meadow, ANCHORS.glade, ANCHORS.riverbank, ANCHORS.forest, ANCHORS.lake,
+    ANCHORS.ashpass, ANCHORS.rocksSouth, ANCHORS.skyapproach, ANCHORS.hill, ANCHORS.veyraCamp,
+    ANCHORS.caelariCamp,
+  ];
   for (const spot of wildSpots) {
-    const p = findLand(rng, spot, 24);
+    const p = findLand(rng, spot, 26);
     addResource('glowberry', p, rng.int(5, 8), 1 / 55);
   }
   // Wild rest spots (sheltered hollows).
   addResource('restspot', findLand(rng, ANCHORS.glade, 16), 99, 0);
   addResource('restspot', findLand(rng, ANCHORS.meadow, 20), 99, 0);
+  addResource('restspot', findLand(rng, ANCHORS.ashpass, 18), 99, 0);
   // Harvestable materials. Timber regrows slowly; stone seams do not, so the
   // valley has a finite supply of it and settlers must range further over time.
-  const woodSpots = [ANCHORS.forest, ANCHORS.forest, ANCHORS.forest, ANCHORS.glade, ANCHORS.riverbank, ANCHORS.meadow];
+  // Timber follows the green; stone follows the rock. Each people therefore
+  // has one material in abundance at home and must travel for the other.
+  const woodSpots = [
+    ANCHORS.forest, ANCHORS.forest, ANCHORS.forest, ANCHORS.glade,
+    ANCHORS.riverbank, ANCHORS.humanCamp, ANCHORS.lake, ANCHORS.skyapproach,
+  ];
   for (const spot of woodSpots) addResource('wood', findLand(rng, spot, 34), rng.int(26, 40), 1 / 110);
-  const stoneSpots = [ANCHORS.rocks, ANCHORS.rocks, ANCHORS.rocksSouth, ANCHORS.hill, ANCHORS.meadow];
+  const stoneSpots = [
+    ANCHORS.rocks, ANCHORS.rocks, ANCHORS.veyraCamp, ANCHORS.rocksSouth,
+    ANCHORS.hill, ANCHORS.caelariCamp, ANCHORS.meadow,
+  ];
   for (const spot of stoneSpots) addResource('stone', findLand(rng, spot, 32), rng.int(24, 36), 1 / 300);
+}
+
+/**
+ * Human Landing: the colony's first foothold, and the place the player should
+ * recognise instantly on the way back.
+ *
+ * Built from systems that already exist — a completed campfire plus a landing
+ * wreck and a fabrication platform as scenery — rather than a spawned town.
+ * The settlers still do the rest of the building themselves.
+ */
+function buildHumanLanding(world: World, rng: Rng): void {
+  const camp = world.camps.find((c) => c.speciesId === 'human')!;
+
+  // The colony hearth: complete from the first minute, so Human Landing has a
+  // gathering point before anyone has built anything.
+  const humans = world.settlers.filter((s) => s.speciesId === 'human');
+  const firePos = findLand(rng, camp.pos, 7);
+  const hearth = createProject(
+    world,
+    humans[0],
+    'campfire',
+    firePos,
+    ['The colony hearth, lit on the first night'],
+    ['Beside the landing site, where everyone already was'],
+  );
+  // Credited to the colonists who actually landed, in equal share. Every
+  // contributor id must resolve to a real settler — the provenance inspector
+  // and the claim model both read these records back.
+  const share = humans.length;
+  hearth.contributions = humans.map((s) => ({
+    id: s.id,
+    name: s.name,
+    wood: hearth.required.wood / share,
+    stone: hearth.required.stone / share,
+    work: 1 / share,
+  }));
+  hearth.contributed = { wood: hearth.required.wood, stone: hearth.required.stone };
+  hearth.progress = 1;
+  hearth.state = 'complete';
+  hearth.completedAt = world.timeSec;
+  for (const s of world.settlers) {
+    if (!s.knownStructureIds.includes(hearth.id)) s.knownStructureIds.push(hearth.id);
+  }
+
+  // Landing infrastructure — scenery, not simulation. Nothing here is
+  // interactive yet; the fabricator is a marked placeholder for a later
+  // milestone.
+  world.landmarksBuilt = [
+    { kind: 'pod', pos: findLand(rng, camp.pos, 14), rot: rng.next() * Math.PI * 2 },
+    { kind: 'debris', pos: findLand(rng, camp.pos, 20), rot: rng.next() * Math.PI * 2 },
+    { kind: 'debris', pos: findLand(rng, camp.pos, 24), rot: rng.next() * Math.PI * 2 },
+    { kind: 'fabricator', pos: findLand(rng, camp.pos, 11), rot: rng.next() * Math.PI * 2 },
+    { kind: 'staging', pos: findLand(rng, camp.pos, 9), rot: rng.next() * Math.PI * 2 },
+  ];
+  // The pod and the fabricator are solid enough to walk around.
+  for (const b of world.landmarksBuilt) {
+    if (b.kind === 'pod') world.obstacles.push({ pos: b.pos, radius: 3.4 });
+    if (b.kind === 'fabricator') world.obstacles.push({ pos: b.pos, radius: 1.6 });
+  }
 }
 
 export function createWorld(seed: number): World {
@@ -299,7 +438,8 @@ export function createWorld(seed: number): World {
   const player: PlayerState = {
     id: 'emerson',
     name: 'Emerson',
-    pos: v2(56, 12),
+    // Placed properly once the terrain is known — see `createWorld`.
+    pos: v2(0, 0),
     y: 0,
     vy: 0,
     heading: Math.PI,
@@ -316,6 +456,7 @@ export function createWorld(seed: number): World {
     dodgeCooldown: 0,
     dead: false,
     respawnTimer: 0,
+    moveSpeed: 0,
     lastSprintAt: -999,
     witnessed: [],
   };
@@ -332,6 +473,7 @@ export function createWorld(seed: number): World {
     offeredFood: [],
     flora: [],
     obstacles: [],
+    landmarksBuilt: [],
     camps: [
       { speciesId: 'human', label: 'Human camp', pos: { ...ANCHORS.humanCamp } },
       { speciesId: 'veyra', label: 'Veyra camp', pos: { ...ANCHORS.veyraCamp } },
@@ -346,7 +488,9 @@ export function createWorld(seed: number): World {
     dirty: { entities: false, resources: false, structures: false },
   };
 
-  // Settlers. Each begins knowing the landmark their people camped in.
+  // Settlers. Each people begins in the region its camp sits in — initial
+  // settlement geography, not a faction wall. They remain fully autonomous and
+  // routinely travel, meet and socialize across the whole valley.
   for (const seedRow of SETTLER_ROSTER) {
     const camp = world.camps.find((c) => c.speciesId === seedRow.species)!;
     const settler = makeSettler(world, rng, seedRow.name, seedRow.sex, seedRow.species, camp);
@@ -357,6 +501,15 @@ export function createWorld(seed: number): World {
 
   scatterFlora(world, rng);
   placeResources(world, rng);
+  buildHumanLanding(world, rng);
+
+  // Emerson opens the game standing at Human Landing on dry, level ground.
+  // Derived from the terrain rather than hard-coded: a literal spawn point
+  // silently put him waist-deep in the river the moment the river moved.
+  const humanCamp = world.camps.find((c) => c.speciesId === 'human')!;
+  world.player.pos = findLand(rng, humanCamp.pos, 12);
+  // Face the water, so the first thing on screen is what makes this place home.
+  world.player.heading = Math.atan2(riverX(world.player.pos.z) - world.player.pos.x, 6);
 
   // Native creatures — every archetype represented at least once.
   const spawnCounts: Record<string, number> = {
@@ -401,6 +554,11 @@ export function createWorld(seed: number): World {
   world.creatures.push(lumi);
 
   chronicle(world, 'system', 'Three peoples — Humans, Veyra and Caelari — have arrived in the Eden valley.');
+  chronicle(
+    world,
+    'system',
+    'The Humans made landfall in the Riverlands, the Veyra in the Ashlands, the Caelari on the Skyreach.',
+  );
   chronicle(world, 'system', 'Twenty-one settlers begin their first day on a new world.');
 
   return world;

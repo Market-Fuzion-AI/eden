@@ -1,7 +1,6 @@
 import { isNight } from './chronicle';
 import { landmarkAt } from './landmarks';
-import { emersonBlocker } from './normEvents';
-import { shelterAtHand } from './player';
+import { REGIONS, regionAt } from './regions';
 import { dist } from './vec';
 import type { World } from './types';
 
@@ -25,6 +24,16 @@ export function ariTick(world: World): void {
     if (world.ariQueue.length < 4) world.ariQueue.push(line);
   };
 
+  // Region arrival: the coarse orientation cue. Named once, on first entry,
+  // so the player learns the shape of the valley by walking it.
+  if (!world.player.dead) {
+    const region = regionAt(world.player.pos.x, world.player.pos.z);
+    if (region !== 'wilds' && !f[`region_${region}`]) {
+      f[`region_${region}`] = true;
+      say(REGIONS.find((r) => r.id === region)!.ariLine);
+    }
+  }
+
   // Landmark arrival: ARI names each place the first time Emerson enters it,
   // giving the valley location identity rather than anonymous terrain.
   if (!world.player.dead) {
@@ -38,7 +47,7 @@ export function ariTick(world: World): void {
   // Arrival greeting.
   if (!f.ariIntro && t > (f.startTime as number ?? 0) + 3) {
     f.ariIntro = true;
-    say('Atmospheric conditions stable. Local biosphere activity is higher than expected.');
+    say('Pathfinder systems online. Take a look around, Emerson — the colony is not going to survey itself.');
   }
   // First close look at a settler.
   if (!f.ariScan) {
@@ -71,18 +80,10 @@ export function ariTick(world: World): void {
     f.lumiFollowSignal = false;
     f.lumiStoppedFollowing = false;
   }
-  // Social expectation warning: ARI reads the room so Emerson can too.
-  if (!world.player.dead) {
-    const shelter = shelterAtHand(world);
-    if (shelter) {
-      const blocker = emersonBlocker(world, shelter);
-      const key = `ariClaim_${shelter.id}`;
-      if (blocker && !f[key]) {
-        f[key] = true;
-        say(`${blocker.settler.name} appears to consider this shelter personally controlled.`);
-      }
-    }
-  }
+  // NOTE: ARI deliberately does *not* announce who claims a shelter. She can
+  // only speak about norm events Emerson was physically present for, which
+  // `witnessNorm` queues at the moment he sees them. Reading a claimant out of
+  // simulation state would make her omniscient and undo v0.6's whole point.
 
   // Health warning.
   if (world.player.health < 35 && !world.player.dead) {

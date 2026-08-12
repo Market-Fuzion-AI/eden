@@ -9,22 +9,22 @@ import {
   playerTalk,
 } from '../sim/player';
 import { useUI } from '../state/store';
+import { addLook, requestRecenter } from './camera';
 
 /**
  * Global input: keyboard state + one-shot actions. Camera yaw/pitch live here
  * so the sim-side player update can read movement direction without touching
  * the renderer.
  *
- * Pointer lock is *camera look*, nothing more. It is only ever requested by an
- * explicit click on the viewport in Live Mode, and Escape always releases it
- * without any other side effect.
+ * Looking around never requires pointer lock. See `camera.ts` for the input
+ * model; this file only routes device events into it.
  */
 
 export const inputState = {
   keys: new Set<string>(),
-  camYaw: Math.PI, // start looking back across the valley
-  camPitch: -0.28,
-  camDist: 5.6,
+  camYaw: 0,
+  camPitch: -0.24,
+  camDist: 6.4,
 };
 
 /** Movement axes. moveX: +1 = screen right. moveZ: +1 = away from camera. */
@@ -95,7 +95,14 @@ export function installInput(): void {
     if (e.code === 'Digit2') ui.setSpeed(5);
     if (e.code === 'Digit3') ui.setSpeed(20);
     if (e.code === 'KeyP') ui.setPaused(!ui.paused);
-    if (e.code === 'KeyC' && ui.mode === 'creator') ui.toggleChronicle();
+    // C is the Chronicle in Creator Mode and the camera recenter in Live Mode.
+    if (e.code === 'KeyC') {
+      if (ui.mode === 'creator') ui.toggleChronicle();
+      else requestRecenter();
+    }
+    // Zoom without a trackpad pinch.
+    if (e.code === 'BracketLeft') inputState.camDist = Math.max(3, inputState.camDist - 0.6);
+    if (e.code === 'BracketRight') inputState.camDist = Math.min(11, inputState.camDist + 0.6);
 
     if (ui.mode === 'live' && !ui.helpOpen) {
       if (e.code === 'KeyE') {
@@ -126,38 +133,105 @@ export function installInput(): void {
   });
 
   window.addEventListener('keyup', (e) => inputState.keys.delete(e.code));
+  // Only a genuine loss of focus clears held keys. Releasing the camera must
+  // not, or looking around would keep stopping the player mid-stride.
   window.addEventListener('blur', () => inputState.keys.clear());
 
-  window.addEventListener('mousedown', (e) => {
-    const ui = useUI.getState();
-    if (ui.mode !== 'live' || ui.helpOpen || !isPointerLocked()) return;
-    if (e.button === 0) playerAttack(getWorld());
-    if (e.button === 2) playerDodge(getWorld());
-  });
-  window.addEventListener('contextmenu', (e) => {
-    if (useUI.getState().mode === 'live' && isPointerLocked()) e.preventDefault();
-  });
-
   window.addEventListener('mousemove', (e) => {
+    // Pointer-lock look, for players who opted into it. Drag-look is handled
+    // by the canvas pointer handlers below.
     if (!isPointerLocked()) return;
-    inputState.camYaw -= e.movementX * 0.0026;
-    inputState.camPitch -= e.movementY * 0.0022;
-    inputState.camPitch = Math.max(-1.05, Math.min(0.45, inputState.camPitch));
-  });
-
-  window.addEventListener('wheel', (e) => {
-    if (useUI.getState().mode !== 'live') return;
-    inputState.camDist = Math.max(3, Math.min(9, inputState.camDist + e.deltaY * 0.004));
+    addLook(e.movementX, e.movementY, 'lock');
   });
 
   document.addEventListener('pointerlockchange', () => {
     const locked = isPointerLocked();
     const ui = useUI.getState();
     ui.setPointerLocked(locked);
-    // Once the player has locked once, they have learned the interaction and
-    // the teaching prompt retires for good.
     if (locked && !ui.learnedLook) ui.setLearnedLook(true);
-    // Never leave a movement key stuck down when control changes hands.
-    if (!locked) inputState.keys.clear();
   });
+}
+
+/** True while a canvas drag is rotating the camera. */
+let dragging = false;
+/** Distance travelled during the current drag, to tell a look from a click. */
+let dragTravel = 0;
+let dragPointerId = -1;
+
+export function isDraggingCamera(): boolean {
+  return dragging;
+}
+
+/**
+ * Attach look handlers to the WebGL canvas.
+ *
+ * Bound to the canvas rather than the window so that clicking a HUD button or
+ * a Creator panel can never rotate the camera by accident.
+ */
+export function installCanvasLook(canvas: HTMLElement): () => void {
+  const liveAndPlayable = () => {
+    const ui = useUI.getState();
+    return ui.mode === 'live' && !ui.helpOpen && !ui.dialogue;
+  };
+
+  const onWheel = (e: WheelEvent) => {
+    if (!liveAndPlayable()) return;
+    e.preventDefault();
+    // A trackpad pinch arrives as ctrl+wheel; treat that (and a real ctrl-
+    // scroll) as zoom, and everything else as a two-finger look swipe.
+    if (e.ctrlKey || e.metaKey) {
+      inputState.camDist = Math.max(3, Math.min(11, inputState.camDist + e.deltaY * 0.02));
+      return;
+    }
+    addLook(e.deltaX, e.deltaY, 'wheel');
+  };
+
+  const onPointerDown = (e: PointerEvent) => {
+    if (!liveAndPlayable()) return;
+    if (e.button !== 0 && e.button !== 2) return;
+    dragging = true;
+    dragTravel = 0;
+    dragPointerId = e.pointerId;
+    canvas.setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e: PointerEvent) => {
+    if (!dragging || e.pointerId !== dragPointerId) return;
+    dragTravel += Math.abs(e.movementX) + Math.abs(e.movementY);
+    addLook(e.movementX, e.movementY, 'drag');
+  };
+
+  const onPointerUp = (e: PointerEvent) => {
+    if (e.pointerId !== dragPointerId) return;
+    const travelled = dragTravel;
+    dragging = false;
+    dragPointerId = -1;
+    if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+    if (!liveAndPlayable()) return;
+    // A press that barely moved was a click, not a look. Only then does it
+    // count as an action — so turning the camera never swings a fist.
+    if (travelled < 6) {
+      if (e.button === 0) playerAttack(getWorld());
+      if (e.button === 2) playerDodge(getWorld());
+    }
+  };
+
+  const onContextMenu = (e: Event) => {
+    if (useUI.getState().mode === 'live') e.preventDefault();
+  };
+
+  canvas.addEventListener('wheel', onWheel, { passive: false });
+  canvas.addEventListener('pointerdown', onPointerDown);
+  canvas.addEventListener('pointermove', onPointerMove);
+  canvas.addEventListener('pointerup', onPointerUp);
+  canvas.addEventListener('pointercancel', onPointerUp);
+  canvas.addEventListener('contextmenu', onContextMenu);
+  return () => {
+    canvas.removeEventListener('wheel', onWheel);
+    canvas.removeEventListener('pointerdown', onPointerDown);
+    canvas.removeEventListener('pointermove', onPointerMove);
+    canvas.removeEventListener('pointerup', onPointerUp);
+    canvas.removeEventListener('pointercancel', onPointerUp);
+    canvas.removeEventListener('contextmenu', onContextMenu);
+  };
 }

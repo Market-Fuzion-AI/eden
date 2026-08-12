@@ -74,25 +74,46 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
   p.dodgeCooldown = Math.max(0, p.dodgeCooldown - dt);
   p.dodgeTimer = Math.max(0, p.dodgeTimer - dt);
 
-  // Movement relative to camera yaw.
+  // --- movement relative to camera yaw ------------------------------------
+  //
+  // Emerson accelerates into a run and coasts to a stop rather than snapping
+  // between full speed and zero, and turns toward his travel direction instead
+  // of pivoting instantly. Both are deliberately quick: this is action-RPG
+  // responsiveness, not momentum simulation. The heading is kept as its own
+  // value so a future lock-on mode can decouple facing from travel without
+  // touching any of this.
   const mag = Math.hypot(input.moveX, input.moveZ);
-  let speed = 0;
+  const moving = mag > 0.05;
+  const sprinting = moving && input.sprint && p.stamina > 5;
+  let targetSpeed = 0;
   if (p.dodgeTimer > 0) {
-    speed = PLAYER.dodgeSpeed;
-  } else if (mag > 0.05) {
-    const sprinting = input.sprint && p.stamina > 5;
-    speed = sprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
+    targetSpeed = PLAYER.dodgeSpeed;
+  } else if (moving) {
+    targetSpeed = (sprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed) * Math.min(1, mag);
     if (sprinting) {
       p.stamina = Math.max(0, p.stamina - 10 * dt);
       p.lastSprintAt = world.timeSec;
     }
   }
-  if (mag > 0.05 || p.dodgeTimer > 0) {
-    if (mag > 0.05) {
-      p.heading = headingFromInput(input.camYaw, input.moveX, input.moveZ);
-    }
+  // Getting going is snappier than stopping, which is what reads as "intent".
+  const accel = targetSpeed > p.moveSpeed ? PLAYER.accel : PLAYER.decel;
+  p.moveSpeed += (targetSpeed - p.moveSpeed) * Math.min(1, accel * dt);
+  if (p.moveSpeed < 0.02) p.moveSpeed = 0;
+
+  if (moving) {
+    // Turn toward the travel direction. Sharp reversals rotate faster, so a
+    // 180 feels decisive instead of like a slow arc.
+    const desired = headingFromInput(input.camYaw, input.moveX, input.moveZ);
+    let err = (desired - p.heading) % (Math.PI * 2);
+    if (err > Math.PI) err -= Math.PI * 2;
+    if (err < -Math.PI) err += Math.PI * 2;
+    const turnRate = PLAYER.turnRate * (1 + Math.abs(err) / Math.PI);
+    p.heading += err * Math.min(1, turnRate * dt);
+  }
+
+  if (p.moveSpeed > 0.02 || p.dodgeTimer > 0) {
     const inWater = isWater(p.pos.x, p.pos.z);
-    const effSpeed = speed * (inWater ? 0.5 : 1);
+    const effSpeed = (p.dodgeTimer > 0 ? PLAYER.dodgeSpeed : p.moveSpeed) * (inWater ? 0.5 : 1);
     let nx = p.pos.x + Math.sin(p.heading) * effSpeed * dt;
     let nz = p.pos.z + Math.cos(p.heading) * effSpeed * dt;
     // Obstacle push-out against registered obstacles.
@@ -129,6 +150,17 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
       const s = WORLD.playRadius / r;
       nx *= s;
       nz *= s;
+    }
+    // Steep ground slows the climb rather than blocking it, so walking uphill
+    // toward the Skyreach reads as effort instead of as an invisible wall.
+    const climb = groundY(nx, nz) - groundY(p.pos.x, p.pos.z);
+    if (climb > 0.02) {
+      const grade = climb / Math.max(0.001, effSpeed * dt);
+      if (grade > 1.6) {
+        // Too steep to walk straight up: give back most of the step.
+        nx = p.pos.x + (nx - p.pos.x) * 0.15;
+        nz = p.pos.z + (nz - p.pos.z) * 0.15;
+      }
     }
     p.pos.x = nx;
     p.pos.z = nz;

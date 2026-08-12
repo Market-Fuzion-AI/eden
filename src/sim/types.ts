@@ -520,6 +520,17 @@ export interface WitnessedNorm {
   t: number;
 }
 
+/**
+ * Landing infrastructure at Human Landing. Pure scenery with a position — it
+ * gives the home base a silhouette without pretending to be simulation. The
+ * fabricator is a marked placeholder for a later crafting milestone.
+ */
+export interface BuiltLandmark {
+  kind: 'pod' | 'debris' | 'fabricator' | 'staging';
+  pos: V2;
+  rot: number;
+}
+
 export interface PlayerState {
   id: 'emerson';
   name: 'Emerson';
@@ -541,6 +552,12 @@ export interface PlayerState {
   dodgeCooldown: number;
   dead: boolean;
   respawnTimer: number;
+  /**
+   * Current ground speed the movement integrator is easing toward the input.
+   * Separate from `speed` (the distance actually covered, after water drag and
+   * collision) so animation cadence can read intent rather than obstruction.
+   */
+  moveSpeed: number;
   /** Sim time of the last fast approach — used by wildlife startle checks. */
   lastSprintAt: number;
   /** Norm events Emerson was actually present for. Bounded. */
@@ -568,6 +585,8 @@ export interface World {
   offeredFood: OfferedFood[];
   flora: FloraItem[];
   obstacles: Obstacle[];
+  /** Landing infrastructure at Human Landing. Scenery, placed once at worldgen. */
+  landmarksBuilt: BuiltLandmark[];
   camps: Camp[];
   chronicle: ChronicleEvent[];
   chronicleCounter: number;

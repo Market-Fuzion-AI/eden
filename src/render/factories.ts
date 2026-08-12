@@ -20,6 +20,8 @@ export interface AnimCtx {
   social: boolean;
   /** Mid-confrontation: sharper, larger gestures. */
   agitated?: boolean;
+  /** Radians per second of turning, for body banking. */
+  turnRate?: number;
 }
 
 export interface Rig {
@@ -249,13 +251,20 @@ export function buildSettlerRig(
 
   let phase = 0;
   let gesture = 0;
+  let lean = 0;
   return {
     group,
     height: 1.9 * heightScale,
     animate(ctx) {
       const speedNorm = Math.min(1, ctx.speed / 4);
-      phase += ctx.dt * (4 + ctx.speed * 2.4);
-      const swing = Math.sin(phase) * 0.68 * speedNorm;
+      // Stride cadence is tied to ground speed rather than to a fixed rate, so
+      // the feet keep pace with the distance actually covered. The constant is
+      // the stride length in metres: the leg completes one cycle per stride,
+      // which is what removes the obvious skating at walking speed.
+      const STRIDE = 1.55;
+      phase += ctx.dt * (ctx.speed > 0.05 ? (ctx.speed / STRIDE) * Math.PI * 2 : 2.2);
+      // Longer strides at speed, so a sprint does not read as fast tiptoeing.
+      const swing = Math.sin(phase) * (0.42 + 0.4 * speedNorm) * Math.min(1, speedNorm * 3);
       legL.rotation.x = swing;
       legR.rotation.x = -swing;
 
@@ -275,8 +284,9 @@ export function buildSettlerRig(
       } else {
         armL.rotation.x = -swing * 0.8;
         armR.rotation.x = swing * 0.8;
-        armL.rotation.z = 0.06;
-        armR.rotation.z = -0.06;
+        // Arms tuck in as the pace picks up.
+        armL.rotation.z = 0.06 + speedNorm * 0.1;
+        armR.rotation.z = -0.06 - speedNorm * 0.1;
       }
 
       const idleBreath = Math.sin(ctx.time * 2 + variant * 9) * 0.012;
@@ -286,8 +296,17 @@ export function buildSettlerRig(
         legR.rotation.x = -1.45;
         armL.rotation.x = -0.2;
         armR.rotation.x = -0.2;
+        body.rotation.x = 0;
+        body.rotation.z = 0;
       } else {
-        body.position.y = Math.abs(Math.sin(phase)) * 0.05 * speedNorm + idleBreath;
+        // Two bounces per stride cycle — one per footfall.
+        body.position.y = Math.abs(Math.sin(phase)) * 0.055 * speedNorm + idleBreath;
+        // Lean into the run, and bank into a turn. Cheap, and it is most of
+        // what stops a character reading as a sliding statue.
+        body.rotation.x = speedNorm * 0.13;
+        const turn = ctx.turnRate ?? 0;
+        lean += (Math.max(-1, Math.min(1, turn * 0.28)) - lean) * Math.min(1, ctx.dt * 6);
+        body.rotation.z = -lean * 0.22 * speedNorm;
       }
 
       // Head: nods while talking, jabs forward while arguing.

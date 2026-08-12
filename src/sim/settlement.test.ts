@@ -85,7 +85,9 @@ describe('resource gathering has a reason', () => {
 describe('construction consumes real resources', () => {
   it('progress can never outrun delivered materials', () => {
     const world = createWorld(72);
-    const s = world.settlers[0];
+    // A Veyra builder: Human Landing now starts with a lit colony hearth, and
+    // campfire spacing rightly refuses a second fire beside it.
+    const s = world.settlers.find((x) => x.speciesId === 'veyra')!;
     const site = chooseBuildSite(world, s, 'campfire')!;
     const st = createProject(world, s, 'campfire', site.pos, ['test'], site.reason);
     expect(deliveredFraction(st)).toBe(0);
@@ -184,7 +186,9 @@ describe('cooperation', () => {
 
   it('refuses to help someone it resents', () => {
     const world = createWorld(75);
-    const [initiator, hostile] = world.settlers;
+    // Away from the pre-built colony hearth, which blocks campfire sites.
+    const veyra = world.settlers.filter((x) => x.speciesId === 'veyra');
+    const [initiator, hostile] = veyra;
     hostile.hunger = 15;
     hostile.energy = 90;
     const site = chooseBuildSite(world, initiator, 'campfire')!;
@@ -337,8 +341,14 @@ describe('determinism and history', () => {
       expect(line.value).not.toContain('undefined');
       expect(line.value).not.toContain('NaN');
     }
+    // The summary reports change over the window, not a running total. Human
+    // Landing now starts with a lit colony hearth, so counting every complete
+    // structure would double-count something that predates the snapshot.
     const completed = Number(summary.settlementLines.find((l) => l.label === 'Structures completed')!.value);
-    expect(completed).toBe(world.structures.filter((s) => s.state === 'complete').length);
+    const since = world.structures.filter(
+      (s) => s.state === 'complete' && s.completedAt !== null && s.completedAt > before.t,
+    ).length;
+    expect(completed).toBe(since);
   });
 
   it('detects a proto-settlement without forcing one', () => {
