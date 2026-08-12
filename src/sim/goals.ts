@@ -1,5 +1,5 @@
 import { NORM, RATES, REL, SETTLER, SOCIAL, STRUCT, WORLD } from './config';
-import { chronicle, daylight01, isNight } from './chronicle';
+import { chronicle, clockOf, daylight01, isNight } from './chronicle';
 import { landmarkAt, placeName } from './landmarks';
 import { remember } from './memory';
 import { stand, stepToward } from './movement';
@@ -642,6 +642,38 @@ export function settlerThink(world: World, s: Settler): void {
     s.socialTimer = 0;
     s.confronting = false;
     s.goal.phase = 'done';
+  }
+
+  // A settler with a post keeps it during working hours.
+  //
+  // This is the smallest role system that makes a gameplay NPC dependable:
+  // it does not decide what they do, only that they drift back to their
+  // station when nothing more pressing is happening. Hunger, exhaustion and
+  // an active errand all still outrank it, so the technician eats, sleeps and
+  // socializes like anyone else — she just does not vanish into the Skyreach
+  // for three days and take the fabricator with her.
+  const post = s.roleAnchor;
+  if (post) {
+    const hour = clockOf(t).hour;
+    const working = hour >= post.fromHour && hour < post.toHour;
+    const away = dist(s.pos, post.pos);
+    const settled = s.hunger < 62 && s.energy > 32 && !s.buildPlan;
+    if (working && settled && away > post.radius) {
+      s.goal = mkGoal('idle', 'Return to the Fabricator', t, {
+        targetPos: { x: post.pos.x + rng.range(-3, 3), z: post.pos.z + rng.range(-3, 3) },
+        deadline: t + 260,
+      });
+      s.goalReason = {
+        summary: [
+          'Keeps the Fabricator during the working day',
+          `${Math.round(away)}m from the station`,
+          `Nothing more urgent — hunger ${Math.round(s.hunger)}, energy ${Math.round(s.energy)}`,
+        ],
+        scores: [],
+      };
+      s.nextThinkAt = t + 2;
+      return;
+    }
   }
 
   // Generosity is opportunistic, not planned: if someone right here is much

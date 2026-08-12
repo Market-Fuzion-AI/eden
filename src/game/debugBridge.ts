@@ -6,11 +6,14 @@ import * as goals from '../sim/goals';
 import * as rel from '../sim/relationships';
 import * as norms from '../sim/norms';
 import * as social from '../sim/socialKnowledge';
+import * as fabrication from '../sim/fabrication';
+import * as scanner from '../sim/scanner';
 import * as regions from '../sim/regions';
 import * as terrain from '../sim/terrain';
 import * as landmarks from '../sim/landmarks';
 import * as inspect from '../sim/inspect';
 import * as structures from '../sim/structures';
+import * as player from '../sim/player';
 import { getInteractions, updatePlayer } from '../sim/player';
 import { simTick } from '../sim/simulation';
 import { buildSummary, snapshot } from '../sim/summary';
@@ -40,6 +43,12 @@ export function registerFog(fog: THREE.FogExp2): void {
   activeFog = fog;
 }
 
+/** Set by ScannerFX.tsx so tests can count what the scan actually lit up. */
+let scanMarkers: THREE.Group | null = null;
+export function registerScanMarkers(group: THREE.Group | null): void {
+  scanMarkers = group;
+}
+
 /** Set by SocialLinks.tsx so tests can confirm the graph actually draws. */
 let socialLinkMesh: THREE.Mesh | null = null;
 export function registerSocialLinks(mesh: THREE.Mesh | null): void {
@@ -67,12 +76,15 @@ export function installDebugBridge(): void {
     input,
     camera,
     sim: { getInteractions },
+    player,
     creator,
     goals,
     rel,
     structures,
     norms,
     social,
+    fabrication,
+    scanner,
     inspect,
     regions,
     terrain,
@@ -80,6 +92,8 @@ export function installDebugBridge(): void {
     perf,
     terrainHash,
     fogDensity: () => activeFog?.density ?? -1,
+    /** How many scan markers are actually being drawn right now. */
+    visibleScanMarkers: () => (scanMarkers?.children ?? []).filter((c) => c.visible).length,
     socialLinksVisible: () =>
       Boolean(socialLinkMesh?.visible) && (socialLinkMesh?.geometry.drawRange.count ?? 0) > 0,
     /** Advance only Emerson, using current keyboard/camera state. */

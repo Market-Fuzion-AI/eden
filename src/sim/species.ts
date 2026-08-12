@@ -92,9 +92,12 @@ export interface SettlerSeed {
   name: string;
   sex: Sex;
   species: IntelligentSpeciesId;
+  /** Settlers with a role keep a post during working hours. */
+  role?: 'fabricator';
 }
 
-/** 21 founding settlers. Humans 4F/3M, Veyra 3F/4M, Caelari 3F/4M. */
+/** 22 founding settlers: 8 Humans (one of them the colony's fabrication
+ *  technician), 7 Veyra, 7 Caelari. */
 export const SETTLER_ROSTER: SettlerSeed[] = [
   { name: 'Asha', sex: 'female', species: 'human' },
   { name: 'Mira', sex: 'female', species: 'human' },
@@ -103,6 +106,10 @@ export const SETTLER_ROSTER: SettlerSeed[] = [
   { name: 'Kael', sex: 'male', species: 'human' },
   { name: 'Rowan', sex: 'male', species: 'human' },
   { name: 'Dmitri', sex: 'male', species: 'human' },
+  // The colony's fabrication technician. She keeps the Fabricator at Human
+  // Landing during working hours (see `roleAnchor`) but is otherwise an
+  // ordinary autonomous settler with her own needs and relationships.
+  { name: 'Petra', sex: 'female', species: 'human', role: 'fabricator' },
   { name: 'Thalyss', sex: 'female', species: 'veyra' },
   { name: 'Ithra', sex: 'female', species: 'veyra' },
   { name: 'Zsava', sex: 'female', species: 'veyra' },

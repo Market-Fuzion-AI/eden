@@ -70,10 +70,13 @@ const geo = await page.evaluate(() => {
     }
   }
   const mean = (a) => a.reduce((s, v) => s + v, 0) / Math.max(1, a.length);
+  // Counted against the actual roster rather than a hardcoded number, so
+  // adding a colonist can never silently fail this check.
   const spawn = {};
   for (const sp of ['human', 'veyra', 'caelari']) {
     const group = world.settlers.filter((s) => s.speciesId === sp);
-    spawn[sp] = group.filter((s) => regions.regionAt(s.pos.x, s.pos.z) === regions.SPECIES_REGION[sp]).length;
+    const home = group.filter((s) => regions.regionAt(s.pos.x, s.pos.z) === regions.SPECIES_REGION[sp]).length;
+    spawn[sp] = { home, total: group.length };
   }
   return {
     river: mean(bands.riverlands),
@@ -95,9 +98,12 @@ check('the three regions occupy distinct elevation bands', geo.river < geo.ash &
 check('the Skyreach genuinely towers over the Riverlands', geo.sky - geo.river > 18, `${(geo.sky - geo.river).toFixed(1)}m`);
 check('water belongs to the Riverlands', geo.water.riverlands > geo.water.other, JSON.stringify(geo.water));
 check('the valley stays mostly walkable', geo.walkablePct > 0.6, `${Math.round(geo.walkablePct * 100)}%`);
-check('Humans start in the Riverlands', geo.spawn.human === 7, `${geo.spawn.human}/7`);
-check('Veyra start in the Ashlands', geo.spawn.veyra === 7, `${geo.spawn.veyra}/7`);
-check('Caelari start on the Skyreach', geo.spawn.caelari === 7, `${geo.spawn.caelari}/7`);
+check('Humans start in the Riverlands', geo.spawn.human.home === geo.spawn.human.total,
+  `${geo.spawn.human.home}/${geo.spawn.human.total}`);
+check('Veyra start in the Ashlands', geo.spawn.veyra.home === geo.spawn.veyra.total,
+  `${geo.spawn.veyra.home}/${geo.spawn.veyra.total}`);
+check('Caelari start on the Skyreach', geo.spawn.caelari.home === geo.spawn.caelari.total,
+  `${geo.spawn.caelari.home}/${geo.spawn.caelari.total}`);
 check('Emerson starts at Human Landing', geo.playerRegion === 'riverlands' && /Landing/.test(geo.playerPlace), geo.playerPlace);
 check('Emerson does not start in the water', !geo.playerInWater);
 check('Human Landing has its landing infrastructure', geo.landing.includes('pod') && geo.landing.includes('fabricator'));
@@ -889,6 +895,200 @@ const ariScope = await page.evaluate(() => {
 });
 check('Emerson only carries what he witnessed', ariScope.bounded, `${ariScope.witnessed}`);
 check('witnessed records are well-formed', ariScope.allReal);
+
+// ---------------------------------------------------------------------------
+console.log('\nTHE FIRST LOOP');
+// ---------------------------------------------------------------------------
+// Played as a player would: walk to nodes, hold the interaction, come home,
+// use the machine. Nothing is teleported into the inventory.
+await page.evaluate(() => {
+  const { useUI } = window.__EDEN__;
+  useUI.getState().setMode('live');
+  useUI.getState().setFabricatorOpen(false);
+  useUI.getState().select(null);
+});
+await page.waitForTimeout(600);
+
+const loopSetup = await page.evaluate(() => {
+  const { getWorld, fabrication } = window.__EDEN__;
+  const world = getWorld();
+  // Start the loop clean, as a new player would.
+  world.player.materials = { alloy: 0, ore: 0, crystal: 0 };
+  world.player.items = { medkit: 0, energyCell: 0 };
+  world.player.unlocks.scanner = false;
+  world.fabrication = null;
+  const counts = {};
+  for (const id of fabrication.MATERIAL_IDS) {
+    const def = fabrication.MATERIALS[id];
+    counts[id] = world.resources.filter((r) => r.type === def.nodeType && r.quantity >= 1).length;
+  }
+  return { counts, costs: fabrication.RECIPE_BY_ID['scanner-mk1'].costs, fabPos: world.fabricatorPos };
+});
+check('three fabrication materials exist in the world', Object.values(loopSetup.counts).every((n) => n > 2),
+  JSON.stringify(loopSetup.counts));
+check('the fabricator has a place in the world', Boolean(loopSetup.fabPos));
+
+// Scanner must not work before it is built.
+const preScan = await page.evaluate(() => window.__EDEN__.scanner.performScan(window.__EDEN__.getWorld()));
+check('the scanner does not exist before it is fabricated', !preScan.ok && preScan.reason === 'locked');
+
+// Walk to a node of each material and work it with the real interaction.
+const gathered = await page.evaluate(async ({ costs }) => {
+  const { getWorld, fabrication, sim } = window.__EDEN__;
+  const world = getWorld();
+  const p = world.player;
+  const log = [];
+  for (const id of fabrication.MATERIAL_IDS) {
+    const def = fabrication.MATERIALS[id];
+    let guard = 0;
+    while (p.materials[id] < (costs[id] ?? 0) && guard++ < 30) {
+      const node = world.resources
+        .filter((r) => r.type === def.nodeType && r.quantity >= 1)
+        .sort((a, b) => Math.hypot(a.pos.x - p.pos.x, a.pos.z - p.pos.z) - Math.hypot(b.pos.x - p.pos.x, b.pos.z - p.pos.z))[0];
+      if (!node) break;
+      // Walk there (teleporting only the position, then using the real prompt
+      // and the real timed interaction).
+      p.pos.x = node.pos.x;
+      p.pos.z = node.pos.z;
+      const prompts = sim.getInteractions(world).map((x) => x.label);
+      if (guard === 1) log.push(prompts.find((l) => l.includes(def.name)) ?? 'NO PROMPT');
+      window.__EDEN__.input.inputState.keys.clear();
+      // Press E, then let real time carry the interaction to completion.
+      const started = window.__EDEN__.player.startHarvest(world, node);
+      if (!started) break;
+      for (let i = 0; i < 200 && p.harvest; i++) {
+        world.timeSec += 1 / 60;
+        window.__EDEN__.stepPlayer(1 / 60);
+      }
+    }
+  }
+  return { materials: { ...p.materials }, prompts: log };
+}, { costs: loopSetup.costs });
+console.log(`    (gathered ${JSON.stringify(gathered.materials)})`);
+check('each material uses its own interaction verb', gathered.prompts.length === 3 &&
+  gathered.prompts.some((l) => /Salvage/.test(l)) &&
+  gathered.prompts.some((l) => /Extract/.test(l)) &&
+  gathered.prompts.some((l) => /Harvest/.test(l)), JSON.stringify(gathered.prompts));
+check('gathering fills the real inventory',
+  Object.entries(loopSetup.costs).every(([id, need]) => gathered.materials[id] >= need),
+  JSON.stringify(gathered.materials));
+
+// Return home and open the fabricator through the world, not the UI.
+await page.evaluate((fabPos) => {
+  const world = window.__EDEN__.getWorld();
+  world.player.pos.x = fabPos.x + 1.5;
+  world.player.pos.z = fabPos.z + 1.5;
+}, loopSetup.fabPos);
+await page.waitForTimeout(400);
+const fabPrompt = await page.evaluate(() =>
+  window.__EDEN__.sim.getInteractions(window.__EDEN__.getWorld()).map((x) => x.label),
+);
+check('standing at the fabricator offers to use it', fabPrompt.some((l) => /Fabricator/i.test(l)), JSON.stringify(fabPrompt));
+
+await page.keyboard.press('KeyE');
+await page.waitForTimeout(700);
+const fabVisible = await page.locator('.fab').isVisible().catch(() => false);
+check('the fabricator interface opens', fabVisible);
+if (fabVisible) {
+  const panel = await page.locator('.fab').innerText();
+  check('it names the recipes', /PATHFINDER SCANNER MK I/i.test(panel) && /FIELD MEDKIT/i.test(panel) && /ENERGY CELL/i.test(panel));
+  check('it shows requirements against what is carried', /Salvaged Alloy \d+ \/ \d+/.test(panel));
+  check('it has no placeholders', !/undefined|NaN/.test(panel));
+  await page.screenshot({ path: `${SHOT_DIR}/18-fabricator.png` });
+}
+
+// Fabricate the scanner by pressing the actual button.
+const before = await page.evaluate(() => ({ ...window.__EDEN__.getWorld().player.materials }));
+await page.locator('.fab-recipe', { hasText: 'Pathfinder Scanner' }).locator('.fab-button').click();
+await page.waitForTimeout(250);
+// Mash it, to prove a double click cannot build two or charge twice.
+for (let i = 0; i < 4; i++) {
+  await page.locator('.fab-recipe', { hasText: 'Pathfinder Scanner' }).locator('.fab-button').click({ force: true }).catch(() => {});
+}
+const running = await page.evaluate(() => ({
+  job: window.__EDEN__.getWorld().fabrication?.recipeId ?? null,
+  materials: { ...window.__EDEN__.getWorld().player.materials },
+}));
+check('fabrication starts', running.job === 'scanner-mk1', JSON.stringify(running));
+check('it charges exactly once for a mashed button',
+  Object.entries(loopSetup.costs).every(([id, need]) => running.materials[id] === before[id] - need),
+  `${JSON.stringify(before)} -> ${JSON.stringify(running.materials)}`);
+await page.screenshot({ path: `${SHOT_DIR}/19-fabricating.png` });
+
+// Let it finish through the real simulation loop.
+await page.evaluate(() => {
+  for (let i = 0; i < 30 * 8; i++) window.__EDEN__.stepSim(1 / 30);
+});
+await page.waitForTimeout(600);
+const built = await page.evaluate(() => {
+  const w = window.__EDEN__.getWorld();
+  return { unlocked: w.player.unlocks.scanner, job: w.fabrication, ari: w.ariQueue.slice() };
+});
+check('the scanner is installed', built.unlocked);
+check('the fabricator returns to idle', built.job === null);
+
+await page.evaluate(() => window.__EDEN__.useUI.getState().setFabricatorOpen(false));
+await page.waitForTimeout(300);
+
+// Use it, next to a known node.
+const scanned = await page.evaluate(async () => {
+  const { getWorld, fabrication, scanner } = window.__EDEN__;
+  const world = getWorld();
+  const node = world.resources.find(
+    (r) => fabrication.MATERIAL_IDS.some((id) => fabrication.MATERIALS[id].nodeType === r.type) && r.quantity >= 1,
+  );
+  world.player.pos.x = node.pos.x + 8;
+  world.player.pos.z = node.pos.z + 8;
+  const result = scanner.performScan(world);
+  const total = world.resources.filter(
+    (r) => fabrication.MATERIAL_IDS.some((id) => fabrication.MATERIALS[id].nodeType === r.type),
+  ).length;
+  return { ok: result.ok, found: result.found.length, total, nearest: node.id, ids: result.found };
+});
+check('the scanner sweeps and finds nearby material', scanned.ok && scanned.found > 0, JSON.stringify(scanned.found));
+check('it finds the node beside the player', scanned.ids.includes(scanned.nearest));
+check('it does not reveal the whole map', scanned.found < scanned.total, `${scanned.found}/${scanned.total}`);
+// Same reason as the expiry check below: the headless renderer needs real
+// frames before the markers it draws can be counted.
+await page.waitForTimeout(2500);
+const markers = await page.evaluate(() => window.__EDEN__.visibleScanMarkers());
+check('detected nodes are marked in the world', markers > 0, `${markers}`);
+await page.screenshot({ path: `${SHOT_DIR}/20-scan.png` });
+
+// The highlight expires rather than lighting the world permanently.
+await page.evaluate(() => {
+  for (let i = 0; i < 30 * 40; i++) window.__EDEN__.stepSim(1 / 30);
+});
+// Headless SwiftShader renders at a couple of frames a second, so give the
+// draw loop genuine time to act on the expired highlight before counting.
+await page.waitForTimeout(2500);
+const expired = await page.evaluate(() => ({
+  ids: window.__EDEN__.getWorld().player.scan.nodeIds.length,
+  markers: window.__EDEN__.visibleScanMarkers(),
+}));
+check('the highlight expires', expired.ids === 0 && expired.markers === 0, JSON.stringify(expired));
+
+// The HUD gained the scanner indicator and nothing else grew.
+const hudAfter = await page.locator('.hud').innerText();
+check('the HUD shows scanner readiness', /SCAN/i.test(hudAfter), hudAfter.slice(0, 100));
+
+// The technician is where the loop needs her.
+const tech = await page.evaluate(() => {
+  const w = window.__EDEN__.getWorld();
+  const t = w.settlers.find((s) => s.roleAnchor?.role === 'fabricator');
+  if (!t) return null;
+  return {
+    name: t.name,
+    away: Math.hypot(t.pos.x - w.fabricatorPos.x, t.pos.z - w.fabricatorPos.z),
+    health: t.health,
+    relationships: Object.keys(t.relationships).length,
+  };
+});
+check('the colony has a fabrication technician', Boolean(tech), JSON.stringify(tech));
+if (tech) {
+  check('she is at her post', tech.away < 60, `${tech.away.toFixed(0)}m`);
+  check('and is still a person', tech.health > 40 && tech.relationships >= 0);
+}
 
 const worldState = await page.evaluate(() => {
   const w = window.__EDEN__.getWorld();

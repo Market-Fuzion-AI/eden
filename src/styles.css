@@ -1309,3 +1309,228 @@
   font-style: italic;
   margin-top: 2px;
 }
+
+/* --- fabrication (v0.7B) -------------------------------------------------- */
+
+.mat-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 5px;
+  flex-wrap: wrap;
+}
+.mat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+.mat-chip.item { color: var(--accent); }
+
+.fab-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  flex: none;
+}
+
+/* Brief acquisition feedback — never a permanent inventory panel. */
+.pickup-feed {
+  position: absolute;
+  bottom: 150px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+.pickup {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  padding: 4px 13px;
+  animation: pickup-in 0.3s ease;
+}
+@keyframes pickup-in {
+  from { opacity: 0; transform: translateY(9px); }
+  to { opacity: 1; transform: none; }
+}
+
+.harvest-bar {
+  width: 190px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.harvest-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
+.scan-chip {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  padding: 5px 10px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text-dim);
+}
+.scan-chip.ready { color: var(--accent); border-color: var(--accent); }
+.scan-chip.cell { color: var(--trust); border-color: rgba(192, 139, 255, 0.5); }
+
+/* --- fabricator interface ------------------------------------------------ */
+
+/*
+ * A machine Emerson is standing at, not a menu he opened: the world stays
+ * visible behind it and the panel sits to one side rather than covering the
+ * screen.
+ */
+.fab-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-left: 4vw;
+  background: linear-gradient(90deg, rgba(4, 9, 16, 0.72) 0%, rgba(4, 9, 16, 0.25) 45%, rgba(4, 9, 16, 0) 70%);
+  z-index: 30;
+  pointer-events: auto;
+}
+
+.fab {
+  width: min(430px, 92vw);
+  max-height: 86vh;
+  overflow-y: auto;
+  border-left: 2px solid var(--accent);
+}
+.fab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+.fab-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  color: var(--accent);
+}
+.fab-sub {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-top: 3px;
+}
+
+.fab-stock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.fab-stock-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+}
+.fab-stock-name { flex: 1; color: var(--text-dim); }
+.fab-stock-count { font-variant-numeric: tabular-nums; color: var(--text); }
+
+.fab-running {
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.fab-running-label {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+  margin-bottom: 5px;
+}
+.fab-bar { height: 5px; }
+
+.fab-recipes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0;
+}
+.fab-recipe {
+  border-left: 2px solid rgba(255, 255, 255, 0.1);
+  padding-left: 10px;
+}
+.fab-recipe.ready { border-left-color: var(--accent); }
+.fab-recipe.built { border-left-color: var(--good); }
+.fab-recipe-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.fab-recipe-name {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+.fab-tag {
+  font-size: 8.5px;
+  letter-spacing: 0.2em;
+  color: var(--good);
+  border: 1px solid rgba(111, 232, 159, 0.45);
+  padding: 1px 6px;
+}
+.fab-recipe-desc {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  margin: 4px 0 7px;
+}
+.fab-costs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  margin-bottom: 7px;
+}
+.fab-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+.fab-cost.met { color: var(--good); }
+.fab-cost.short { color: var(--warn); }
+.fab-note {
+  font-size: 10px;
+  font-style: italic;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+.fab-button {
+  width: 100%;
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  padding: 7px;
+}
+.fab-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+  border-color: rgba(126, 151, 163, 0.25);
+}
+.fab-footer {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 8px;
+}

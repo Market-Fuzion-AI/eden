@@ -1,4 +1,4 @@
-import { NORM, PLAYER, RATES, SETTLER, WILDLIFE, WORLD } from './config';
+import { FABRICATOR, GATHER, NORM, PLAYER, RATES, SETTLER, WILDLIFE, WORLD } from './config';
 import { chronicle } from './chronicle';
 import { buildExchange, type DialogueExchange } from './dialogue';
 import { placeName } from './landmarks';
@@ -6,6 +6,7 @@ import { remember } from './memory';
 import { emersonBlocker, observePlayerAsk } from './normEvents';
 import { attitudeFor, decidePermission, permissionLine } from './norms';
 import { applyRelationship, peekRelationship, relationshipState } from './relationships';
+import { collectMaterial, materialForNodeType } from './fabrication';
 import { emersonKnows, witnessNorm } from './socialKnowledge';
 import { missingResources } from './structures';
 import { groundY, isWater } from './terrain';
@@ -188,6 +189,9 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
     p.y = ground;
   }
 
+  // Gathering interaction, in real time alongside movement.
+  harvestTick(world);
+
   // Passive recovery.
   p.health = clamp100(p.health + 0.6 * dt);
 
@@ -226,7 +230,88 @@ export function playerDodge(world: World): void {
 export interface InteractionPrompt {
   key: string;
   label: string;
-  action: 'gather' | 'offer' | 'talk' | 'harvest' | 'contribute' | 'ask';
+  action: 'gather' | 'offer' | 'talk' | 'harvest' | 'contribute' | 'ask' | 'salvage' | 'fabricate';
+}
+
+// ---------------------------------------------------------------------------
+// Fabrication materials
+// ---------------------------------------------------------------------------
+
+/** A material node Emerson is standing at and which still holds something. */
+export function materialNodeAtHand(world: World): ResourceNode | null {
+  const p = world.player;
+  if (p.dead) return null;
+  let best: ResourceNode | null = null;
+  let bestD: number = GATHER.range;
+  for (const r of world.resources) {
+    if (!materialForNodeType(r.type)) continue;
+    if (r.quantity < 1) continue;
+    const d = dist(r.pos, p.pos);
+    if (d < bestD) {
+      best = r;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+/** True when Emerson is close enough to operate the fabricator. */
+export function fabricatorAtHand(world: World): boolean {
+  const p = world.player;
+  if (p.dead || !world.fabricatorPos) return false;
+  return dist(world.fabricatorPos, p.pos) < FABRICATOR.range;
+}
+
+/**
+ * Begin working a material node. The interaction takes real time and is
+ * cancelled by walking away, so gathering reads as an act rather than a
+ * number going up.
+ */
+export function startHarvest(world: World, node: ResourceNode): boolean {
+  const p = world.player;
+  if (p.harvest) return false;
+  if (!materialForNodeType(node.type) || node.quantity < 1) return false;
+  p.harvest = {
+    nodeId: node.id,
+    startedAt: world.timeSec,
+    endsAt: world.timeSec + GATHER.duration,
+    from: { x: p.pos.x, z: p.pos.z },
+  };
+  return true;
+}
+
+/** 0..1 progress of the current gathering interaction, or 0 when idle. */
+export function harvestProgress(world: World): number {
+  const h = world.player.harvest;
+  if (!h) return 0;
+  const span = Math.max(0.001, h.endsAt - h.startedAt);
+  return Math.max(0, Math.min(1, (world.timeSec - h.startedAt) / span));
+}
+
+/**
+ * Advance the gathering interaction. Driven from `updatePlayer`, so it runs in
+ * real time alongside movement rather than at the simulation's speed multiplier.
+ */
+function harvestTick(world: World): void {
+  const p = world.player;
+  const h = p.harvest;
+  if (!h) return;
+  const node = world.resources.find((r) => r.id === h.nodeId);
+  // Walked away, or the seam ran out under him.
+  if (!node || node.quantity < 1 || dist(p.pos, h.from) > GATHER.cancelDistance) {
+    p.harvest = null;
+    return;
+  }
+  if (world.timeSec < h.endsAt) return;
+  p.harvest = null;
+  const got = collectMaterial(world, node.id);
+  if (!got) return;
+  world.pickups.push({ materialId: got.material.id, amount: got.amount, at: world.timeSec });
+  if (world.pickups.length > 6) world.pickups.splice(0, world.pickups.length - 6);
+  if (!world.flags[`firstMaterial_${got.material.id}`]) {
+    world.flags[`firstMaterial_${got.material.id}`] = true;
+    world.ariQueue.push(`${got.material.name}. ${got.material.description} Petra will want this.`);
+  }
 }
 
 /** A material node Emerson is standing at. */
@@ -274,7 +359,14 @@ export function getInteractions(world: World): InteractionPrompt[] {
   );
   const site = siteAtHand(world);
   const material = materialAtHand(world);
-  if (site && (p.wood > 0 || p.stone > 0)) {
+  const fabMaterial = materialNodeAtHand(world);
+  // Fabrication materials take precedence: they are the reason to be out here.
+  if (fabMaterial) {
+    const def = materialForNodeType(fabMaterial.type)!;
+    out.push({ key: 'E', label: `${def.verb} ${def.name}`, action: 'salvage' });
+  } else if (fabricatorAtHand(world)) {
+    out.push({ key: 'E', label: 'Use the Fabricator', action: 'fabricate' });
+  } else if (site && (p.wood > 0 || p.stone > 0)) {
     // Emerson can carry materials to a settler's project like anyone else.
     out.push({ key: 'E', label: `Contribute to the ${site.type}`, action: 'contribute' });
   } else if (material && p.wood + p.stone < PLAYER.maxMaterials) {
@@ -468,6 +560,11 @@ export function playerTalk(world: World): DialogueExchange | null {
 export function playerGather(world: World): boolean {
   const p = world.player;
   if (p.dead) return false;
+  if (p.harvest) return true; // already working a node
+
+  // Fabrication materials first: they are why Emerson is out here.
+  const fabNode = materialNodeAtHand(world);
+  if (fabNode) return startHarvest(world, fabNode);
 
   // Contributing to someone's build records Emerson in its provenance exactly
   // like any settler — the player is part of the settlement, not above it.

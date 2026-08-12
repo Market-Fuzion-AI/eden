@@ -55,6 +55,17 @@ const woodMat = toonMat('#6a4e36');
 const stoneMat = toonMat('#7a7688');
 const offerMat = toonMat('#ffd76a', { emissive: '#ffb03f', emissiveIntensity: 2.2 });
 
+// --- player fabrication materials -----------------------------------------
+// Each reads at gameplay distance by silhouette and palette rather than by a
+// marker: metal panels, veined rock, angular crystal.
+const alloyMat = toonMat('#9aa3b2');
+const alloyDarkMat = toonMat('#5c6473');
+const alloyLampMat = toonMat('#7fe7ff', { emissive: '#7fe7ff', emissiveIntensity: 1.4 });
+const oreRockMat = toonMat('#6b5a52');
+const oreVeinMat = toonMat('#e0a24a', { emissive: '#e0a24a', emissiveIntensity: 1.1 });
+const crystalBaseMat = toonMat('#5a5470');
+const crystalMat = toonMat('#c08bff', { emissive: '#9a6fe0', emissiveIntensity: 0.75 });
+
 export function ResourceNodes() {
   const version = useUI((s) => s.resourcesVersion);
   const world = getWorld();
@@ -94,6 +105,58 @@ export function ResourceNodes() {
         stump.position.set(1.5, 0.25, 0.6);
         stump.castShadow = true;
         g.add(stump);
+      } else if (node.type === 'alloy') {
+        // Hull plating torn off in the descent: flat panels, a bent strut and a
+        // scorched edge, half-sunk where it hit. Reads as salvage, not scenery.
+        for (let i = 0; i < 3; i++) {
+          const panel = new THREE.Mesh(new THREE.BoxGeometry(1.5 - i * 0.28, 0.12, 0.95 - i * 0.16), alloyMat);
+          panel.position.set((i - 1) * 0.55, 0.16 + i * 0.13, (i % 2) * 0.42 - 0.2);
+          panel.rotation.set(0.16 * i, 0.7 * i + 0.4, 0.3 * (i - 1));
+          panel.castShadow = true;
+          g.add(panel);
+        }
+        const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.7, 6), alloyDarkMat);
+        strut.position.set(0.45, 0.5, 0.35);
+        strut.rotation.set(0.2, 0, 1.05);
+        strut.castShadow = true;
+        g.add(strut);
+        // A live indicator still blinking on a dead panel.
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), alloyLampMat);
+        lamp.position.set(-0.5, 0.38, 0.1);
+        g.add(lamp);
+      } else if (node.type === 'ore') {
+        // A mineral seam with conductive veins running through the rock face.
+        for (let i = 0; i < 4; i++) {
+          const chunk = new THREE.Mesh(new THREE.DodecahedronGeometry(0.62 - i * 0.11, 0), oreRockMat);
+          chunk.position.set(Math.sin(i * 1.9) * 0.5, 0.34 + i * 0.17, Math.cos(i * 1.9) * 0.42);
+          chunk.rotation.set(i * 1.1, i * 0.8, i * 1.6);
+          chunk.castShadow = true;
+          g.add(chunk);
+        }
+        // The veins: thin bright bands, restrained rather than glowing cubes.
+        for (let i = 0; i < 5; i++) {
+          const vein = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.055, 0.055), oreVeinMat);
+          vein.position.set(Math.sin(i * 2.4) * 0.42, 0.3 + i * 0.16, Math.cos(i * 2.4) * 0.36);
+          vein.rotation.set(i * 0.6, i * 1.4, 0.5 + i * 0.3);
+          g.add(vein);
+        }
+      } else if (node.type === 'crystal') {
+        // An angular cluster growing out of the rock — a clear silhouette from
+        // a distance, which is what makes the Skyreach worth climbing.
+        const base = new THREE.Mesh(new THREE.DodecahedronGeometry(0.5, 0), crystalBaseMat);
+        base.position.y = 0.2;
+        base.scale.y = 0.55;
+        base.castShadow = true;
+        g.add(base);
+        for (let i = 0; i < 5; i++) {
+          const h = 1.5 - i * 0.2;
+          const shard = new THREE.Mesh(new THREE.ConeGeometry(0.17 - i * 0.02, h, 5), crystalMat);
+          const a = (i / 5) * Math.PI * 2 + 0.7;
+          shard.position.set(Math.sin(a) * 0.3, 0.28 + h / 2, Math.cos(a) * 0.3);
+          shard.rotation.set(Math.cos(a) * 0.26, a, -Math.sin(a) * 0.26);
+          shard.castShadow = true;
+          g.add(shard);
+        }
       } else {
         // A worked seam rather than scenery boulders.
         for (let i = 0; i < 3; i++) {

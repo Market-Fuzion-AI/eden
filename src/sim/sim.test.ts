@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DAY_SEC, PLAYER, SIM_DT, WILDLIFE } from './config';
 import { buildExchange } from './dialogue';
 import { playerTalk } from './player';
-import { CREATURE_SPECIES_BY_ID } from './species';
+import { CREATURE_SPECIES_BY_ID, SETTLER_ROSTER } from './species';
 import { buildSummary, snapshot } from './summary';
 import { createWorld } from './worldgen';
 import { simTick } from './simulation';
@@ -56,7 +56,7 @@ describe('EDEN simulation', () => {
       expect(Math.hypot(a.pos.x, a.pos.z)).toBeLessThanOrEqual(200);
       expect(VALID_GOALS.has(a.goal.type), `${a.name} valid goal ${a.goal.type}`).toBe(true);
     }
-    expect(world.settlers.length).toBe(21);
+    expect(world.settlers.length).toBe(SETTLER_ROSTER.length);
     // Camps sit on dry land.
     const { isWater } = await import('./terrain');
     for (const camp of world.camps) {
@@ -216,7 +216,7 @@ describe('temporal summary', () => {
     const rel = summary!.eventLines.find((l) => l.label === 'New relationships')!;
     expect(Number(rel.value)).toBeGreaterThanOrEqual(0);
     // Settler count is stable in v0.2 (no births, no settler deaths).
-    expect(summary!.populationLines[0].value).toBe('21');
+    expect(summary!.populationLines[0].value).toBe(String(SETTLER_ROSTER.length));
   });
 
   it('declines to report a period too short to matter', () => {

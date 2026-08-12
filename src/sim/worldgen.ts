@@ -9,7 +9,7 @@ import {
 } from './species';
 import { landmarkAt, placeName } from './landmarks';
 import { isWalkable, isWater, riverX, setTerrainSeed } from './terrain';
-import { regionWeights } from './regions';
+import { regionAt, regionWeights } from './regions';
 import type {
   Camp,
   Creature,
@@ -63,6 +63,12 @@ function resourceLabel(type: ResourceNode['type'], pos: V2): string {
       return `the timber stand at ${place}`;
     case 'stone':
       return `the stone seam at ${place}`;
+    case 'alloy':
+      return `the salvage at ${place}`;
+    case 'ore':
+      return `the conductive seam at ${place}`;
+    case 'crystal':
+      return `the crystal cluster at ${place}`;
     default:
       return `the shelter at ${place}`;
   }
@@ -369,6 +375,77 @@ function placeResources(world: World, rng: Rng): void {
     ANCHORS.hill, ANCHORS.caelariCamp, ANCHORS.meadow,
   ];
   for (const spot of stoneSpots) addResource('stone', findLand(rng, spot, 32), rng.int(24, 36), 1 / 300);
+
+  // --- player fabrication materials --------------------------------------
+  //
+  // Each region has one material in real abundance and a token presence of the
+  // others, so "I need conductive ore, I should head for the Ashlands" is
+  // learnable — without a lone unlucky seam being able to soft-lock the first
+  // loop. These do not regenerate: they are a finite prototype economy, and
+  // there are far more units in the ground than the first loop consumes.
+  const placeMaterial = (
+    type: 'alloy' | 'ore' | 'crystal',
+    spots: V2[],
+    spread: number,
+    qty: [number, number],
+    /** When set, the node must land inside this region. */
+    requireRegion?: 'riverlands' | 'ashlands' | 'skyreach',
+  ) => {
+    for (const spot of spots) {
+      let p = findLand(rng, spot, spread);
+      if (requireRegion) {
+        // Enforce the affinity rather than hoping the scatter lands well: an
+        // anchor near a region boundary can otherwise fling a node across it,
+        // and a crystal on the valley floor quietly removes the climb from the
+        // first loop.
+        for (let i = 0; i < 20 && regionAt(p.x, p.z) !== requireRegion; i++) {
+          p = findLand(rng, spot, spread * (1 - i / 26));
+        }
+        if (regionAt(p.x, p.z) !== requireRegion) p = findLand(rng, spot, 6);
+      }
+      addResource(type, p, rng.int(qty[0], qty[1]), 0);
+    }
+  };
+
+  // Salvaged Alloy: the wreck scattered debris across the Riverlands on the
+  // way down, so it trails away from Human Landing.
+  placeMaterial(
+    'alloy',
+    [
+      ANCHORS.humanCamp, ANCHORS.humanCamp, ANCHORS.humanCamp,
+      ANCHORS.lake, ANCHORS.riverbank, ANCHORS.meadow, ANCHORS.glade,
+      ANCHORS.ashpass, ANCHORS.skyapproach,
+    ],
+    30,
+    [5, 8],
+  );
+  // Conductive Ore: the Ashlands' mineral seams.
+  placeMaterial(
+    'ore',
+    [
+      ANCHORS.veyraCamp, ANCHORS.veyraCamp, ANCHORS.rocks, ANCHORS.rocks,
+      ANCHORS.ashpass, ANCHORS.rocksSouth, ANCHORS.forest, ANCHORS.hill,
+    ],
+    34,
+    [4, 7],
+    'ashlands',
+  );
+  // Aether Crystal: high ground only, and rarer than the rest.
+  //
+  // The one seeding in the Glowing Glade was removed: it sat close enough to
+  // Human Landing to supply the whole Scanner without ever climbing, which
+  // quietly cut the Skyreach out of the first loop. Skyreach Approach is the
+  // low, walkable end of the region and carries the easiest cluster.
+  placeMaterial(
+    'crystal',
+    [
+      ANCHORS.caelariCamp, ANCHORS.caelariCamp, ANCHORS.hill, ANCHORS.hill,
+      ANCHORS.skyapproach, ANCHORS.skyapproach, ANCHORS.skyapproach,
+    ],
+    32,
+    [3, 5],
+    'skyreach',
+  );
 }
 
 /**
@@ -426,7 +503,20 @@ function buildHumanLanding(world: World, rng: Rng): void {
   // The pod and the fabricator are solid enough to walk around.
   for (const b of world.landmarksBuilt) {
     if (b.kind === 'pod') world.obstacles.push({ pos: b.pos, radius: 3.4 });
-    if (b.kind === 'fabricator') world.obstacles.push({ pos: b.pos, radius: 1.6 });
+    // Sized to the machine's deck, not its core: a smaller radius let the
+    // camera boom pull inside the hazard ring and fill the screen with it.
+    if (b.kind === 'fabricator') world.obstacles.push({ pos: b.pos, radius: 2.9 });
+  }
+
+  // The technician keeps the fabricator during working hours. She remains
+  // fully autonomous otherwise — this only decides where she drifts back to.
+  const fab = world.landmarksBuilt.find((b) => b.kind === 'fabricator');
+  const tech = world.settlers.find((s) => s.name === 'Petra');
+  if (fab && tech) {
+    world.fabricatorPos = { ...fab.pos };
+    tech.roleAnchor = { role: 'fabricator', pos: { ...fab.pos }, radius: 16, fromHour: 6, toHour: 21 };
+    tech.home = { ...fab.pos };
+    tech.pos = findLand(rng, fab.pos, 5);
   }
 }
 
@@ -459,6 +549,13 @@ export function createWorld(seed: number): World {
     moveSpeed: 0,
     lastSprintAt: -999,
     witnessed: [],
+    // Emerson lands with nothing to fabricate from: the Scanner cannot be
+    // built without leaving Human Landing, which is the whole point.
+    materials: { alloy: 0, ore: 0, crystal: 0 },
+    items: { medkit: 0, energyCell: 0 },
+    unlocks: { scanner: false },
+    harvest: null,
+    scan: { lastAt: -9999, activeUntil: -9999, pulseStartedAt: -9999, radius: 0, nodeIds: [] },
   };
 
   const world: World = {
@@ -474,6 +571,9 @@ export function createWorld(seed: number): World {
     flora: [],
     obstacles: [],
     landmarksBuilt: [],
+    fabricatorPos: null,
+    fabrication: null,
+    pickups: [],
     camps: [
       { speciesId: 'human', label: 'Human camp', pos: { ...ANCHORS.humanCamp } },
       { speciesId: 'veyra', label: 'Veyra camp', pos: { ...ANCHORS.veyraCamp } },
@@ -497,6 +597,15 @@ export function createWorld(seed: number): World {
     const home = landmarkAt(settler.pos);
     if (home) settler.knownLandmarkIds.push(home.id);
     world.settlers.push(settler);
+  }
+  // The technician's temperament suits the post: practical, patient with
+  // people, happy to stay put while everyone else goes wandering.
+  const technician = world.settlers.find((s) => s.name === 'Petra');
+  if (technician) {
+    technician.personality.sociability = clamp01(technician.personality.sociability * 0.6 + 0.36);
+    technician.personality.initiative = clamp01(technician.personality.initiative * 0.5 + 0.42);
+    technician.personality.curiosity = clamp01(technician.personality.curiosity * 0.5);
+    technician.knowledge = ['fabrication', ...technician.knowledge.filter((k) => k !== 'fabrication')];
   }
 
   scatterFlora(world, rng);

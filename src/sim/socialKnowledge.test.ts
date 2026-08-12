@@ -24,6 +24,7 @@ import { chooseBuildSite, createProject, recordUse } from './structures';
 import { setTerrainSeed } from './terrain';
 import { createWorld } from './worldgen';
 import type { Settler, Structure, World } from './types';
+import { SETTLER_ROSTER } from './species';
 
 /**
  * The v0.6 thesis: PRIVATE EXPECTATION -> SOCIAL KNOWLEDGE -> INFORMAL CUSTOM.
@@ -729,7 +730,7 @@ describe('emergent social knowledge over a long unguided run', () => {
 
   it('never harms welfare in pursuit of etiquette', () => {
     const world = settled();
-    expect(world.settlers.length).toBe(21);
+    expect(world.settlers.length).toBe(SETTLER_ROSTER.length);
     for (const s of world.settlers) {
       expect(s.health, `${s.name} should not starve over social niceties`).toBeGreaterThan(40);
     }

@@ -47,6 +47,8 @@ interface UIState {
   dialogue: DialogueExchange | null;
   summary: TemporalSummary | null;
   helpOpen: boolean;
+  /** The Fabricator panel, opened by standing at the machine and pressing E. */
+  fabricatorOpen: boolean;
   /** True once the player has used mouse-look — retires the teaching prompt. */
   learnedLook: boolean;
   debugOpen: boolean;
@@ -75,6 +77,7 @@ interface UIState {
   closeDialogue(): void;
   setSummary(s: TemporalSummary | null): void;
   setHelpOpen(open: boolean): void;
+  setFabricatorOpen(open: boolean): void;
   setLearnedLook(v: boolean): void;
   toggleDebug(): void;
   toggleChronicle(): void;
@@ -104,6 +107,7 @@ export const useUI = create<UIState>((set) => ({
   dialogue: null,
   summary: null,
   helpOpen: false,
+  fabricatorOpen: false,
   learnedLook: localStorage.getItem('eden.learnedLook') === '1',
   debugOpen: false,
   chronicleOpen: true,
@@ -141,6 +145,7 @@ export const useUI = create<UIState>((set) => ({
   closeDialogue: () => set({ dialogue: null }),
   setSummary: (summary) => set({ summary }),
   setHelpOpen: (helpOpen) => set({ helpOpen }),
+  setFabricatorOpen: (fabricatorOpen) => set({ fabricatorOpen }),
   setLearnedLook: (learnedLook) => {
     localStorage.setItem('eden.learnedLook', learnedLook ? '1' : '0');
     set({ learnedLook });

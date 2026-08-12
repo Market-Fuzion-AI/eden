@@ -10,7 +10,7 @@ The differentiator is underneath:
 
 > *The world continues to think and act without you.*
 
-Twenty-one autonomous settlers (7 Humans, 7 Veyra, 7 Caelari), nine native creature archetypes, and
+Twenty-two autonomous settlers (8 Humans, 7 Veyra, 7 Caelari), nine native creature archetypes, and
 one very important small creature named **Lumi**. Every inhabitant selects its own goals from needs,
 personality, memory and what it believes about everyone else. They build, argue, share food, form
 expectations and change their minds whether or not you are watching. Creator Mode lets you read
@@ -91,6 +91,24 @@ click, or anything at all beyond a two-finger swipe.** Hold `W`, swipe to turn, 
 key stays down, which it did not before. Click-drag looks too, `C` sweeps the camera back behind you,
 and pointer lock is still there for mouse users who want it, as an option nobody has to find.
 
+**v0.7B** gave walking around a point —
+
+> *Leaving home earns you a reason to come back.*
+
+EDEN's first complete loop. The colony's **Fabricator** works, and Petra — the fabrication technician
+who keeps it through the working day — will tell you what it needs. It needs material the Riverlands
+do not have. **Salvaged Alloy** comes out of the wreck scattered along the descent path, **Conductive
+Ore** out of the Ashlands mineral seams, **Aether Crystal** only off the Skyreach at altitude. Each is
+worked with its own verb over a real interaction, and each node holds a finite amount.
+
+Bring all three home and the Fabricator builds the **Pathfinder Scanner Mk I**. Press `Q` and a pulse
+goes out; for a few seconds ARI can name and mark every usable material signature within about sixty
+metres. It is local and it expires — it answers *is there anything useful near me*, not *where is
+everything in the Skyreach*. There are two other recipes: a Field Medkit, and an Energy Cell that
+discharges into the scanner for one long-range sweep.
+
+Left home, found something, brought it back, turned it into technology, went further. That is the loop.
+
 ## Running it
 
 ```bash
@@ -160,7 +178,9 @@ the existing needs, utility and relationship systems decide to do.
 | `[` `]` / pinch | Zoom the camera in and out |
 | `Shift` | Sprint |
 | `Space` | Jump |
-| `E` | Gather glowberries or materials · contribute to a build · talk to a settler |
+| `E` | Salvage / extract / harvest · use the Fabricator · gather · talk · help build |
+| `Q` | Pathfinder Scanner sweep (once built) |
+| `H` | Use a Field Medkit |
 | `F` | Offer a glowberry (Lumi decides whether to take it) |
 | `R` | Ask a settler's permission to use their shelter |
 | Left click | Attack |
@@ -184,9 +204,16 @@ between sessions. Creator Mode always keeps your cursor.
 | **Caelari Skyreach** | Terraced plateau ~30m up, cliffs, vantage points | Caelari |
 
 Emerson starts at **Human Landing**: the drop pod, its scattered hull panels, a materials staging
-area, an inert fabrication platform waiting on a later milestone, and a hearth that was lit before
-the game began. Timber grows in the green and stone lies in the rock, so every people has one
-material at hand and must travel for the other.
+area, the working Fabricator, and a hearth that was lit before the game began. Timber grows in the
+green and stone lies in the rock, so every people has one material at hand and must travel for the
+other — and the same is true of the three fabrication materials, which is what turns the map into a
+reason to walk across it.
+
+| Material | Found in | Fabricates |
+| --- | --- | --- |
+| **Salvaged Alloy** | Riverlands wreckage | structure and casings |
+| **Conductive Ore** | Ashlands seams | energy transmission |
+| **Aether Crystal** | Skyreach, high ground only | scanning and focusing |
 
 ## Architecture
 
@@ -200,7 +227,8 @@ src/sim/      Pure TypeScript simulation. No Three.js, no React.
               provenance, agent-relative claims and informal norms,
               second-order beliefs about what other people expect (with
               provenance, confidence and decay) and the private
-              generalizations drawn from them,
+              generalizations drawn from them, player materials,
+              data-driven fabrication recipes and the Pathfinder Scanner,
               wildlife, Lumi, chronicle (with structured
               who/where/why/effects payloads), landmarks, three biome
               regions, deterministic dialogue, temporal summaries,

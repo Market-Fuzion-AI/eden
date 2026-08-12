@@ -2,7 +2,9 @@ import { DAY_SEC, STRUCT, YIELD } from './config';
 import { ariTick } from './ari';
 import { chronicle, clockOf } from './chronicle';
 import { settlerExecute, settlerNeedsTick, settlerThink } from './goals';
+import { fabricationTick } from './fabrication';
 import { separateAgents } from './movement';
+import { scanTick } from './scanner';
 import { setTerrainSeed, terrainSeed } from './terrain';
 import { tickOfferedFood } from './player';
 import { creatureExecute, creatureNeedsTick, creatureThink } from './wildlife';
@@ -40,6 +42,10 @@ export function simTick(world: World, dt: number): void {
     }
   }
   tickOfferedFood(world);
+  // The fabricator and the scanner run on simulation time, so accelerating
+  // time shortens the wait without ever completing a job twice.
+  fabricationTick(world);
+  scanTick(world);
 
   // Settlers.
   for (const s of world.settlers) {

@@ -21,6 +21,7 @@ import { chooseBuildSite, createProject, recordUse } from './structures';
 import { setTerrainSeed } from './terrain';
 import { createWorld } from './worldgen';
 import type { Settler, Structure, World } from './types';
+import { SETTLER_ROSTER } from './species';
 
 /**
  * The v0.5 thesis: EXPECTATION BEFORE LAW.
@@ -490,7 +491,7 @@ describe('the world produces norms on its own', () => {
     expect(granted + refused, 'someone should have asked someone').toBeGreaterThan(0);
 
     // And nobody was harmed by the norm system.
-    expect(world.settlers.length).toBe(21);
+    expect(world.settlers.length).toBe(SETTLER_ROSTER.length);
     for (const s of world.settlers) expect(s.health).toBeGreaterThan(40);
   });
 

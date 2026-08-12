@@ -3,7 +3,10 @@ import { formatClock } from '../sim/chronicle';
 import { placeName } from '../sim/landmarks';
 import { regionAt, regionShortName } from '../sim/regions';
 import { identifyFocus } from '../sim/identify';
-import { getInteractions } from '../sim/player';
+import { getInteractions, harvestProgress } from '../sim/player';
+import { MATERIALS } from '../sim/fabrication';
+import { scanCooldownRemaining, scanWouldSpendCell } from '../sim/scanner';
+import type { MaterialId } from '../sim/types';
 import { useUI } from '../state/store';
 import { inputState } from '../game/input';
 import { DialoguePanel } from './DialoguePanel';
@@ -43,6 +46,13 @@ export function LiveHUD() {
 
   // Where Emerson is, and which way he is looking — the two things a
   // third-person explorer actually needs on screen at all times.
+  // Recent pickups, shown briefly then dropped — no permanent inventory panel.
+  const recentPickups = world.pickups.filter((x) => world.timeSec - x.at < 4);
+  const carrying = (Object.keys(MATERIALS) as MaterialId[]).filter((id) => p.materials[id] > 0);
+  const harvesting = harvestProgress(world);
+  const scanCooldown = scanCooldownRemaining(world);
+  const scanCell = scanWouldSpendCell(world);
+
   const region = regionShortName(regionAt(p.pos.x, p.pos.z));
   const place = placeName(p.pos);
   const heading = ((-inputState.camYaw * 180) / Math.PI + 360 * 4) % 360;
@@ -83,6 +93,15 @@ export function LiveHUD() {
 
       <div className="hud-topright">
         <div className="clock-chip">{formatClock(world.timeSec)}</div>
+        {p.unlocks.scanner && (
+          <div className={`scan-chip ${scanCooldown <= 0 ? 'ready' : scanCell ? 'cell' : 'cooling'}`}>
+            {scanCooldown <= 0
+              ? 'Q · SCAN READY'
+              : scanCell
+                ? `Q · SPEND CELL (${Math.ceil(scanCooldown)}s)`
+                : `SCAN ${Math.ceil(scanCooldown)}s`}
+          </div>
+        )}
         {paused && <div className="hint-chip warn">PAUSED</div>}
         {!paused && speed !== 1 && <div className="hint-chip">{speed}×</div>}
         <div className="hint-chip dim">TAB Creator · ESC Help</div>
@@ -119,6 +138,22 @@ export function LiveHUD() {
             </div>
           </div>
           {p.berries > 0 && <div className="berries">◉ Glowberries × {p.berries}</div>}
+          {carrying.length > 0 && (
+            <div className="mat-row">
+              {carrying.map((id) => (
+                <span key={id} className="mat-chip">
+                  <span className="fab-swatch" style={{ background: MATERIALS[id].color }} />
+                  {p.materials[id]}
+                </span>
+              ))}
+            </div>
+          )}
+          {(p.items.medkit > 0 || p.items.energyCell > 0) && (
+            <div className="mat-row">
+              {p.items.medkit > 0 && <span className="mat-chip item">✚ {p.items.medkit} · H</span>}
+              {p.items.energyCell > 0 && <span className="mat-chip item">⬢ {p.items.energyCell}</span>}
+            </div>
+          )}
           {(p.wood > 0 || p.stone > 0) && (
             <div className="materials">
               {p.wood > 0 && <span>▣ Wood × {Math.round(p.wood)}</span>}
@@ -128,7 +163,24 @@ export function LiveHUD() {
         </div>
       </div>
 
+      {/* Material acquisition feedback — brief, then gone. */}
+      {recentPickups.length > 0 && (
+        <div className="pickup-feed">
+          {recentPickups.map((x, i) => (
+            <div key={`${x.at}-${i}`} className="pickup">
+              <span className="fab-swatch" style={{ background: MATERIALS[x.materialId].color }} />
+              +{x.amount} {MATERIALS[x.materialId].name}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="hud-bottomcenter">
+        {harvesting > 0 && (
+          <div className="harvest-bar">
+            <div className="harvest-fill" style={{ width: `${Math.round(harvesting * 100)}%` }} />
+          </div>
+        )}
         {prompts.map((pr) => (
           <div key={pr.key} className="prompt">
             <span className="prompt-key">{pr.key}</span> {pr.label}

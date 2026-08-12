@@ -9,6 +9,18 @@ import type { World } from './types';
  * cooldowns so she feels present without spamming. No external AI involved.
  */
 
+/**
+ * One line per region telling the player what is worth gathering there.
+ * Deliberately geological rather than a waypoint: it says "look around here",
+ * not "the ore is at these coordinates".
+ */
+const REGION_MATERIAL_HINT: Record<string, string> = {
+  riverlands:
+    'Hull fragments are scattered across the whole approach path. Salvaged alloy will not be hard to find near home.',
+  ashlands: 'Geological conductivity is elevated here. These seams should yield conductive ore.',
+  skyreach: 'Crystalline energy signatures, concentrated at altitude. Aether crystal, if I read this correctly.',
+};
+
 const AMBIENT_LINES = [
   'Local flora exhibits coordinated bioluminescent signaling. Fascinating.',
   'I am cataloguing nine distinct native organism archetypes. So far.',
@@ -31,6 +43,10 @@ export function ariTick(world: World): void {
     if (region !== 'wilds' && !f[`region_${region}`]) {
       f[`region_${region}`] = true;
       say(REGIONS.find((r) => r.id === region)!.ariLine);
+      // What this region is good for. Broad geological hints, said once —
+      // enough to point the player somewhere without marking every node.
+      const hint = REGION_MATERIAL_HINT[region];
+      if (hint) say(hint);
     }
   }
 

@@ -359,6 +359,39 @@ export const SOCIAL = {
   askConfidenceFloor: 0.22,
 } as const;
 
+/**
+ * The first player progression loop.
+ *
+ * Tuned so one deliberate circuit — Riverlands, Ashlands, Skyreach and home —
+ * completes the Scanner. The Scanner costs 4 alloy + 3 ore + 2 crystal, which
+ * at these yields is two salvage stops, two extractions and two harvests.
+ */
+export const GATHER = {
+  /** How close Emerson must be to work a node. */
+  range: 3.2,
+  /** Seconds of interaction per pull. Long enough to feel physical, short
+   *  enough that six of them are not a chore. */
+  duration: 1.3,
+  /** Walking this far from where the interaction began cancels it. */
+  cancelDistance: 2.2,
+} as const;
+
+export const SCANNER = {
+  /** Local, not regional: enough to answer "is anything useful near me?". */
+  radius: 58,
+  /** An energy cell buys reach, not omniscience. */
+  boostedRadius: 95,
+  /** Seconds the highlight persists before the world goes quiet again. */
+  highlight: 14,
+  boostedHighlight: 22,
+  cooldown: 22,
+  /** Seconds the expanding pulse ring takes to reach full radius. */
+  pulseDuration: 1.1,
+} as const;
+
+/** How close Emerson must stand to operate the fabricator. */
+export const FABRICATOR = { range: 4.6 } as const;
+
 /** Glowberry abundance, adjustable from Creator Mode. */
 export const YIELD = {
   normal: { regenScale: 1, capScale: 1, label: 'Normal' },

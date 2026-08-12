@@ -1,7 +1,8 @@
 import { isNight } from './chronicle';
 import { placeName } from './landmarks';
 import { INTELLIGENT_SPECIES } from './species';
-import type { IntelligentSpeciesId, Settler, World } from './types';
+import type { IntelligentSpeciesId, MaterialId, Settler, World } from './types';
+import { MATERIALS, RECIPE_BY_ID } from './fabrication';
 
 /**
  * Deterministic contextual dialogue. Lines are *derived* from live simulation
@@ -133,11 +134,69 @@ function colorLine(s: Settler, world: World, affinity: number): string | null {
  * Build the exchange. Pure: produces the lines and the relationship values,
  * but does not mutate the world — `playerTalk` applies the effects.
  */
+/**
+ * Petra's lines. Deterministic and state-aware: what she says depends on
+ * whether the scanner exists yet and what Emerson is actually carrying, so the
+ * conversation tracks the loop without any quest bookkeeping behind it.
+ */
+function technicianLines(world: World, s: Settler, firstMeeting: boolean): DialogueLine[] {
+  const p = world.player;
+  const out: DialogueLine[] = [];
+  const say = (text: string) => out.push({ speaker: s.name, text });
+
+  if (firstMeeting) {
+    say('You must be the pathfinder. Petra — I keep the Fabricator running, such as it is.');
+    say(
+      'The machine survived the landing. What did not survive is the supply chain behind it. It can still build almost anything, but only out of feedstock I do not have.',
+    );
+    say(
+      'Bring me usable material and I can start rebuilding your field kit. Eden has plenty — it just is not evenly spread.',
+    );
+    return out;
+  }
+
+  if (!p.unlocks.scanner) {
+    const scanner = RECIPE_BY_ID['scanner-mk1'];
+    const missing: string[] = [];
+    for (const [id, need] of Object.entries(scanner.costs)) {
+      const have = p.materials[id as MaterialId];
+      if (have < (need ?? 0)) missing.push(`${(need ?? 0) - have} more ${MATERIALS[id as MaterialId].name}`);
+    }
+    if (missing.length === 0) {
+      say('That is everything the scanner needs. Load it into the hopper and I will run the sequence.');
+    } else {
+      say(`Still short: ${missing.join(', ')}.`);
+      say(
+        'Alloy is scattered all through the Riverlands — the descent shed debris the whole way down. Conductive ore is an Ashlands problem. The crystal only grows high up on the Skyreach.',
+      );
+    }
+    return out;
+  }
+
+  say('Scanner is holding calibration. Tell ARI if the resolution drifts.');
+  say('Bring me more material when you find it. There is a long list of things this colony still cannot make.');
+  return out;
+}
+
 export function buildExchange(world: World, s: Settler): DialogueExchange {
   const rel = s.relationships.emerson;
   const affinity = rel?.affinity ?? 0;
   const firstMeeting = !rel || rel.interactions === 0;
   const speciesDef = INTELLIGENT_SPECIES[s.speciesId as IntelligentSpeciesId];
+
+  // The fabrication technician orients Emerson instead of small-talking. This
+  // is the only guidance the first loop gets: no quest, no marker, just a
+  // colonist explaining what her machine needs and where it might come from.
+  if (s.roleAnchor?.role === 'fabricator') {
+    return {
+      settlerId: s.id,
+      name: s.name,
+      speciesLabel: 'Fabrication technician',
+      affinity,
+      firstMeeting,
+      lines: technicianLines(world, s, firstMeeting),
+    };
+  }
 
   const lines: DialogueLine[] = [{ speaker: s.name, text: greetingLine(s, affinity, firstMeeting) }];
 

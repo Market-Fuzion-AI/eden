@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { Scene } from './render/Scene';
 import { CreatorUI } from './ui/CreatorUI';
 import { DebugOverlay } from './ui/DebugOverlay';
+import { FabricatorPanel } from './ui/FabricatorPanel';
 import { HelpOverlay } from './ui/HelpOverlay';
 import { LiveHUD } from './ui/LiveHUD';
 import { useUI } from './state/store';
@@ -11,6 +12,7 @@ export default function App() {
   const mode = useUI((s) => s.mode);
   const debugOpen = useUI((s) => s.debugOpen);
   const helpOpen = useUI((s) => s.helpOpen);
+  const fabricatorOpen = useUI((s) => s.fabricatorOpen);
 
   return (
     <div className={`app mode-${mode}`}>
@@ -28,6 +30,7 @@ export default function App() {
       </Canvas>
       <div className="mode-tint" />
       {mode === 'live' ? <LiveHUD /> : <CreatorUI />}
+      {mode === 'live' && fabricatorOpen && <FabricatorPanel />}
       {debugOpen && <DebugOverlay />}
       {helpOpen && <HelpOverlay />}
     </div>

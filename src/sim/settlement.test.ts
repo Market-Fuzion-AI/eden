@@ -16,6 +16,7 @@ import { heightAt, setTerrainSeed } from './terrain';
 import { createWorld } from './worldgen';
 import type { World } from './types';
 import { dist } from './vec';
+import { SETTLER_ROSTER } from './species';
 
 /**
  * The v0.4 thesis: NEEDS + RELATIONSHIPS + RESOURCES SHOULD CREATE PLACE.
@@ -266,7 +267,7 @@ describe('bounded and safe over long runs', () => {
   it('keeps structure count, spacing and welfare within bounds', () => {
     const world = settledWorld();
     expect(world.structures.length).toBeLessThanOrEqual(STRUCT.globalCap);
-    expect(world.settlers.length).toBe(21);
+    expect(world.settlers.length).toBe(SETTLER_ROSTER.length);
 
     // No overlapping buildings.
     for (let i = 0; i < world.structures.length; i++) {

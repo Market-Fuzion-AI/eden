@@ -6,6 +6,7 @@ import { EdenEnvironment } from './Environment';
 import { LandingSite } from './LandingSite';
 import { MistLayer } from './MistLayer';
 import { PlayerRig } from './PlayerRig';
+import { ScannerFX } from './ScannerFX';
 import { ResourceNodes } from './ResourceNodes';
 import { SocialLinks } from './SocialLinks';
 import { StructureVisuals } from './StructureVisuals';
@@ -28,6 +29,7 @@ export function Scene() {
       <MistLayer />
       <Agents />
       <PlayerRig />
+      <ScannerFX />
       {mode === 'creator' && <CreatorRig />}
       {mode === 'creator' && <SocialLinks />}
     </>

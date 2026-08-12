@@ -332,6 +332,27 @@ export interface Settler extends AgentCommon {
   socialCooldownUntil: number;
   /** Sim time until which Emerson's conversation holds this settler in place. */
   talkingUntil: number;
+  /**
+   * A post this settler keeps during working hours.
+   *
+   * The smallest possible job system, and deliberately so: it does not tell
+   * them what to do, only where to drift back to when nothing more pressing is
+   * happening. They still get hungry, tired and sociable on their own terms —
+   * but the colony's fabrication technician does not wander off to the Skyreach
+   * for three days and take a gameplay system with her.
+   */
+  roleAnchor?: RoleAnchor;
+}
+
+export interface RoleAnchor {
+  /** Identifies the role for inspection and dialogue. */
+  role: 'fabricator';
+  pos: V2;
+  /** How far they may drift from the post before being drawn back. */
+  radius: number;
+  /** Hours of the in-world day the post is kept, inclusive start, exclusive end. */
+  fromHour: number;
+  toHour: number;
 }
 
 /** A settler's intention to build or help build something. */
@@ -367,7 +388,42 @@ export interface Creature extends AgentCommon {
 
 export type Entity = Settler | Creature;
 
-export type ResourceType = 'glowberry' | 'wood' | 'stone' | 'restspot';
+/**
+ * Node types. `alloy`/`ore`/`crystal` are player fabrication materials; the
+ * settlers' autonomous construction only ever asks for `wood` and `stone`, so
+ * the two economies share one node model without competing for stock.
+ */
+export type ResourceType = 'glowberry' | 'wood' | 'stone' | 'restspot' | 'alloy' | 'ore' | 'crystal';
+
+/** Player-facing fabrication materials. */
+export type MaterialId = 'alloy' | 'ore' | 'crystal';
+
+export type RecipeId = 'scanner-mk1' | 'medkit' | 'energy-cell';
+
+/** A fabrication job in flight. Driven by sim time, so speed changes are safe. */
+export interface FabricationJob {
+  recipeId: RecipeId;
+  startedAt: number;
+  endsAt: number;
+}
+
+/** An in-progress gathering interaction. Real-time, like the rest of the player. */
+export interface HarvestAction {
+  nodeId: EntityId;
+  startedAt: number;
+  endsAt: number;
+  /** Where Emerson stood when he started — walking away cancels it. */
+  from: V2;
+}
+
+/** Transient scanner state. */
+export interface ScanState {
+  lastAt: number;
+  activeUntil: number;
+  pulseStartedAt: number;
+  radius: number;
+  nodeIds: EntityId[];
+}
 export type CarriedResource = 'glowberry' | 'wood' | 'stone';
 
 export type StructureType = 'campfire' | 'shelter';
@@ -562,6 +618,15 @@ export interface PlayerState {
   lastSprintAt: number;
   /** Norm events Emerson was actually present for. Bounded. */
   witnessed: WitnessedNorm[];
+  /** Player fabrication materials. Distinct from the settlers' wood/stone. */
+  materials: Record<MaterialId, number>;
+  /** Fabricated consumables and components. */
+  items: { medkit: number; energyCell: number };
+  /** Permanent capabilities earned through fabrication. */
+  unlocks: { scanner: boolean };
+  /** The gathering interaction in progress, if any. */
+  harvest: HarvestAction | null;
+  scan: ScanState;
 }
 
 export type Weather = 'clear' | 'mist';
@@ -587,6 +652,8 @@ export interface World {
   obstacles: Obstacle[];
   /** Landing infrastructure at Human Landing. Scenery, placed once at worldgen. */
   landmarksBuilt: BuiltLandmark[];
+  /** Where the fabricator stands, for interaction and the technician's post. */
+  fabricatorPos: V2 | null;
   camps: Camp[];
   chronicle: ChronicleEvent[];
   chronicleCounter: number;
@@ -594,6 +661,10 @@ export interface World {
   /** Glowberry abundance — the single controlled scarcity lever. */
   yieldMode: YieldMode;
   flags: WorldFlags;
+  /** The fabricator's current job, or null when idle. */
+  fabrication: FabricationJob | null;
+  /** Recent material pickups, for brief HUD feedback. Bounded. */
+  pickups: { materialId: MaterialId; amount: number; at: number }[];
   /** Pending ARI lines, drained by the game loop into the HUD. */
   ariQueue: string[];
   /** Set by sim when entities/resources are added or removed; loop bumps store versions. */

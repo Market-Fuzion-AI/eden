@@ -6,6 +6,7 @@ import { simTick } from './simulation';
 import { heightAt, isWalkable, isWater, setTerrainSeed, slopeAt, terrainSeed } from './terrain';
 import { createWorld } from './worldgen';
 import type { World } from './types';
+import { SETTLER_ROSTER } from './species';
 
 /**
  * The v0.7A thesis: LIVE INSIDE AN AUTONOMOUS WORLD.
@@ -180,7 +181,7 @@ describe('starting geography', () => {
       if (regionAt(s.pos.x, s.pos.z) !== SPECIES_REGION[s.speciesId]) travellers++;
     }
     expect(travellers, 'settlers should range beyond their home region').toBeGreaterThan(0);
-    expect(world.settlers.length).toBe(21);
+    expect(world.settlers.length).toBe(SETTLER_ROSTER.length);
   });
 
   it('lets every region feed and house its people', () => {

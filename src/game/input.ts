@@ -1,6 +1,7 @@
 import { getWorld } from '../sim';
 import { ariCreatorToggle } from '../sim/ari';
 import {
+  fabricatorAtHand,
   playerAskPermission,
   playerAttack,
   playerDodge,
@@ -8,6 +9,8 @@ import {
   playerOfferFood,
   playerTalk,
 } from '../sim/player';
+import { useMedkit } from '../sim/fabrication';
+import { performScan } from '../sim/scanner';
 import { useUI } from '../state/store';
 import { addLook, requestRecenter } from './camera';
 
@@ -67,6 +70,7 @@ export function installInput(): void {
       ui.setMode(next);
       ui.setHelpOpen(false);
       ui.closeDialogue();
+      ui.setFabricatorOpen(false);
       // Creator Mode is a cursor mode: never hold pointer lock there.
       releasePointerLock();
       if (next === 'creator') ariCreatorToggle(getWorld());
@@ -78,6 +82,10 @@ export function installInput(): void {
       // releases the lock itself; we simply do not also open a menu, so the
       // key never feels like it did two things at once.
       if (isPointerLocked()) return;
+      if (ui.fabricatorOpen) {
+        ui.setFabricatorOpen(false);
+        return;
+      }
       if (ui.dialogue) {
         ui.closeDialogue();
         return;
@@ -107,12 +115,32 @@ export function installInput(): void {
     if (ui.mode === 'live' && !ui.helpOpen) {
       if (e.code === 'KeyE') {
         const world = getWorld();
-        // Gathering takes precedence when standing at a bush; otherwise talk.
-        const acted = playerGather(world);
-        if (!acted) {
-          const exchange = playerTalk(world);
-          if (exchange) ui.openDialogue(exchange);
+        // Standing at the fabricator opens it; otherwise gather, otherwise talk.
+        if (fabricatorAtHand(world) && !ui.fabricatorOpen) {
+          ui.setFabricatorOpen(true);
+        } else {
+          const acted = playerGather(world);
+          if (!acted) {
+            const exchange = playerTalk(world);
+            if (exchange) ui.openDialogue(exchange);
+          }
         }
+      }
+      // Scanner sweep — the payoff of the first fabrication loop.
+      if (e.code === 'KeyQ') {
+        const world = getWorld();
+        const result = performScan(world);
+        if (!result.ok && result.reason === 'locked' && !world.flags.scannerHinted) {
+          world.flags.scannerHinted = true;
+          world.ariQueue.push(
+            'No field analysis module installed. Petra could build one at the Fabricator, given the materials.',
+          );
+        }
+      }
+      if (e.code === 'KeyH') {
+        const world = getWorld();
+        const healed = useMedkit(world);
+        if (healed > 0) world.ariQueue.push(`Medkit administered. ${Math.round(healed)} points recovered.`);
       }
       if (e.code === 'KeyF') playerOfferFood(getWorld());
       if (e.code === 'KeyR') {
