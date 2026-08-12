@@ -140,7 +140,7 @@ export const KNOWLEDGE_POOL = [
 // Native creatures
 // ---------------------------------------------------------------------------
 
-export type BodyPlan = 'lumi' | 'grazer' | 'strider' | 'blob' | 'floater' | 'fish' | 'bird' | 'moth' | 'raptor';
+export type BodyPlan = 'lumi' | 'grazer' | 'strider' | 'blob' | 'floater' | 'fish' | 'bird' | 'moth' | 'raptor' | 'warden';
 
 export interface CreatureSpeciesDef {
   id: string;
@@ -159,6 +159,13 @@ export interface CreatureSpeciesDef {
   /** Where this species lives; keys into worldgen anchor points. */
   homeAnchor: string;
   aquatic?: boolean;
+  /** Ancient machine rather than Eden biology. Changes salvage and ARI's read. */
+  synthetic?: boolean;
+  /**
+   * Can threaten Emerson. Only these creatures carry a `combat` record, get a
+   * lock-on reticle, or ever attack anybody.
+   */
+  dangerous?: { health: number; damage: number; attackRange: number; cooldown: number };
   hover?: boolean;
   hoverHeight?: number;
   nocturnal?: boolean;
@@ -274,6 +281,32 @@ export const CREATURE_SPECIES: CreatureSpeciesDef[] = [
     homeAnchor: 'rocksSouth',
     replication: { cap: 2, chancePerThink: 0.004 },
     palette: { body: '#8a5a4a', belly: '#c9a06a', accent: '#4e2f28', glow: '#ff6a4a' },
+    // The introductory encounter: territorial rather than murderous. It warns
+    // first, commits slowly, and gives up if you leave its ground.
+    dangerous: { health: 90, damage: 13, attackRange: 2.6, cooldown: 2.4 },
+  },
+  {
+    // EDEN's first synthetic fauna. Not a robot animal and not colony
+    // technology: something that was already maintaining this planet long
+    // before anybody arrived to name it. What it guards is not answered.
+    id: 'warden',
+    name: 'Warden Wisp',
+    plan: 'warden',
+    // Deliberately large. It stands among ten-metre pylons and it is the thing
+    // guarding them; at human scale it read as a piece of litter.
+    scale: 1.75,
+    speed: 3.1,
+    traits: { aggression: 0.5, curiosity: 0.2, sociability: 0, fearfulness: 0, metabolism: 0.05 },
+    homeAnchor: 'sunkenRing',
+    hover: true,
+    hoverHeight: 2.7,
+    synthetic: true,
+    // Harder than the Rakhor, and slower to commit — the extra wind-up is what
+    // keeps it fair.
+    dangerous: { health: 130, damage: 19, attackRange: 9.5, cooldown: 3.4 },
+    // Machines do not breed.
+    replication: { cap: 0, chancePerThink: 0 },
+    palette: { body: '#a3abbd', belly: '#6d7688', accent: '#333b4c', glow: '#7fe7ff' },
   },
 ];
 

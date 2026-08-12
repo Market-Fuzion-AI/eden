@@ -29,7 +29,9 @@ export type GoalType =
   | 'build'
   | 'help-build'
   | 'gather-at-fire'
-  | 'ask-to-use';
+  | 'ask-to-use'
+  /** A dangerous creature engaged with Emerson; driven by `threats.ts`. */
+  | 'threat';
 
 export type GoalPhase = 'travel' | 'act' | 'done';
 
@@ -382,6 +384,13 @@ export interface Creature extends AgentCommon {
   replicationCooldownUntil: number;
   aggroUntil: number;
   visualVariant: number;
+  /** Sim time of the last hit taken, for the flinch flash. */
+  hitAt?: number;
+  /**
+   * Combat state, present only on creatures capable of threatening anybody.
+   * Its absence is what makes a mossling harmless.
+   */
+  combat?: CombatMemory;
   /** Present only on the individual named Lumi. */
   lumi?: LumiState;
 }
@@ -398,7 +407,66 @@ export type ResourceType = 'glowberry' | 'wood' | 'stone' | 'restspot' | 'alloy'
 /** Player-facing fabrication materials. */
 export type MaterialId = 'alloy' | 'ore' | 'crystal';
 
-export type RecipeId = 'scanner-mk1' | 'medkit' | 'energy-cell';
+/**
+ * Salvage recovered from disabled synthetic fauna. Not a gathering resource:
+ * there is no node for it anywhere in the valley, and the only way to hold one
+ * is to have survived a Warden.
+ */
+export type SalvageId = 'coreFragment';
+
+export type EquippedWeapon = 'none' | 'arcBlade';
+
+/** Player attack phases. Damage lands only during `active`. */
+export type StrikePhase = 'windup' | 'active' | 'recover';
+
+export interface StrikeState {
+  kind: 'light' | 'heavy';
+  phase: StrikePhase;
+  /** Real seconds remaining in the current phase. */
+  timer: number;
+  /** Position in a light chain, 1-based. */
+  chain: number;
+  /**
+   * Entities already hit by *this* swing. One strike may never damage the same
+   * target twice, however long its active window is.
+   */
+  hitIds: EntityId[];
+}
+
+/**
+ * How a dangerous creature currently regards Emerson.
+ *
+ * Every transition is explicit and every attack is preceded by `windup`, so
+ * damage is never a surprise. `warn` is the state that makes retreat a real
+ * option: the creature is posturing, not yet committed.
+ */
+export type ThreatState =
+  | 'calm'
+  | 'alert'
+  | 'warn'
+  | 'hostile'
+  | 'windup'
+  | 'strike'
+  | 'recover'
+  | 'disengage';
+
+export interface CombatMemory {
+  state: ThreatState;
+  /** Sim time the current state began. */
+  since: number;
+  /** Who it is engaged with. Only ever Emerson in v0.8. */
+  targetId: EntityId | null;
+  /** Last moment the target was actually perceived. */
+  lastSeenAt: number;
+  /** Sim time this creature may next begin a wind-up. */
+  nextAttackAt: number;
+  /** Where it considers home — it will not chase beyond `THREAT.leash` of this. */
+  territory: V2;
+  /** True once it has landed a hit this engagement (used for chronicle once-flags). */
+  hasStruck: boolean;
+}
+
+export type RecipeId = 'scanner-mk1' | 'arc-blade-mk1' | 'medkit' | 'energy-cell';
 
 /** A fabrication job in flight. Driven by sim time, so speed changes are safe. */
 export interface FabricationJob {
@@ -587,6 +655,22 @@ export interface BuiltLandmark {
   rot: number;
 }
 
+/**
+ * The Sunken Ring: half-buried structures nobody in the valley built.
+ *
+ * Scenery with a position, exactly like the landing site — the site is a place
+ * to arrive at and a reason to wonder, not a system. Nothing here explains
+ * itself, and v0.8 deliberately never answers the question it raises.
+ */
+export interface SitePropItem {
+  kind: 'pylon' | 'arc' | 'shard' | 'plate';
+  pos: V2;
+  rot: number;
+  scale: number;
+  /** Sunk into the ground by this much, in metres. */
+  sink: number;
+}
+
 export interface PlayerState {
   id: 'emerson';
   name: 'Emerson';
@@ -602,12 +686,16 @@ export interface PlayerState {
   /** Construction materials Emerson is carrying. */
   wood: number;
   stone: number;
-  attackTimer: number;
-  attackCooldown: number;
   dodgeTimer: number;
   dodgeCooldown: number;
+  /**
+   * The direction a roll travels in, fixed when it starts. Separate from
+   * `heading` so a locked-on player can roll sideways while still facing what
+   * is trying to kill them.
+   */
+  dodgeHeading: number;
+  /** True only for the length of an emergency extraction. */
   dead: boolean;
-  respawnTimer: number;
   /**
    * Current ground speed the movement integrator is easing toward the input.
    * Separate from `speed` (the distance actually covered, after water drag and
@@ -622,11 +710,30 @@ export interface PlayerState {
   materials: Record<MaterialId, number>;
   /** Fabricated consumables and components. */
   items: { medkit: number; energyCell: number };
-  /** Permanent capabilities earned through fabrication. */
-  unlocks: { scanner: boolean };
+  /**
+   * Permanent capabilities earned through fabrication. Never revoked — an
+   * emergency extraction costs materials, never a capability.
+   */
+  unlocks: { scanner: boolean; arcBlade: boolean };
   /** The gathering interaction in progress, if any. */
   harvest: HarvestAction | null;
   scan: ScanState;
+  /** What Emerson is holding. One slot, deliberately. */
+  equipped: EquippedWeapon;
+  /** The swing in progress, if any. */
+  strike: StrikeState | null;
+  /** Sim time until which a dodge roll makes Emerson untouchable. */
+  invulnUntil: number;
+  /** Currently locked target, or null. */
+  lockedId: EntityId | null;
+  /** Sim time of the last damage taken — gates out-of-combat regeneration. */
+  lastHurtAt: number;
+  /** Salvage recovered from synthetics. */
+  salvage: Record<SalvageId, number>;
+  /** Emergency extraction in progress: fade out, relocate, fade in. */
+  extraction: { startedAt: number; endsAt: number } | null;
+  /** How many times ARI has had to pull Emerson out. */
+  extractions: number;
 }
 
 export type Weather = 'clear' | 'mist';
@@ -652,6 +759,8 @@ export interface World {
   obstacles: Obstacle[];
   /** Landing infrastructure at Human Landing. Scenery, placed once at worldgen. */
   landmarksBuilt: BuiltLandmark[];
+  /** The ancient synthetic site at the Sunken Ring. Scenery, placed once. */
+  siteProps: SitePropItem[];
   /** Where the fabricator stands, for interaction and the technician's post. */
   fabricatorPos: V2 | null;
   camps: Camp[];
@@ -665,6 +774,13 @@ export interface World {
   fabrication: FabricationJob | null;
   /** Recent material pickups, for brief HUD feedback. Bounded. */
   pickups: { materialId: MaterialId; amount: number; at: number }[];
+  /** Recent synthetic salvage, likewise. */
+  pickupsSalvage: { salvageId: SalvageId; amount: number; at: number }[];
+  /**
+   * Injected by `index.ts` so combat can name a place without importing the
+   * landmark table (which would close an import cycle through worldgen).
+   */
+  landmarkNameAt?: (p: V2) => string;
   /** Pending ARI lines, drained by the game loop into the HUD. */
   ariQueue: string[];
   /** Set by sim when entities/resources are added or removed; loop bumps store versions. */

@@ -1,4 +1,5 @@
 import { CREATURE_SPECIES_BY_ID, INTELLIGENT_SPECIES } from './species';
+import { dispositionOf as threatDisposition } from './threats';
 import type { Entity, IntelligentSpeciesId, World } from './types';
 import { dist } from './vec';
 
@@ -15,6 +16,18 @@ export interface Identification {
   disposition: string;
   /** Lumi and other notable individuals get emphasis. */
   notable: boolean;
+  /**
+   * Scanner read-out. Present only with the Pathfinder Scanner installed —
+   * without it Emerson sees a shape and has to judge for himself, which is the
+   * point of building the thing.
+   */
+  scan?: {
+    category: 'Biological' | 'Synthetic';
+    threat: 'Passive' | 'Defensive' | 'Hostile' | 'Dormant';
+  };
+  /** 0..1 remaining condition of something that can actually be fought. */
+  healthFrac?: number;
+  dangerous: boolean;
 }
 
 const IDENT_RANGE = 22;
@@ -31,8 +44,27 @@ function dispositionOf(world: World, e: Entity): string {
     if (e.personality.sociability > 0.65) return 'open';
     return 'neutral';
   }
+  // Dangerous fauna report the state machine that is actually driving them,
+  // rather than a species stereotype: a Rakhor that has not noticed Emerson
+  // genuinely is placid, and saying otherwise would make every read-out a lie.
+  if (e.combat) {
+    switch (e.combat.state) {
+      case 'hostile':
+      case 'windup':
+      case 'strike':
+      case 'recover':
+        return 'hostile';
+      case 'warn':
+        return 'warning';
+      case 'alert':
+        return 'watching';
+      case 'disengage':
+        return 'withdrawing';
+      default:
+        return CREATURE_SPECIES_BY_ID[e.speciesId].synthetic ? 'dormant' : 'unbothered';
+    }
+  }
   if (e.threatUntil > world.timeSec) return 'alarmed';
-  if (e.aggroUntil > world.timeSec) return 'hostile';
   if (e.lumi) {
     const t = e.lumi.trust;
     if (t >= 75) return 'bonded';
@@ -87,6 +119,7 @@ export function identifyFocus(world: World, camForwardX: number, camForwardZ: nu
       line: `${def.name} settler`,
       disposition,
       notable: false,
+      dangerous: false,
     };
   }
   const def = CREATURE_SPECIES_BY_ID[e.speciesId];
@@ -97,16 +130,32 @@ export function identifyFocus(world: World, camForwardX: number, camForwardZ: nu
       line: world.flags.lumiMet ? `${def.name} · unique individual` : `Unknown ${def.name}`,
       disposition,
       notable: true,
+      dangerous: false,
     };
   }
-  const role =
-    def.traits.aggression > 0.6 ? 'Native predator' : def.aquatic ? 'Native river life' : 'Native lifeform';
+  const role = def.synthetic
+    ? 'Unknown synthetic organism'
+    : def.dangerous
+      ? 'Native predator'
+      : def.traits.aggression > 0.6
+        ? 'Native predator'
+        : def.aquatic
+          ? 'Native river life'
+          : 'Native lifeform';
+  const maxHealth = def.dangerous?.health ?? 100;
   return {
     id: e.id,
     name: def.name.toUpperCase(),
     line: e.ageStage === 'juvenile' ? `${role} · juvenile` : role,
     disposition,
-    notable: false,
+    notable: Boolean(def.synthetic),
+    dangerous: Boolean(def.dangerous),
+    healthFrac: def.dangerous ? Math.max(0, Math.min(1, e.health / maxHealth)) : undefined,
+    // The scanner is what turns "something is moving over there" into a
+    // classification. Without it Emerson gets the name and the posture only.
+    scan: world.player.unlocks.scanner
+      ? { category: def.synthetic ? 'Synthetic' : 'Biological', threat: threatDisposition(e) }
+      : undefined,
   };
 }
 

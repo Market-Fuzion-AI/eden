@@ -1534,3 +1534,175 @@
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding-top: 8px;
 }
+
+/* --- v0.8 combat ---------------------------------------------------------- */
+
+/*
+ * Health is quiet until it matters. Out of a fight the vitals stay the thin
+ * line they have been since v0.2; the moment something is actually trying to
+ * kill Emerson the bar grows, gains a number and picks up a border.
+ */
+.vitals.engaged {
+  border-color: rgba(255, 95, 106, 0.45);
+}
+.vital-row.vital-hp.prominent .bar {
+  height: 9px;
+}
+.vital-row.vital-hp.prominent {
+  gap: 8px;
+}
+.vital-num {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fff;
+  min-width: 26px;
+  text-align: right;
+}
+.vitals.critical .bar-fill.hp {
+  background: var(--bad);
+  animation: vital-pulse 0.9s ease-in-out infinite;
+}
+@keyframes vital-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Damage feedback: a red rim, never a full-screen wash that hides the fight. */
+.hurt-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(255, 40, 55, 0) 45%, rgba(255, 40, 55, 0.55) 100%);
+  transition: opacity 0.12s linear;
+}
+.hurt-vignette.critical {
+  opacity: 0.42;
+  animation: crit-breathe 1.6s ease-in-out infinite;
+}
+@keyframes crit-breathe {
+  0%, 100% { opacity: 0.26; }
+  50% { opacity: 0.5; }
+}
+
+/* Identification card additions: condition bar and the scanner classification. */
+.ident-card.danger {
+  border-right-color: var(--bad);
+}
+.ident-card.danger .ident-name {
+  color: var(--bad);
+}
+.ident-hp {
+  height: 3px;
+  margin-top: 6px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+.ident-hp-fill {
+  height: 100%;
+  background: var(--bad);
+  float: right;
+  transition: width 0.16s linear;
+}
+.ident-scan {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 6px;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.ident-cat,
+.ident-threat {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 1px 6px;
+  color: var(--text-dim);
+}
+.ident-cat.biological { color: var(--good); border-color: rgba(111, 232, 159, 0.4); }
+.ident-cat.synthetic { color: var(--accent); border-color: var(--accent-soft); }
+.ident-threat.t-hostile { color: var(--bad); border-color: rgba(255, 95, 106, 0.45); }
+.ident-threat.t-defensive { color: var(--warn); border-color: rgba(255, 176, 63, 0.45); }
+.ident-threat.t-dormant { color: var(--trust); border-color: rgba(192, 139, 255, 0.4); }
+
+/*
+ * The locked target. The only floating health bar in EDEN — it exists because
+ * the player explicitly asked to track something, and it leaves with the lock.
+ */
+.lock-card {
+  position: absolute;
+  top: 92px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 210px;
+  text-align: center;
+  pointer-events: none;
+  animation: ari-in 0.18s ease;
+}
+.lock-name {
+  font-size: 11px;
+  letter-spacing: 0.28em;
+  color: #fff;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+}
+.lock-bar {
+  margin-top: 4px;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.lock-fill {
+  height: 100%;
+  background: var(--bad);
+  transition: width 0.14s linear;
+}
+
+.mat-chip.synth {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+}
+.pickup.synth {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+}
+
+/* Creator Mode: live combat state on whatever is currently selected. */
+.combat-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.combat-chip {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--text);
+}
+.combat-chip.s-calm,
+.combat-chip.s-clear { color: var(--good); border-color: rgba(111, 232, 159, 0.4); }
+.combat-chip.s-alert,
+.combat-chip.s-warn,
+.combat-chip.s-disengage { color: var(--warn); border-color: rgba(255, 176, 63, 0.45); }
+.combat-chip.s-hostile,
+.combat-chip.s-windup,
+.combat-chip.s-strike,
+.combat-chip.s-recover,
+.combat-chip.s-in-combat,
+.combat-chip.s-extracting { color: var(--bad); border-color: rgba(255, 95, 106, 0.5); }
+.combat-timer {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+}
+
+.help-section-title {
+  margin: 14px 0 6px;
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  color: var(--bad);
+  border-top: 1px solid rgba(255, 95, 106, 0.25);
+  padding-top: 10px;
+}

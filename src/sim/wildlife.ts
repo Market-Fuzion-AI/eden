@@ -6,6 +6,7 @@ import { stand, stepToward } from './movement';
 import { CREATURE_SPECIES_BY_ID } from './species';
 import { isWater, riverX } from './terrain';
 import { makeCreature } from './worldgen';
+import { dispositionOf, threatExecute, threatThink } from './threats';
 import type { Creature, Goal, GoalType, World } from './types';
 import { angleTo, clamp100, dist, lerpAngle, v2, type V2 } from './vec';
 
@@ -249,6 +250,16 @@ export function creatureThink(world: World, c: Creature): void {
 
   maybeReplicate(world, c);
 
+  // Dangerous creatures consult the threat machine first. When it declines to
+  // take control they fall through to the ordinary life below — a predator
+  // that is not currently interested in anybody still forages and roams.
+  if (c.combat && threatThink(world, c)) {
+    c.goal = mkGoal('threat', threatLabel(c), t, { deadline: t + 30 });
+    c.goalReason = { summary: threatReason(world, c), scores: [] };
+    c.nextThinkAt = t + 0.25;
+    return;
+  }
+
   if (c.threatUntil > t && c.threatPos) {
     // Keep fleeing — handled in execute.
     c.goalReason = { summary: ['Threatened!', 'Putting distance between itself and danger'], scores: [] };
@@ -260,14 +271,6 @@ export function creatureThink(world: World, c: Creature): void {
   if (c.lumi) {
     lumiThink(world, c);
     c.nextThinkAt = t + rng.range(0.8, 1.6);
-    return;
-  }
-
-  // Rakhor aggression while provoked.
-  if (c.aggroUntil > t && !world.player.dead) {
-    c.goal = mkGoal('attack-player', 'Drive off the intruder', t, { deadline: t + 8 });
-    c.goalReason = { summary: ['Provoked by Emerson', `Aggression ${Math.round(def.traits.aggression * 100)}`], scores: [] };
-    c.nextThinkAt = t + 0.5;
     return;
   }
 
@@ -306,6 +309,10 @@ export function creatureThink(world: World, c: Creature): void {
 // ---------------------------------------------------------------------------
 
 export function creatureExecute(world: World, c: Creature, dt: number): void {
+  // Engaged creatures move under the threat machine instead of their goal, so
+  // nothing tries to graze mid-lunge.
+  if (c.combat && c.goal.type === 'threat' && threatExecute(world, c, dt)) return;
+
   const t = world.timeSec;
   const def = CREATURE_SPECIES_BY_ID[c.speciesId];
   const g = c.goal;
@@ -461,6 +468,38 @@ export function creatureExecute(world: World, c: Creature, dt: number): void {
       stand(c);
       g.phase = 'done';
   }
+}
+
+/** The creature's own words for what it is doing about Emerson. */
+function threatLabel(c: Creature): string {
+  switch (c.combat?.state) {
+    case 'alert':
+      return 'Watching the intruder';
+    case 'warn':
+      return 'Warning the intruder off';
+    case 'hostile':
+      return 'Driving off the intruder';
+    case 'windup':
+      return 'Committing to a strike';
+    case 'strike':
+      return 'Striking';
+    case 'recover':
+      return 'Recovering';
+    case 'disengage':
+      return 'Returning to its ground';
+    default:
+      return 'Alert';
+  }
+}
+
+function threatReason(world: World, c: Creature): string[] {
+  const def = CREATURE_SPECIES_BY_ID[c.speciesId];
+  const d = Math.round(dist(c.pos, world.player.pos));
+  return [
+    def.synthetic ? 'Guarding the Sunken Ring' : 'Defending its territory',
+    `Emerson is ${d}m away`,
+    `Disposition: ${dispositionOf(c)}`,
+  ];
 }
 
 /** Per-tick biology for creatures. */

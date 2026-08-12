@@ -1,6 +1,8 @@
 import { getWorld } from '../sim';
 import { formatClock } from '../sim/chronicle';
+import { inCombat, lockedTarget } from '../sim/combat';
 import { placeName } from '../sim/landmarks';
+import { CREATURE_SPECIES_BY_ID } from '../sim/species';
 import { regionAt, regionShortName } from '../sim/regions';
 import { identifyFocus } from '../sim/identify';
 import { getInteractions, harvestProgress } from '../sim/player';
@@ -52,6 +54,16 @@ export function LiveHUD() {
   const harvesting = harvestProgress(world);
   const scanCooldown = scanCooldownRemaining(world);
   const scanCell = scanWouldSpendCell(world);
+
+  // Combat state, read straight off the simulation. Nothing here is owned by
+  // React — the HUD is a view of the fight, not a participant in it.
+  const fighting = inCombat(world);
+  const hurtFlash = Math.max(0, 1 - (world.timeSec - p.lastHurtAt) / 0.9);
+  const lowHealth = p.health <= 30 && !p.dead;
+  const locked = lockedTarget(world);
+  const lockedDef = locked ? CREATURE_SPECIES_BY_ID[locked.speciesId] : null;
+  const lockedMax = lockedDef?.dangerous?.health ?? 100;
+  const recentSalvage = world.pickupsSalvage.filter((x) => world.timeSec - x.at < 5);
 
   const region = regionShortName(regionAt(p.pos.x, p.pos.z));
   const place = placeName(p.pos);
@@ -108,14 +120,33 @@ export function LiveHUD() {
       </div>
 
       {ident && (
-        <div className={`ident-card ${ident.notable ? 'notable' : ''}`}>
+        <div className={`ident-card ${ident.notable ? 'notable' : ''} ${ident.dangerous ? 'danger' : ''}`}>
           <div className="ident-name">{ident.name}</div>
           <div className="ident-line">{ident.line}</div>
+          {/* A creature that can actually fight shows its condition, so the
+              player can tell "nearly down" from "barely scratched". */}
+          {ident.healthFrac !== undefined && (
+            <div className="ident-hp">
+              <div className="ident-hp-fill" style={{ width: `${Math.round(ident.healthFrac * 100)}%` }} />
+            </div>
+          )}
           <div className="ident-disp">
             <span className="ident-disp-label">Disposition</span> {ident.disposition}
           </div>
+          {/* The scanner read-out. Without the Pathfinder installed Emerson
+              gets the shape and the posture and has to make his own call. */}
+          {ident.scan && (
+            <div className="ident-scan">
+              <span className={`ident-cat ${ident.scan.category.toLowerCase()}`}>{ident.scan.category}</span>
+              <span className={`ident-threat t-${ident.scan.threat.toLowerCase()}`}>{ident.scan.threat}</span>
+            </div>
+          )}
         </div>
       )}
+
+      {/* Damage vignette — pure feedback, driven by the sim's last-hurt stamp. */}
+      {hurtFlash > 0 && <div className="hurt-vignette" style={{ opacity: hurtFlash }} />}
+      {lowHealth && !p.extraction && <div className="hurt-vignette critical" />}
 
       <div className="hud-bottomleft">
         {ariLine && (
@@ -124,12 +155,15 @@ export function LiveHUD() {
             <span className="ari-text">{ariLine}</span>
           </div>
         )}
-        <div className="vitals panel">
-          <div className="vital-row">
+        <div className={`vitals panel ${fighting ? 'engaged' : ''} ${lowHealth ? 'critical' : ''}`}>
+          {/* Health gets bigger and louder the moment it matters. Out of a
+              fight it stays a thin line; in one it is the loudest thing here. */}
+          <div className={`vital-row vital-hp ${fighting || lowHealth ? 'prominent' : ''}`}>
             <span className="vital-label">VIT</span>
             <div className="bar">
               <div className="bar-fill hp" style={{ width: `${p.health}%` }} />
             </div>
+            {(fighting || lowHealth) && <span className="vital-num">{Math.round(p.health)}</span>}
           </div>
           <div className="vital-row">
             <span className="vital-label">STA</span>
@@ -137,6 +171,11 @@ export function LiveHUD() {
               <div className="bar-fill sta" style={{ width: `${p.stamina}%` }} />
             </div>
           </div>
+          {p.salvage.coreFragment > 0 && (
+            <div className="mat-row">
+              <span className="mat-chip synth">◈ Core Fragment × {p.salvage.coreFragment}</span>
+            </div>
+          )}
           {p.berries > 0 && <div className="berries">◉ Glowberries × {p.berries}</div>}
           {carrying.length > 0 && (
             <div className="mat-row">
@@ -164,7 +203,7 @@ export function LiveHUD() {
       </div>
 
       {/* Material acquisition feedback — brief, then gone. */}
-      {recentPickups.length > 0 && (
+      {(recentPickups.length > 0 || recentSalvage.length > 0) && (
         <div className="pickup-feed">
           {recentPickups.map((x, i) => (
             <div key={`${x.at}-${i}`} className="pickup">
@@ -172,6 +211,26 @@ export function LiveHUD() {
               +{x.amount} {MATERIALS[x.materialId].name}
             </div>
           ))}
+          {recentSalvage.map((x, i) => (
+            <div key={`salv-${x.at}-${i}`} className="pickup synth">
+              <span className="fab-swatch" style={{ background: '#7fe7ff' }} />
+              +{x.amount} Synthetic Core Fragment
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Locked target. Deliberately the only floating health bar in the game:
+          it appears because the player asked for it and vanishes with the lock. */}
+      {locked && lockedDef && (
+        <div className="lock-card">
+          <div className="lock-name">{lockedDef.name.toUpperCase()}</div>
+          <div className="lock-bar">
+            <div
+              className="lock-fill"
+              style={{ width: `${Math.max(0, Math.min(100, (locked.health / lockedMax) * 100))}%` }}
+            />
+          </div>
         </div>
       )}
 
@@ -196,10 +255,12 @@ export function LiveHUD() {
       {dialogue && <DialoguePanel exchange={dialogue} />}
       {summary && <SummaryPanel summary={summary} />}
 
-      {p.dead && (
+      {/* Going down is a setback, not a reset. The wording matters: the valley
+          is explicitly still running while ARI pulls him out. */}
+      {p.extraction && (
         <div className="death-overlay">
-          <div className="death-text">SIGNAL LOST</div>
-          <div className="death-sub">reviving field engaged…</div>
+          <div className="death-text">EMERGENCY EXTRACTION</div>
+          <div className="death-sub">ARI has the beacon — the valley carries on without you…</div>
         </div>
       )}
     </div>

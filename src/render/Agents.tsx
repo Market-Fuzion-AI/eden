@@ -8,11 +8,13 @@ import { groundY } from '../sim/terrain';
 import type { Entity, IntelligentSpeciesId } from '../sim/types';
 import { useUI } from '../state/store';
 import { ambientChatter } from '../sim/dialogue';
+import { threatPhase } from '../sim/threats';
 import { buildCreatureRig, buildLumiRig, buildSettlerRig, type Rig } from './factories';
 import { speechBubbleMaterial, statusSpriteMaterial } from './toon';
 
 /** Ambient conversation bubbles only appear within earshot of Emerson. */
 const BUBBLE_RANGE = 26;
+const WHITE = new THREE.Color('#ffffff');
 
 /**
  * Presentation adapter: each sim entity gets a rig whose transform is
@@ -45,6 +47,8 @@ function AgentView({ id }: { id: string }) {
   const bubbleRef = useRef<THREE.Sprite>(null);
   const visualPos = useRef(new THREE.Vector3());
   const initialized = useRef(false);
+  /** True while a hit flash is being applied, so it gets cleared exactly once. */
+  const flashing = useRef(false);
 
   useEffect(() => {
     if (!rig) return;
@@ -91,6 +95,14 @@ function AgentView({ id }: { id: string }) {
     }
     rig.group.rotation.y = dampAngle(rig.group.rotation.y, e.heading, dt * 8);
 
+    // Combat telegraph. Every attack in EDEN is preceded by something visible
+    // on the creature itself, and this is where the simulation's threat state
+    // becomes that visible thing.
+    if (e.kind === 'creature' && e.combat && rig.setCharge) {
+      const phase = threatPhase(world, e);
+      rig.setCharge(phase.progress, phase.state);
+    }
+
     rig.animate({
       time: state.clock.elapsedTime,
       dt,
@@ -99,6 +111,24 @@ function AgentView({ id }: { id: string }) {
       social: e.socialTimer > 0,
       agitated: e.kind === 'settler' && Boolean(e.confronting),
     });
+
+    // Hit flash: a short white-hot pulse on everything that took the blow, so
+    // a landed strike is unambiguous even in a cluttered frame.
+    if (e.kind === 'creature' && e.hitAt !== undefined) {
+      const since = world.timeSec - e.hitAt;
+      const flash = since >= 0 && since < 0.18 ? 1 - since / 0.18 : 0;
+      if (flash > 0 || flashing.current) {
+        flashing.current = flash > 0;
+        rig.group.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (!m.isMesh) return;
+          const mat = m.material as THREE.MeshToonMaterial;
+          if (!mat.emissive) return;
+          const base = (mat.userData.baseEmissive ??= mat.emissive.clone());
+          mat.emissive.copy(base as THREE.Color).lerp(WHITE, flash * 0.85);
+        });
+      }
+    }
 
     // Status sprite: talking / sleeping / fleeing.
     const sprite = spriteRef.current;
@@ -110,7 +140,11 @@ function AgentView({ id }: { id: string }) {
         else if (e.kind === 'settler' && e.goal.type === 'share-food') kind = 'gift';
         else kind = 'social';
       } else if (e.resting) kind = 'sleep';
-      else if (e.kind === 'creature' && e.threatUntil > world.timeSec) kind = 'alert';
+      // A creature squaring up to Emerson gets the same marker as a startled
+      // one: the warning is the last moment walking away still works.
+      else if (e.kind === 'creature' && e.combat && (e.combat.state === 'warn' || e.combat.state === 'alert')) {
+        kind = 'alert';
+      } else if (e.kind === 'creature' && e.threatUntil > world.timeSec) kind = 'alert';
       if (kind) {
         sprite.visible = true;
         sprite.material = statusSpriteMaterial(kind);

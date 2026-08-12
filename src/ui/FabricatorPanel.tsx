@@ -110,6 +110,10 @@ export function FabricatorPanel() {
           Carrying: {p.items.medkit} medkit{p.items.medkit === 1 ? '' : 's'} · {p.items.energyCell} energy cell
           {p.items.energyCell === 1 ? '' : 's'}
           {p.unlocks.scanner ? ' · Scanner Mk I installed' : ''}
+          {p.unlocks.arcBlade ? ' · Arc Blade Mk I' : ''}
+          {p.salvage.coreFragment > 0
+            ? ` · ${p.salvage.coreFragment} core fragment${p.salvage.coreFragment === 1 ? '' : 's'} — Petra has no idea what they are`
+            : ''}
         </div>
       </div>
     </div>

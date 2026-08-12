@@ -1,5 +1,17 @@
-import { FABRICATOR, GATHER, NORM, PLAYER, RATES, SETTLER, WILDLIFE, WORLD } from './config';
+import { COMBAT, FABRICATOR, GATHER, NORM, PLAYER, RATES, SETTLER, WILDLIFE, WORLD } from './config';
 import { chronicle } from './chronicle';
+import {
+  beginDodge,
+  beginExtraction,
+  beginStrike,
+  finishExtraction,
+  inCombat,
+  lockTick,
+  lockedTarget,
+  strikeTick,
+  toggleLock,
+  type StrikeAttempt,
+} from './combat';
 import { buildExchange, type DialogueExchange } from './dialogue';
 import { placeName } from './landmarks';
 import { remember } from './memory';
@@ -10,8 +22,7 @@ import { collectMaterial, materialForNodeType } from './fabrication';
 import { emersonKnows, witnessNorm } from './socialKnowledge';
 import { missingResources } from './structures';
 import { groundY, isWater } from './terrain';
-import { damageCreature } from './wildlife';
-import type { ResourceNode, Settler, Structure, World } from './types';
+import type { Creature, ResourceNode, Settler, Structure, World } from './types';
 import { clamp100, dist, v2 } from './vec';
 
 /**
@@ -54,26 +65,34 @@ let nextOfferId = 0;
 export function updatePlayer(world: World, dt: number, input: PlayerInput): void {
   const p = world.player;
 
-  if (p.dead) {
-    p.respawnTimer -= dt;
+  // Emergency extraction. Emerson is out of the fight and the valley is not:
+  // the simulation keeps running underneath this the entire time.
+  if (p.extraction) {
     p.speed = 0;
-    if (p.respawnTimer <= 0) {
-      const camp = world.camps.find((c) => c.speciesId === 'human')!;
-      p.pos = v2(camp.pos.x + 2, camp.pos.z + 2);
-      p.health = 60;
-      p.stamina = 60;
-      p.dead = false;
-      p.vy = 0;
-      world.ariQueue.push('Reviving field engaged. Please avoid dying, Emerson — it is expensive.');
-    }
+    p.moveSpeed = 0;
+    if (world.timeSec >= p.extraction.endsAt) finishExtraction(world);
+    return;
+  }
+  if (p.dead) {
+    // Should be unreachable — every route to zero health goes through
+    // `beginExtraction` — but a stranded `dead` flag would soft-lock the game,
+    // so recover rather than freeze.
+    beginExtraction(world, 'unknown causes');
     return;
   }
 
   // Timers.
-  p.attackCooldown = Math.max(0, p.attackCooldown - dt);
-  p.attackTimer = Math.max(0, p.attackTimer - dt);
   p.dodgeCooldown = Math.max(0, p.dodgeCooldown - dt);
   p.dodgeTimer = Math.max(0, p.dodgeTimer - dt);
+
+  // Combat advances in real time alongside movement, never at the simulation's
+  // speed multiplier — a strike must not get faster because the world does.
+  const hits = strikeTick(world, dt);
+  for (const h of hits) {
+    world.flags.lastHitAt = world.timeSec;
+    if (h.killed) world.flags.lastKillAt = world.timeSec;
+  }
+  lockTick(world);
 
   // --- movement relative to camera yaw ------------------------------------
   //
@@ -86,9 +105,15 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
   const mag = Math.hypot(input.moveX, input.moveZ);
   const moving = mag > 0.05;
   const sprinting = moving && input.sprint && p.stamina > 5;
+  // Committing to a swing plants Emerson: the wind-up and the active window
+  // barely move him, and only the recovery lets him walk out of it. Without
+  // this a light attack can be spammed while sprinting and nothing has weight.
+  const committed = p.strike !== null && p.strike.phase !== 'recover';
   let targetSpeed = 0;
   if (p.dodgeTimer > 0) {
-    targetSpeed = PLAYER.dodgeSpeed;
+    targetSpeed = COMBAT.dodgeSpeed;
+  } else if (committed) {
+    targetSpeed = 0;
   } else if (moving) {
     targetSpeed = (sprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed) * Math.min(1, mag);
     if (sprinting) {
@@ -101,7 +126,20 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
   p.moveSpeed += (targetSpeed - p.moveSpeed) * Math.min(1, accel * dt);
   if (p.moveSpeed < 0.02) p.moveSpeed = 0;
 
-  if (moving) {
+  // Where a step actually travels. Normally the same as facing; while locked on
+  // it is not, which is what lets Emerson circle something instead of only ever
+  // walking at it.
+  const target = lockedTarget(world);
+  let travelHeading = p.heading;
+  if (target) {
+    // Face the threat, always. Strafing and backing off stay on the sticks.
+    const desired = Math.atan2(target.pos.x - p.pos.x, target.pos.z - p.pos.z);
+    let err = (desired - p.heading) % (Math.PI * 2);
+    if (err > Math.PI) err -= Math.PI * 2;
+    if (err < -Math.PI) err += Math.PI * 2;
+    p.heading += err * Math.min(1, PLAYER.turnRate * 0.8 * dt);
+    travelHeading = moving ? headingFromInput(input.camYaw, input.moveX, input.moveZ) : p.heading;
+  } else if (moving && !committed) {
     // Turn toward the travel direction. Sharp reversals rotate faster, so a
     // 180 feels decisive instead of like a slow arc.
     const desired = headingFromInput(input.camYaw, input.moveX, input.moveZ);
@@ -110,24 +148,44 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
     if (err < -Math.PI) err += Math.PI * 2;
     const turnRate = PLAYER.turnRate * (1 + Math.abs(err) / Math.PI);
     p.heading += err * Math.min(1, turnRate * dt);
+    travelHeading = p.heading;
   }
 
   if (p.moveSpeed > 0.02 || p.dodgeTimer > 0) {
     const inWater = isWater(p.pos.x, p.pos.z);
-    const effSpeed = (p.dodgeTimer > 0 ? PLAYER.dodgeSpeed : p.moveSpeed) * (inWater ? 0.5 : 1);
-    let nx = p.pos.x + Math.sin(p.heading) * effSpeed * dt;
-    let nz = p.pos.z + Math.cos(p.heading) * effSpeed * dt;
-    // Obstacle push-out against registered obstacles.
-    for (const o of world.obstacles) {
-      const ox = nx - o.pos.x;
-      const oz = nz - o.pos.z;
-      const od = Math.hypot(ox, oz);
-      const min = o.radius + 0.45;
-      if (od < min && od > 0.001) {
+    const rolling = p.dodgeTimer > 0;
+    const effSpeed = (rolling ? COMBAT.dodgeSpeed : p.moveSpeed) * (inWater ? 0.5 : 1);
+    const stepHeading = rolling ? p.dodgeHeading : travelHeading;
+    let nx = p.pos.x + Math.sin(stepHeading) * effSpeed * dt;
+    let nz = p.pos.z + Math.cos(stepHeading) * effSpeed * dt;
+    // Obstacle resolution.
+    //
+    // Radial push-out alone slides correctly along a single boulder but wedges
+    // between two: escaping one pushes into the other, and a single pass leaves
+    // Emerson inside the second. Relaxing a few times converges on the corner
+    // instead — which matters far more now that fights happen next to rocks
+    // rather than in open meadow.
+    for (let pass = 0; pass < 4; pass++) {
+      let corrected = false;
+      for (const o of world.obstacles) {
+        const ox = nx - o.pos.x;
+        const oz = nz - o.pos.z;
+        const od = Math.hypot(ox, oz);
+        const min = o.radius + PLAYER.bodyRadius;
+        if (od >= min) continue;
+        if (od <= 0.001) {
+          // Dead centre: no direction to push along. Use the travel heading.
+          nx += Math.sin(stepHeading + Math.PI) * min;
+          nz += Math.cos(stepHeading + Math.PI) * min;
+          corrected = true;
+          continue;
+        }
         const push = (min - od) / od;
         nx += ox * push;
         nz += oz * push;
+        corrected = true;
       }
+      if (!corrected) break;
     }
     // Character presence: Emerson cannot walk through the inhabitants.
     // Settlers are solid; small creatures scatter rather than block.
@@ -158,14 +216,39 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
     if (climb > 0.02) {
       const grade = climb / Math.max(0.001, effSpeed * dt);
       if (grade > 1.6) {
-        // Too steep to walk straight up: give back most of the step.
-        nx = p.pos.x + (nx - p.pos.x) * 0.15;
-        nz = p.pos.z + (nz - p.pos.z) * 0.15;
+        // Too steep to walk straight up. Rather than simply refusing the step —
+        // which pins the player against a cliff face with no way out but a
+        // full stop — strip the uphill component and keep whatever runs along
+        // the slope, so a diagonal approach traverses instead of sticking.
+        const dx = nx - p.pos.x;
+        const dz = nz - p.pos.z;
+        const e = 0.6;
+        const gx = groundY(p.pos.x + e, p.pos.z) - groundY(p.pos.x - e, p.pos.z);
+        const gz = groundY(p.pos.x, p.pos.z + e) - groundY(p.pos.x, p.pos.z - e);
+        const gl = Math.hypot(gx, gz);
+        if (gl > 0.0001) {
+          const ux = gx / gl;
+          const uz = gz / gl;
+          const into = dx * ux + dz * uz;
+          // Keep a sliver of the uphill push so a straight-on approach still
+          // creeps upward rather than stopping dead at the foot of the slope.
+          const keep = 0.15;
+          nx = p.pos.x + dx - ux * into * (1 - keep);
+          nz = p.pos.z + dz - uz * into * (1 - keep);
+        } else {
+          nx = p.pos.x + dx * 0.15;
+          nz = p.pos.z + dz * 0.15;
+        }
       }
     }
+    // Report the distance actually covered, not the distance intended. Walking
+    // into a boulder should look like walking into a boulder — the v0.6 wedge
+    // bug hid itself for a whole milestone precisely because the agent kept
+    // reporting full speed while standing still.
+    const travelled = Math.hypot(nx - p.pos.x, nz - p.pos.z);
     p.pos.x = nx;
     p.pos.z = nz;
-    p.speed = effSpeed;
+    p.speed = dt > 0 ? travelled / dt : 0;
   } else {
     p.speed = 0;
   }
@@ -192,39 +275,54 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
   // Gathering interaction, in real time alongside movement.
   harvestTick(world);
 
-  // Passive recovery.
-  p.health = clamp100(p.health + 0.6 * dt);
-
-  if (p.health <= 0 && !p.dead) {
-    p.dead = true;
-    p.respawnTimer = 4;
-    chronicle(world, 'emerson', 'Emerson collapsed. The reviving field carried him back to camp.');
-  }
+  // Passive recovery — but never mid-fight. Regenerating while something is
+  // winding up to hit you is what turns a threat into an inconvenience.
+  if (!inCombat(world)) p.health = clamp100(p.health + 0.6 * dt);
 }
 
-export function playerAttack(world: World): void {
-  const p = world.player;
-  if (p.dead || p.attackCooldown > 0) return;
-  p.attackCooldown = PLAYER.attackCooldown;
-  p.attackTimer = 0.3;
-  const fx = Math.sin(p.heading);
-  const fz = Math.cos(p.heading);
-  for (const c of [...world.creatures]) {
-    const dx = c.pos.x - p.pos.x;
-    const dz = c.pos.z - p.pos.z;
-    const d = Math.hypot(dx, dz);
-    if (d > PLAYER.attackRange) continue;
-    const dot = d > 0.01 ? (dx * fx + dz * fz) / d : 1;
-    if (dot < PLAYER.attackArcCos) continue;
-    damageCreature(world, c, PLAYER.attackDamage);
+/**
+ * Swing the Arc Blade. Light chains, heavy commits.
+ *
+ * Returns the refusal when nothing happened, so the caller can say something
+ * useful about *why* rather than the input silently doing nothing.
+ */
+export function playerStrike(world: World, kind: 'light' | 'heavy'): StrikeAttempt {
+  const result = beginStrike(world, kind);
+  if (!result.ok && result.reason === 'unarmed' && !world.flags.unarmedHinted) {
+    world.flags.unarmedHinted = true;
+    world.ariQueue.push(
+      'You have nothing to fight with, Emerson. Petra can cut you a blade at the Fabricator if you bring her the material.',
+    );
   }
+  return result;
 }
 
-export function playerDodge(world: World): void {
+/**
+ * Roll. The direction is the movement input if there is any, and straight
+ * backwards if there is not — a standing dodge should always open distance.
+ */
+export function playerDodge(world: World, input?: { moveX: number; moveZ: number; camYaw: number }): boolean {
   const p = world.player;
-  if (p.dead || p.dodgeCooldown > 0) return;
-  p.dodgeCooldown = PLAYER.dodgeCooldown;
-  p.dodgeTimer = PLAYER.dodgeDuration;
+  let heading = p.heading + Math.PI;
+  if (input && Math.hypot(input.moveX, input.moveZ) > 0.05) {
+    heading = headingFromInput(input.camYaw, input.moveX, input.moveZ);
+  }
+  if (!beginDodge(world)) return false;
+  p.dodgeHeading = heading;
+  // An unlocked roll turns Emerson the way he rolled; a locked one never does.
+  if (!p.lockedId) p.heading = heading;
+  return true;
+}
+
+/** Toggle lock-on, and tell the player when there is nothing worth locking. */
+export function playerToggleLock(world: World): Creature | null {
+  const had = world.player.lockedId;
+  const target = toggleLock(world);
+  if (!had && !target && !world.flags.lockHinted) {
+    world.flags.lockHinted = true;
+    world.ariQueue.push('Nothing hostile in range to track.');
+  }
+  return target;
 }
 
 export interface InteractionPrompt {

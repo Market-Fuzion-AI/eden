@@ -1,4 +1,5 @@
-import { LUMI, START_TIME } from './config';
+import { LUMI, START_TIME, THREAT } from './config';
+import { armThreat } from './threats';
 import { makeRng, type Rng } from './rng';
 import {
   CREATURE_SPECIES,
@@ -19,6 +20,7 @@ import type {
   PlayerState,
   ResourceNode,
   Settler,
+  SitePropItem,
   World,
 } from './types';
 import { chronicle } from './chronicle';
@@ -51,6 +53,8 @@ export const ANCHORS: Record<string, V2> = {
   caelariCamp: v2(-60, -102),
   skyapproach: v2(-34, -58),
   hill: v2(-96, -62),
+  // The synthetic site, on the Ashlands/Skyreach transition.
+  sunkenRing: v2(-86, -14),
 };
 
 /** Resource labels read as places in the world, e.g. "the glowberries at River Bend". */
@@ -212,6 +216,110 @@ export function makeCreature(
     aggroUntil: 0,
     visualVariant: rng.next(),
   };
+}
+
+/**
+ * The Sunken Ring.
+ *
+ * Twelve pylons on a circle, most of them broken and all of them sunk at the
+ * angle the ground has settled to over however long they have stood there. Two
+ * fallen arcs and a scatter of plating complete it. No door, no terminal, no
+ * inscription: the site raises a question and answers none of it, which is the
+ * whole reason to walk out here.
+ */
+function buildSyntheticSite(world: World, rng: Rng): void {
+  const center = ANCHORS.sunkenRing;
+  const props: SitePropItem[] = [];
+  const RING_R = 16;
+  const CLEARING = 24;
+
+  // Nothing grows on the ring.
+  //
+  // Partly because whatever holds it also holds the ground, and partly for a
+  // plainer reason: with the Western Wood's trees standing between the pylons
+  // the site read as scenery in a forest instead of the one thing in the
+  // valley that nobody here built.
+  world.flora = world.flora.filter((f) => Math.hypot(f.pos.x - center.x, f.pos.z - center.z) > CLEARING);
+  world.obstacles = world.obstacles.filter((o) => Math.hypot(o.pos.x - center.x, o.pos.z - center.z) > CLEARING);
+
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2 + 0.18;
+    const jitter = rng.range(-1.8, 1.8);
+    const pos = v2(center.x + Math.sin(a) * (RING_R + jitter), center.z + Math.cos(a) * (RING_R + jitter));
+    // A quarter of the twelve have gone over entirely; the rest lean.
+    const fallen = rng.chance(0.25);
+    props.push({
+      kind: fallen ? 'plate' : 'pylon',
+      pos,
+      rot: a + rng.range(-0.3, 0.3),
+      scale: fallen ? rng.range(0.9, 1.3) : rng.range(0.95, 1.4),
+      // Sunk, but never so far that the site stops being a landmark you can
+      // navigate by from the ridge above it.
+      sink: fallen ? rng.range(0.3, 0.9) : rng.range(0.3, 1.6),
+    });
+    // Standing pylons are solid. Fallen plating is not — it is walkable debris.
+    if (!fallen) world.obstacles.push({ pos, radius: 1.15 });
+  }
+
+  // Two collapsed spans, out near the ring rather than across the middle: the
+  // centre has to stay open, because that is where the fight happens.
+  for (let i = 0; i < 2; i++) {
+    const a = rng.next() * Math.PI * 2;
+    const d = RING_R * rng.range(0.62, 0.78);
+    const pos = v2(center.x + Math.sin(a) * d, center.z + Math.cos(a) * d);
+    props.push({ kind: 'arc', pos, rot: a + rng.range(-0.4, 0.4), scale: rng.range(0.75, 1), sink: rng.range(0.2, 0.7) });
+    world.obstacles.push({ pos, radius: 1.3 });
+  }
+  for (let i = 0; i < 11; i++) {
+    const a = rng.next() * Math.PI * 2;
+    const d = Math.sqrt(rng.next()) * (RING_R + 5);
+    props.push({
+      kind: 'shard',
+      pos: v2(center.x + Math.sin(a) * d, center.z + Math.cos(a) * d),
+      rot: rng.next() * Math.PI * 2,
+      scale: rng.range(0.4, 0.9),
+      sink: rng.range(0, 0.4),
+    });
+  }
+
+  world.siteProps = props;
+}
+
+/**
+ * Place the two dangerous archetypes.
+ *
+ * Deliberately hand-placed rather than scattered by the generic spawner,
+ * because where danger *is* is the whole design: never inside Human Landing,
+ * never astride the only path anywhere, but reliably found by anybody who walks
+ * the material route out to the Ashlands and up onto the Skyreach.
+ */
+function spawnDangers(world: World, rng: Rng): void {
+  const camp = world.camps.find((c) => c.speciesId === 'human');
+  const farFromHome = (p: V2) =>
+    !camp || Math.hypot(p.x - camp.pos.x, p.z - camp.pos.z) > THREAT.safeRadius + THREAT.noticeRange + 20;
+
+  const place = (speciesId: string, anchor: V2, radius: number): void => {
+    const def = CREATURE_SPECIES.find((s) => s.id === speciesId);
+    if (!def) return;
+    let pos = findLand(rng, anchor, radius);
+    // Retry rather than accept a spawn that could reach into the safe zone.
+    for (let i = 0; i < 12 && !farFromHome(pos); i++) pos = findLand(rng, anchor, radius);
+    if (!farFromHome(pos)) return;
+    const c = makeCreature(world, rng, def, pos);
+    armThreat(c);
+    world.creatures.push(c);
+  };
+
+  // Biological. Territorial predators on the ground between the regions — one
+  // on the Ashlands approach, one in the wood, one deep in their own crags.
+  place('rakhor', ANCHORS.rocksSouth, 22);
+  place('rakhor', ANCHORS.ashpass, 26);
+  place('rakhor', ANCHORS.forest, 30);
+
+  // Synthetic. They do not roam: they stand on the ring they are still
+  // guarding, and they have been there far longer than the colony.
+  place('warden', ANCHORS.sunkenRing, 11);
+  place('warden', ANCHORS.sunkenRing, 15);
 }
 
 function scatterFlora(world: World, rng: Rng): void {
@@ -540,12 +648,10 @@ export function createWorld(seed: number): World {
     berries: 0,
     wood: 0,
     stone: 0,
-    attackTimer: 0,
-    attackCooldown: 0,
     dodgeTimer: 0,
     dodgeCooldown: 0,
+    dodgeHeading: Math.PI,
     dead: false,
-    respawnTimer: 0,
     moveSpeed: 0,
     lastSprintAt: -999,
     witnessed: [],
@@ -553,9 +659,17 @@ export function createWorld(seed: number): World {
     // built without leaving Human Landing, which is the whole point.
     materials: { alloy: 0, ore: 0, crystal: 0 },
     items: { medkit: 0, energyCell: 0 },
-    unlocks: { scanner: false },
+    unlocks: { scanner: false, arcBlade: false },
     harvest: null,
     scan: { lastAt: -9999, activeUntil: -9999, pulseStartedAt: -9999, radius: 0, nodeIds: [] },
+    equipped: 'none',
+    strike: null,
+    invulnUntil: -9999,
+    lockedId: null,
+    lastHurtAt: -9999,
+    salvage: { coreFragment: 0 },
+    extraction: null,
+    extractions: 0,
   };
 
   const world: World = {
@@ -571,9 +685,12 @@ export function createWorld(seed: number): World {
     flora: [],
     obstacles: [],
     landmarksBuilt: [],
+    siteProps: [],
     fabricatorPos: null,
     fabrication: null,
     pickups: [],
+    pickupsSalvage: [],
+    landmarkNameAt: (p: V2) => placeName(p),
     camps: [
       { speciesId: 'human', label: 'Human camp', pos: { ...ANCHORS.humanCamp } },
       { speciesId: 'veyra', label: 'Veyra camp', pos: { ...ANCHORS.veyraCamp } },
@@ -611,6 +728,7 @@ export function createWorld(seed: number): World {
   scatterFlora(world, rng);
   placeResources(world, rng);
   buildHumanLanding(world, rng);
+  buildSyntheticSite(world, rng);
 
   // Emerson opens the game standing at Human Landing on dry, level ground.
   // Derived from the terrain rather than hard-coded: a literal spawn point
@@ -630,7 +748,9 @@ export function createWorld(seed: number): World {
     glimmerfin: 2,
     skyren: 2,
     emberwing: 1,
-    rakhor: 1,
+    // Dangerous creatures are spawned separately below, on chosen ground.
+    rakhor: 0,
+    warden: 0,
   };
   for (const def of CREATURE_SPECIES) {
     const n = spawnCounts[def.id] ?? 1;
@@ -645,6 +765,8 @@ export function createWorld(seed: number): World {
       world.creatures.push(makeCreature(world, rng, def, pos));
     }
   }
+
+  spawnDangers(world, rng);
 
   // Lumi — a persistent named individual, not a disposable animal.
   const lumiDef = CREATURE_SPECIES.find((s) => s.id === 'lumin')!;

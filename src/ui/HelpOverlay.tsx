@@ -21,6 +21,22 @@ const CONTROLS: [string, string][] = [
   ['Esc', 'This screen'],
 ];
 
+/**
+ * Combat, shown as its own block.
+ *
+ * Every action here has a left-hand key as well as a mouse button, because
+ * EDEN is tested on a laptop with no mouse: a trackpad cannot hold a look-drag
+ * and click at the same time, so a mouse-only binding is an unusable binding.
+ */
+const COMBAT_CONTROLS: [string, string][] = [
+  ['J  /  left click', 'Light attack — chains up to three'],
+  ['K  /  right click', 'Heavy attack — slower, hits much harder'],
+  ['Space', 'Dodge roll — brief invulnerability'],
+  ['L', 'Lock on / release'],
+  ['H', 'Use a medkit'],
+  ['V', 'Jump'],
+];
+
 const SENSITIVITIES: Sensitivity[] = ['low', 'normal', 'high'];
 
 export function HelpOverlay() {
@@ -34,7 +50,7 @@ export function HelpOverlay() {
     <div className="help-overlay" onClick={() => setHelpOpen(false)}>
       <div className="help panel" onClick={(e) => e.stopPropagation()}>
         <div className="wordmark">EDEN</div>
-        <div className="help-sub">a living world · v0.7A</div>
+        <div className="help-sub">a living world · v0.8</div>
         <div className="help-grid">
           {CONTROLS.map(([k, v]) => (
             <div key={k} className="help-row">
@@ -42,6 +58,20 @@ export function HelpOverlay() {
               <span className="help-desc">{v}</span>
             </div>
           ))}
+        </div>
+
+        <div className="help-section-title">IF SOMETHING COMES AT YOU</div>
+        <div className="help-grid">
+          {COMBAT_CONTROLS.map(([k, v]) => (
+            <div key={k} className="help-row">
+              <span className="help-key">{k}</span>
+              <span className="help-desc">{v}</span>
+            </div>
+          ))}
+        </div>
+        <div className="help-note dim-note">
+          Most of the valley wants nothing to do with you. What does will warn you first — back away and it will
+          usually let you go.
         </div>
 
         <div className="setting-row">
@@ -102,7 +132,7 @@ export function HelpOverlay() {
           Enter Eden
         </button>
         <div className="help-more">
-          Space jump · [ ] or pinch to zoom · Left click attack · Right click dodge · 1/2/3 speed · P pause · F3 debug
+          Q scan · [ ] or pinch to zoom · 1/2/3 speed · P pause · F3 debug
         </div>
       </div>
     </div>

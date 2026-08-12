@@ -38,7 +38,7 @@ const VALID_GOAL_MAP: Record<GoalType, true> = {
   graze: true, flee: true, investigate: true, 'watch-emerson': true, 'approach-food': true,
   'follow-emerson': true, 'attack-player': true, 'talk-emerson': true, 'seek-friend': true,
   confront: true, avoid: true, 'share-food': true, 'gather-wood': true, 'gather-stone': true,
-  build: true, 'help-build': true, 'gather-at-fire': true, 'ask-to-use': true,
+  build: true, 'help-build': true, 'gather-at-fire': true, 'ask-to-use': true, threat: true,
 };
 const VALID_GOALS = new Set(Object.keys(VALID_GOAL_MAP));
 

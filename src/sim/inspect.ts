@@ -1,5 +1,6 @@
-import { SOCIAL } from './config';
+import { SOCIAL, THREAT } from './config';
 import { formatClock, formatClockShort } from './chronicle';
+import { activeThreats, inCombat, insideSafeZone } from './combat';
 import { getEntity, getWorld } from './index';
 import { LANDMARKS, placeName } from './landmarks';
 import { memoryText } from './memory';
@@ -21,7 +22,7 @@ import {
 } from './socialKnowledge';
 import { CREATURE_SPECIES_BY_ID, INTELLIGENT_SPECIES } from './species';
 import { constructionStage, frequentUsers, STAGE_LABEL, STRUCTURE_DEFS } from './structures';
-import type { ClaimKind, IntelligentSpeciesId, Relationship } from './types';
+import type { ClaimKind, IntelligentSpeciesId, Relationship, World } from './types';
 import { dist } from './vec';
 
 /**
@@ -72,6 +73,21 @@ export interface InspectorData {
   relationships: RelationshipSummary[];
   memories: { text: string; ago: string }[];
   known: string[];
+  /**
+   * Live combat state, for debugging a fight without guessing at it. Present
+   * only on things that can actually be in one, so the panel does not grow a
+   * permanently-empty section for every mossling in the valley.
+   */
+  combat?: CombatDebug;
+}
+
+export interface CombatDebug {
+  state: string;
+  /** How long it has been in that state. */
+  forSeconds: number;
+  /** Metres to Emerson. */
+  distance: number;
+  lines: string[];
 }
 
 /** Everything Creator Mode shows about a structure — all of it recorded. */
@@ -510,7 +526,10 @@ export function inspect(id: string): InspectorData | null {
         `Carrying ${p.berries} glowberr${p.berries === 1 ? 'y' : 'ies'}`,
         ...(p.wood > 0 ? [`Carrying ${Math.round(p.wood)} wood`] : []),
         ...(p.stone > 0 ? [`Carrying ${Math.round(p.stone)} stone`] : []),
+        ...(p.salvage.coreFragment > 0 ? [`Holding ${p.salvage.coreFragment} synthetic core fragment(s)`] : []),
+        ...(p.extractions > 0 ? [`Emergency extractions: ${p.extractions}`] : []),
       ],
+      combat: playerCombatDebug(world),
     };
   }
 
@@ -609,5 +628,57 @@ export function inspect(id: string): InspectorData | null {
     data.known.push(`Fed by Emerson ${e.lumi.fedCount}×`);
     data.known.push(`${Math.round(dist(e.pos, world.player.pos))}m from Emerson`);
   }
+  if (e.combat && def.dangerous) {
+    data.kindLabel = def.synthetic ? 'SYNTHETIC ORGANISM · ORIGIN UNKNOWN' : 'NATIVE LIFEFORM · DANGEROUS';
+    // Health for a dangerous creature is measured against its own pool, not
+    // the shared 0..100 the rest of the vitals use.
+    data.vitals[0] = {
+      label: 'Condition',
+      value: Math.max(0, Math.min(100, (e.health / def.dangerous.health) * 100)),
+      tone: tone((e.health / def.dangerous.health) * 100),
+    };
+    const d = dist(e.pos, world.player.pos);
+    const lines = [
+      `Damage ${def.dangerous.damage} · reach ${def.dangerous.attackRange}m · cooldown ${def.dangerous.cooldown}s`,
+      `Notices at ${THREAT.noticeRange}m · warns inside ${THREAT.provokeRange}m`,
+      `Leash ${Math.round(dist(e.pos, e.combat.territory))}m / ${THREAT.leash}m from its ground`,
+      e.combat.targetId ? `Engaged with ${e.combat.targetId}` : 'No target',
+      world.timeSec < e.combat.nextAttackAt
+        ? `Next attack available in ${(e.combat.nextAttackAt - world.timeSec).toFixed(1)}s`
+        : 'Attack available now',
+    ];
+    data.combat = {
+      state: e.combat.state,
+      forSeconds: world.timeSec - e.combat.since,
+      distance: d,
+      lines,
+    };
+  }
   return data;
+}
+
+/** What Emerson's own combat state looks like from Creator Mode. */
+function playerCombatDebug(world: World): CombatDebug {
+  const p = world.player;
+  const threats = activeThreats(world);
+  const lines: string[] = [
+    p.equipped === 'arcBlade' ? 'Armed: Arc Blade Mk I' : 'Unarmed — no weapon fabricated',
+    p.strike
+      ? `Strike: ${p.strike.kind} · ${p.strike.phase} · chain ${p.strike.chain} · ${p.strike.timer.toFixed(2)}s left`
+      : 'Not attacking',
+    world.timeSec < p.invulnUntil
+      ? `Invulnerable for ${(p.invulnUntil - world.timeSec).toFixed(2)}s`
+      : p.dodgeCooldown > 0
+        ? `Dodge on cooldown ${p.dodgeCooldown.toFixed(2)}s`
+        : 'Dodge ready',
+    p.lockedId ? `Locked onto ${p.lockedId}` : 'No lock',
+    insideSafeZone(world, p.pos.x, p.pos.z) ? 'Inside the Human Landing safe zone' : 'Outside the safe zone',
+    `${threats.length} creature(s) currently hostile`,
+  ];
+  return {
+    state: p.extraction ? 'extracting' : inCombat(world) ? 'in combat' : 'clear',
+    forSeconds: world.timeSec - p.lastHurtAt,
+    distance: 0,
+    lines,
+  };
 }

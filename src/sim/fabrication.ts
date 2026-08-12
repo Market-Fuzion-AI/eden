@@ -79,7 +79,7 @@ export function materialForNodeType(type: ResourceType): MaterialDef | null {
 // Recipes
 // ---------------------------------------------------------------------------
 
-export type RecipeOutput = 'scanner' | 'medkit' | 'energy-cell';
+export type RecipeOutput = 'scanner' | 'arc-blade' | 'medkit' | 'energy-cell';
 
 export interface RecipeDef {
   id: RecipeId;
@@ -104,6 +104,16 @@ export const RECIPES: RecipeDef[] = [
     costs: { alloy: 4, ore: 3, crystal: 2 },
     duration: 3,
     output: 'scanner',
+    once: true,
+  },
+  {
+    id: 'arc-blade-mk1',
+    name: 'Arc Blade Mk I',
+    description:
+      'A cutting edge struck from salvaged plating and driven by a crystal discharge. Petra will not call it a weapon. It is a weapon.',
+    costs: { alloy: 5, ore: 4, crystal: 3 },
+    duration: 4,
+    output: 'arc-blade',
     once: true,
   },
   {
@@ -144,7 +154,15 @@ export interface FabricateResult {
 
 /** Does the player already own the one-shot output of this recipe? */
 export function alreadyBuilt(world: World, recipe: RecipeDef): boolean {
-  return recipe.once && recipe.output === 'scanner' && world.player.unlocks.scanner;
+  if (!recipe.once) return false;
+  switch (recipe.output) {
+    case 'scanner':
+      return world.player.unlocks.scanner;
+    case 'arc-blade':
+      return world.player.unlocks.arcBlade;
+    default:
+      return false;
+  }
 }
 
 export function canFabricate(world: World, recipeId: RecipeId): FabricateResult {
@@ -213,6 +231,16 @@ export function fabricationTick(world: World): void {
           'Pathfinder Scanner Mk I online. Sensor resolution improved — I can isolate usable material signatures at range now. Press Q.',
         );
         world.flags.scannerBuiltAt = world.timeSec;
+      }
+      break;
+    case 'arc-blade':
+      if (!p.unlocks.arcBlade) {
+        p.unlocks.arcBlade = true;
+        p.equipped = 'arcBlade';
+        world.ariQueue.push(
+          'ARC BLADE MK I ONLINE. Discharge is stable. Emerson — this changes where you can go, not what the valley is. Most of what lives out there still wants nothing to do with you.',
+        );
+        world.flags.arcBladeBuiltAt = world.timeSec;
       }
       break;
     case 'medkit':

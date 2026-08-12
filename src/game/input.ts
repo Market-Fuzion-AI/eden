@@ -3,11 +3,12 @@ import { ariCreatorToggle } from '../sim/ari';
 import {
   fabricatorAtHand,
   playerAskPermission,
-  playerAttack,
   playerDodge,
   playerGather,
   playerOfferFood,
+  playerStrike,
   playerTalk,
+  playerToggleLock,
 } from '../sim/player';
 import { useMedkit } from '../sim/fabrication';
 import { performScan } from '../sim/scanner';
@@ -44,7 +45,15 @@ export function readMoveAxes(): { moveX: number; moveZ: number; sprint: boolean;
     moveX /= mag;
     moveZ /= mag;
   }
-  return { moveX, moveZ, sprint: k.has('ShiftLeft') || k.has('ShiftRight'), jump: k.has('Space') };
+  // V jumps. Space became the dodge in v0.8: it is the single most-pressed key
+  // in a fight, and a trackpad player has no comfortable alternative for it.
+  return { moveX, moveZ, sprint: k.has('ShiftLeft') || k.has('ShiftRight'), jump: k.has('KeyV') };
+}
+
+/** The movement input a dodge should travel along. */
+function dodgeInput(): { moveX: number; moveZ: number; camYaw: number } {
+  const axes = readMoveAxes();
+  return { moveX: axes.moveX, moveZ: axes.moveZ, camYaw: inputState.camYaw };
 }
 
 export function isPointerLocked(): boolean {
@@ -141,6 +150,17 @@ export function installInput(): void {
         const world = getWorld();
         const healed = useMedkit(world);
         if (healed > 0) world.ariQueue.push(`Medkit administered. ${Math.round(healed)} points recovered.`);
+      }
+      // Combat. Keyboard alternatives to the mouse buttons, because a trackpad
+      // cannot hold a look-drag and click at the same time — every combat
+      // action must be reachable from the left hand alone.
+      if (e.code === 'KeyJ' && !inputState.keys.has('KeyJ')) playerStrike(getWorld(), 'light');
+      if (e.code === 'KeyK' && !inputState.keys.has('KeyK')) playerStrike(getWorld(), 'heavy');
+      if (e.code === 'KeyL' && !inputState.keys.has('KeyL')) playerToggleLock(getWorld());
+      if (e.code === 'Space') {
+        // Never let the dodge key scroll the page out from under the canvas.
+        e.preventDefault();
+        if (!inputState.keys.has('Space')) playerDodge(getWorld(), dodgeInput());
       }
       if (e.code === 'KeyF') playerOfferFood(getWorld());
       if (e.code === 'KeyR') {
@@ -239,8 +259,8 @@ export function installCanvasLook(canvas: HTMLElement): () => void {
     // A press that barely moved was a click, not a look. Only then does it
     // count as an action — so turning the camera never swings a fist.
     if (travelled < 6) {
-      if (e.button === 0) playerAttack(getWorld());
-      if (e.button === 2) playerDodge(getWorld());
+      if (e.button === 0) playerStrike(getWorld(), 'light');
+      if (e.button === 2) playerStrike(getWorld(), 'heavy');
     }
   };
 

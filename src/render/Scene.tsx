@@ -10,6 +10,7 @@ import { ScannerFX } from './ScannerFX';
 import { ResourceNodes } from './ResourceNodes';
 import { SocialLinks } from './SocialLinks';
 import { StructureVisuals } from './StructureVisuals';
+import { SyntheticSite } from './SyntheticSite';
 import { Terrain } from './Terrain';
 import { Vegetation } from './Vegetation';
 import { Water } from './Water';
@@ -24,6 +25,7 @@ export function Scene() {
       <Vegetation />
       <CampVisuals />
       <LandingSite />
+      <SyntheticSite />
       <ResourceNodes />
       <StructureVisuals />
       <MistLayer />

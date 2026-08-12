@@ -88,13 +88,10 @@ export const PLAYER = {
   gravity: 14,
   maxBerries: 6,
   maxMaterials: 10,
-  attackRange: 2.4,
-  attackArcCos: 0.2, // ~78 degrees each side
-  attackDamage: 26,
-  attackCooldown: 0.6,
-  dodgeSpeed: 9.5,
-  dodgeDuration: 0.28,
-  dodgeCooldown: 1.1,
+  // Combat tuning lives in COMBAT, below. The v0.1 attack/dodge numbers that
+  // used to sit here were superseded wholesale in v0.8 and are gone rather
+  // than left behind — a second set of dials nobody reads is how you spend an
+  // afternoon tuning a constant that no longer does anything.
   interactRange: 2.8,
   offerRange: 10,
 };
@@ -391,6 +388,53 @@ export const SCANNER = {
 
 /** How close Emerson must stand to operate the fabricator. */
 export const FABRICATOR = { range: 4.6 } as const;
+
+/**
+ * Combat. One blade, two threats, numbers small enough to read at a glance.
+ *
+ * Tuned in the browser: the biological encounter must be survivable while
+ * learning the controls, the synthetic one must be noticeably harder without
+ * being unfair. Every enemy attack is preceded by a visible wind-up long
+ * enough to react to.
+ */
+export const COMBAT = {
+  /** Player strike timing, in real seconds. */
+  light: { windup: 0.14, active: 0.16, recover: 0.26, damage: 26, range: 3.0, arcCos: 0.15 },
+  heavy: { windup: 0.34, active: 0.2, recover: 0.5, damage: 52, range: 3.4, arcCos: 0.3 },
+  /** A light chain resets if the next press comes later than this. */
+  chainWindow: 0.55,
+  maxChain: 3,
+
+  /** Dodge: a displacement model, plus a short mercy window. */
+  dodgeSpeed: 11,
+  dodgeDuration: 0.3,
+  dodgeCooldown: 0.55,
+  /** Invulnerable for most of the roll — conservative, but forgiving to learn. */
+  dodgeIFrames: 0.24,
+
+  /** Lock-on. */
+  lockRange: 26,
+  lockBreakRange: 34,
+
+  /** Emerson recovers slowly out of combat, and not at all during it. */
+  regenDelay: 6,
+} as const;
+
+/** Threat behaviour shared by both encounter archetypes. */
+export const THREAT = {
+  /** Nothing notices Emerson from across the valley. */
+  noticeRange: 22,
+  /** Inside this, a warning becomes a real threat. */
+  provokeRange: 9,
+  /** How long the creature postures before it will commit. */
+  warnDuration: 2.6,
+  /** Lost sight of the target for this long → disengage. */
+  loseTargetAfter: 6,
+  /** Never chase further than this from home territory. */
+  leash: 46,
+  /** Human Landing is home: nothing hunts inside this radius of the hearth. */
+  safeRadius: 42,
+} as const;
 
 /** Glowberry abundance, adjustable from Creator Mode. */
 export const YIELD = {

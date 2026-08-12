@@ -100,6 +100,15 @@ export const LANDMARKS: Landmark[] = [
     pos: { x: -46, z: 118 },
     radius: 36,
   },
+  // --- between the Ashlands and the Skyreach -------------------------------
+  {
+    id: 'sunkenring',
+    name: 'the Sunken Ring',
+    ariLine:
+      'Emerson, stop. These pylons are not ours. They are not Veyra or Caelari either, and the weathering says they have been here far longer than any of us.',
+    pos: { x: -86, z: -14 },
+    radius: 30,
+  },
   // --- Caelari Skyreach ---------------------------------------------------
   {
     id: 'skyapproach',

@@ -173,7 +173,45 @@ function technicianLines(world: World, s: Settler, firstMeeting: boolean): Dialo
     return out;
   }
 
+  // A recovered core fragment outranks anything else she has to say. She is a
+  // technician looking at hardware she cannot account for, and she says so
+  // plainly — nobody in EDEN explains the Sunken Ring, because nobody can.
+  if (p.salvage.coreFragment > 0) {
+    say('That thing you brought back. I ran it through everything I have.');
+    say(
+      'It is not Veyra work and it is not Caelari work, and it is certainly not ours. Whatever alloy that is, we cannot make it and I cannot cut it.',
+    );
+    say(
+      p.salvage.coreFragment > 1
+        ? 'And you have more than one. So there is more than one of them still running out there. I would very much like to know what they are running for.'
+        : 'It still draws power, Emerson. Sitting on my bench, with nothing attached to it. Bring me another and I will keep looking.',
+    );
+    return out;
+  }
+
+  if (!p.unlocks.arcBlade) {
+    const blade = RECIPE_BY_ID['arc-blade-mk1'];
+    const missing: string[] = [];
+    for (const [id, need] of Object.entries(blade.costs)) {
+      const have = p.materials[id as MaterialId];
+      if (have < (need ?? 0)) missing.push(`${(need ?? 0) - have} more ${MATERIALS[id as MaterialId].name}`);
+    }
+    say('Scanner is holding calibration. Tell ARI if the resolution drifts.');
+    if (missing.length === 0) {
+      say(
+        'And I can cut you an edge now, if you want one. I would rather you did not need it. Bring the feedstock to the hopper and I will run it.',
+      );
+    } else {
+      say(
+        'ARI has been reading things out past the Ash Pass that I do not like. If you are going that way, I can build you something to hold — an arc edge, nothing clever.',
+      );
+      say(`I would need ${missing.join(', ')} for it.`);
+    }
+    return out;
+  }
+
   say('Scanner is holding calibration. Tell ARI if the resolution drifts.');
+  say('You have the blade. Try not to make me regret building it.');
   say('Bring me more material when you find it. There is a long list of things this colony still cannot make.');
   return out;
 }

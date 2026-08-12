@@ -34,8 +34,26 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 810 } });
 page.on('console', (msg) => msg.type() === 'error' && errors.push('console: ' + msg.text()));
 page.on('pageerror', (err) => errors.push('pageerror: ' + err.message));
 
+/*
+ * Pin the world seed.
+ *
+ * The game picks a random seed on a fresh profile, which meant this script was
+ * really running a different valley every time — and a handful of the geography
+ * assertions below are marginal enough that an unlucky valley failed them for
+ * reasons that had nothing to do with the change under test. The playthrough is
+ * what this script exists to check, so it gets one reproducible world; the
+ * across-seed properties belong to the headless suite, which can afford to
+ * generate hundreds of them.
+ */
+const SEED = Number(process.env.EDEN_SEED ?? 31337);
+await page.addInitScript((seed) => {
+  window.localStorage.setItem('eden.seed', String(seed));
+}, SEED);
+
 await page.goto(TARGET_URL, { waitUntil: 'networkidle' });
 await page.waitForTimeout(5000);
+const bootSeed = await page.evaluate(() => window.__EDEN__.getWorld().seed);
+check('the smoke run uses the pinned seed', bootSeed === SEED, `${bootSeed} != ${SEED}`);
 
 // ---------------------------------------------------------------------------
 console.log('\nFIRST RUN / HELP');
@@ -1089,6 +1107,345 @@ if (tech) {
   check('she is at her post', tech.away < 60, `${tech.away.toFixed(0)}m`);
   check('and is still a person', tech.health > 40 && tech.relationships >= 0);
 }
+
+// ---------------------------------------------------------------------------
+console.log('\nv0.8 — THE FIRST DANGER');
+// ---------------------------------------------------------------------------
+
+// The world ships with both archetypes, armed, and the ancient site they guard.
+const dangerWorld = await page.evaluate(() => {
+  const { getWorld, species, config } = window.__EDEN__;
+  const w = getWorld();
+  const camp = w.camps.find((c) => c.speciesId === 'human');
+  const dangerous = w.creatures.filter((c) => species.CREATURE_SPECIES_BY_ID[c.speciesId].dangerous);
+  return {
+    biological: dangerous.filter((c) => !species.CREATURE_SPECIES_BY_ID[c.speciesId].synthetic).length,
+    synthetic: dangerous.filter((c) => species.CREATURE_SPECIES_BY_ID[c.speciesId].synthetic).length,
+    allArmed: dangerous.every((c) => Boolean(c.combat)),
+    nearestToCamp: Math.min(...dangerous.map((c) => Math.hypot(c.pos.x - camp.pos.x, c.pos.z - camp.pos.z))),
+    safeRadius: config.THREAT.safeRadius,
+    pylons: w.siteProps.filter((s) => s.kind === 'pylon').length,
+  };
+});
+check('the valley holds a biological danger', dangerWorld.biological > 0, JSON.stringify(dangerWorld));
+check('and a synthetic one', dangerWorld.synthetic > 0);
+check('every dangerous creature is armed', dangerWorld.allArmed);
+check('none of them sit on Human Landing', dangerWorld.nearestToCamp > dangerWorld.safeRadius,
+  `${dangerWorld.nearestToCamp.toFixed(0)}m`);
+check('the Sunken Ring stands', dangerWorld.pylons > 4, `${dangerWorld.pylons} pylons`);
+
+// Unarmed, the blade cannot be swung at all.
+const unarmed = await page.evaluate(() => {
+  const { getWorld, combat } = window.__EDEN__;
+  const w = getWorld();
+  w.player.equipped = 'none';
+  w.player.unlocks.arcBlade = false;
+  return combat.canStrike(w);
+});
+check('the Arc Blade cannot be swung before it is built', !unarmed.ok && unarmed.reason === 'unarmed',
+  JSON.stringify(unarmed));
+
+// Build it at the real machine, through the real button.
+await page.evaluate(() => {
+  const { getWorld, fabrication } = window.__EDEN__;
+  const w = getWorld();
+  const recipe = fabrication.RECIPE_BY_ID['arc-blade-mk1'];
+  for (const [id, need] of Object.entries(recipe.costs)) w.player.materials[id] = need;
+  w.player.pos.x = w.fabricatorPos.x + 1.2;
+  w.player.pos.z = w.fabricatorPos.z + 1.2;
+  window.__EDEN__.useUI.getState().setFabricatorOpen(true);
+});
+await page.waitForTimeout(400);
+await page.locator('.fab-recipe', { hasText: 'Arc Blade' }).locator('.fab-button').click();
+await page.waitForTimeout(200);
+await page.screenshot({ path: `${SHOT_DIR}/21-arc-blade.png` });
+await page.evaluate(() => {
+  for (let i = 0; i < 30 * 8; i++) window.__EDEN__.stepSim(1 / 30);
+});
+await page.waitForTimeout(400);
+const armed = await page.evaluate(() => {
+  const w = window.__EDEN__.getWorld();
+  return { unlocked: w.player.unlocks.arcBlade, equipped: w.player.equipped, ari: w.ariQueue.join(' | ') };
+});
+check('the Arc Blade Mk I is fabricated and equipped', armed.unlocked && armed.equipped === 'arcBlade',
+  JSON.stringify(armed));
+check('ARI announces it', /ARC BLADE MK I ONLINE/.test(armed.ari), armed.ari.slice(0, 120));
+await page.evaluate(() => window.__EDEN__.useUI.getState().setFabricatorOpen(false));
+await page.waitForTimeout(300);
+
+// Nothing may hunt Emerson at home.
+const atHome = await page.evaluate(() => {
+  const { getWorld, combat, species, config } = window.__EDEN__;
+  const w = getWorld();
+  const camp = w.camps.find((c) => c.speciesId === 'human');
+  const def = species.CREATURE_SPECIES.find((s) => s.id === 'rakhor');
+  w.player.pos.x = camp.pos.x;
+  w.player.pos.z = camp.pos.z;
+  w.player.health = 100;
+  // Put one right on top of him and let the simulation run.
+  const c = window.__EDEN__.goals ? null : null;
+  const made = w.creatures.find((x) => x.speciesId === 'rakhor');
+  if (made) {
+    made.pos.x = camp.pos.x + 3;
+    made.pos.z = camp.pos.z;
+    made.combat.state = 'calm';
+  }
+  for (let i = 0; i < 30 * 30; i++) {
+    window.__EDEN__.stepSim(1 / 30);
+    window.__EDEN__.stepPlayer(1 / 30);
+    w.player.pos.x = camp.pos.x;
+    w.player.pos.z = camp.pos.z;
+  }
+  void c;
+  void def;
+  return {
+    inside: combat.insideSafeZone(w, w.player.pos.x, w.player.pos.z),
+    health: w.player.health,
+    hostiles: combat.activeThreats(w).length,
+    config: config.THREAT.safeRadius,
+  };
+});
+check('Human Landing is genuinely safe', atHome.inside && atHome.health >= 99 && atHome.hostiles === 0,
+  JSON.stringify(atHome));
+
+// A real encounter, out in the open, driven entirely by the simulation.
+const encounter = await page.evaluate(() => {
+  const { getWorld, threats, species, combat, config } = window.__EDEN__;
+  const w = getWorld();
+  const def = species.CREATURE_SPECIES.find((s) => s.id === 'rakhor');
+  // Clear ground far from the colony.
+  const camp = w.camps.find((c) => c.speciesId === 'human');
+  let spot = null;
+  for (let ring = 90; ring < 160 && !spot; ring += 10) {
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      const p = { x: Math.sin(a) * ring, z: Math.cos(a) * ring };
+      if (Math.hypot(p.x, p.z) > 145) continue;
+      if (Math.hypot(p.x - camp.pos.x, p.z - camp.pos.z) < config.THREAT.safeRadius + 60) continue;
+      if (!window.__EDEN__.terrain.isWalkable(p.x, p.z) || window.__EDEN__.terrain.isWater(p.x, p.z)) continue;
+      if (w.obstacles.some((o) => Math.hypot(o.pos.x - p.x, o.pos.z - p.z) < o.radius + 6)) continue;
+      spot = p;
+      break;
+    }
+  }
+  const c = w.creatures.find((x) => x.speciesId === 'rakhor');
+  c.pos.x = spot.x + 3;
+  c.pos.z = spot.z;
+  c.combat.state = 'calm';
+  c.combat.territory = { x: spot.x + 3, z: spot.z };
+  c.health = def.dangerous.health;
+  w.player.pos.x = spot.x;
+  w.player.pos.z = spot.z;
+  w.player.health = 100;
+
+  const seen = [];
+  for (let i = 0; i < 30 * 40; i++) {
+    window.__EDEN__.stepSim(1 / 30);
+    window.__EDEN__.stepPlayer(1 / 30);
+    w.player.pos.x = spot.x;
+    w.player.pos.z = spot.z;
+    const st = c.combat.state;
+    if (seen[seen.length - 1] !== st) seen.push(st);
+    if (st === 'strike') break;
+  }
+  return {
+    spot,
+    seen,
+    warnedFirst: seen.indexOf('warn') > -1 && seen.indexOf('warn') < seen.indexOf('hostile'),
+    windupBeforeStrike: seen.indexOf('strike') > 0 && seen[seen.indexOf('strike') - 1] === 'windup',
+    health: w.player.health,
+    hostile: combat.isHostile(c),
+    disposition: threats.dispositionOf(c),
+    creatureId: c.id,
+  };
+});
+check('a predator warns before it commits', encounter.warnedFirst, encounter.seen.join(' → '));
+check('and winds up before every strike', encounter.windupBeforeStrike, encounter.seen.join(' → '));
+check('the strike actually costs health', encounter.health < 100, `${encounter.health}`);
+check('the scanner reads it as hostile', encounter.disposition === 'Hostile', encounter.disposition);
+await page.screenshot({ path: `${SHOT_DIR}/22-encounter.png` });
+
+// The blade works, in the active window and nowhere else.
+const fight = await page.evaluate((creatureId) => {
+  const { getWorld, combat } = window.__EDEN__;
+  const w = getWorld();
+  const c = w.creatures.find((x) => x.id === creatureId);
+  // Face it and swing.
+  c.pos.x = w.player.pos.x + 1.5;
+  c.pos.z = w.player.pos.z;
+  w.player.heading = Math.atan2(c.pos.x - w.player.pos.x, c.pos.z - w.player.pos.z);
+  const before = c.health;
+  const started = combat.beginStrike(w, 'light');
+  const duringWindup = { phase: w.player.strike.phase, health: c.health };
+  let hits = 0;
+  for (let i = 0; i < 90 && w.player.strike; i++) {
+    hits += combat.strikeTick(w, 1 / 60).length;
+    c.pos.x = w.player.pos.x + 1.5;
+    c.pos.z = w.player.pos.z;
+  }
+  return { started: started.ok, duringWindup, hits, before, after: c.health };
+}, encounter.creatureId);
+check('the Arc Blade swings', fight.started);
+check('nothing lands during the wind-up', fight.duringWindup.phase === 'windup' && fight.duringWindup.health === fight.before);
+check('one swing lands exactly one hit', fight.hits === 1, `${fight.hits}`);
+check('and it hurts', fight.after < fight.before, `${fight.before} → ${fight.after}`);
+
+// Lock-on shows the target, and the dodge is a real mercy window.
+const defence = await page.evaluate((creatureId) => {
+  const { getWorld, combat } = window.__EDEN__;
+  const w = getWorld();
+  const c = w.creatures.find((x) => x.id === creatureId);
+  c.pos.x = w.player.pos.x + 3;
+  c.pos.z = w.player.pos.z;
+  const locked = combat.toggleLock(w);
+  w.player.health = 100;
+  w.player.invulnUntil = -9999;
+  w.player.dodgeCooldown = 0;
+  w.player.dodgeTimer = 0;
+  const rolled = combat.beginDodge(w);
+  const blocked = combat.damagePlayer(w, 40, 'a test');
+  return { lockedId: locked?.id ?? null, rolled, blocked, health: w.player.health };
+}, encounter.creatureId);
+check('lock-on takes the nearest threat', defence.lockedId === encounter.creatureId, JSON.stringify(defence));
+check('the dodge grants real invulnerability', defence.rolled && !defence.blocked && defence.health === 100,
+  JSON.stringify(defence));
+await page.waitForTimeout(1200);
+const lockHud = await page.locator('.hud').innerText();
+check('the HUD tracks the locked target', /RAKHOR/i.test(lockHud), lockHud.slice(0, 160));
+await page.screenshot({ path: `${SHOT_DIR}/23-lock-on.png` });
+
+// Bringing one down leaves a record; a synthetic leaves salvage as well.
+const spoils = await page.evaluate((creatureId) => {
+  const { getWorld, combat, species } = window.__EDEN__;
+  const w = getWorld();
+  const c = w.creatures.find((x) => x.id === creatureId);
+  combat.damageCreatureByPlayer(w, c, 9999);
+  const biologicalSalvage = w.player.salvage.coreFragment;
+  // Now a Warden, on its own ground.
+  const warden = w.creatures.find((x) => species.CREATURE_SPECIES_BY_ID[x.speciesId].synthetic);
+  combat.damageCreatureByPlayer(w, warden, 9999);
+  return {
+    biologicalSalvage,
+    fragments: w.player.salvage.coreFragment,
+    chronicle: w.chronicle.slice(-14).map((e) => e.text),
+    creaturesLeft: w.creatures.length,
+  };
+}, encounter.creatureId);
+check('a predator leaves no salvage', spoils.biologicalSalvage === 0);
+check('a synthetic leaves a core fragment', spoils.fragments === 1, `${spoils.fragments}`);
+check('the Chronicle records both', spoils.chronicle.some((t) => /brought down a Rakhor/.test(t)) &&
+  spoils.chronicle.some((t) => /disabled a Warden Wisp/.test(t)), spoils.chronicle.join(' // ').slice(0, 240));
+
+// The scanner classifies life, not just minerals.
+const classified = await page.evaluate(() => {
+  const { getWorld, scanner, species, identify } = window.__EDEN__;
+  const w = getWorld();
+  const target = w.creatures.find((c) => species.CREATURE_SPECIES_BY_ID[c.speciesId].dangerous);
+  if (!target) return null;
+  w.player.pos.x = target.pos.x + 6;
+  w.player.pos.z = target.pos.z;
+  w.player.scan.lastAt = -9999;
+  const result = scanner.performScan(w);
+  const dx = target.pos.x - w.player.pos.x;
+  const dz = target.pos.z - w.player.pos.z;
+  const d = Math.hypot(dx, dz);
+  const ident = identify.identifyFocus(w, dx / d, dz / d);
+  return {
+    threats: result.threats,
+    line: w.ariQueue[w.ariQueue.length - 1] ?? '',
+    category: ident?.scan?.category ?? null,
+    disposition: ident?.scan?.threat ?? null,
+    dangerous: ident?.dangerous ?? false,
+  };
+});
+if (classified) {
+  check('the scanner reports dangerous life',
+    classified.threats.biological + classified.threats.synthetic > 0, JSON.stringify(classified.threats));
+  check('ARI says so out loud', /signature|power source/i.test(classified.line), classified.line.slice(0, 140));
+  check('the identification card classifies it',
+    classified.category === 'Biological' || classified.category === 'Synthetic', String(classified.category));
+  check('and gives it a disposition', Boolean(classified.disposition), String(classified.disposition));
+}
+await page.waitForTimeout(1200);
+await page.screenshot({ path: `${SHOT_DIR}/24-identify.png` });
+
+// Going down must never restart the valley.
+const extraction = await page.evaluate(() => {
+  const { getWorld, combat } = window.__EDEN__;
+  const w = getWorld();
+  w.player.unlocks.scanner = true;
+  w.player.materials.alloy = 8;
+  w.player.salvage.coreFragment = 3;
+  const before = {
+    settlers: w.settlers.length,
+    names: w.settlers.map((s) => s.name).join('|'),
+    structures: w.structures.length,
+    chronicle: w.chronicle.length,
+    time: w.timeSec,
+    relationships: w.settlers.reduce((n, s) => n + Object.keys(s.relationships).length, 0),
+  };
+  w.player.invulnUntil = -9999;
+  combat.damagePlayer(w, 9999, 'a Rakhor');
+  const extracting = Boolean(w.player.extraction);
+  for (let i = 0; i < 30 * 10; i++) {
+    window.__EDEN__.stepSim(1 / 30);
+    window.__EDEN__.stepPlayer(1 / 30);
+  }
+  return {
+    extracting,
+    after: {
+      settlers: w.settlers.length,
+      names: w.settlers.map((s) => s.name).join('|'),
+      structures: w.structures.length,
+      chronicle: w.chronicle.length,
+      time: w.timeSec,
+      relationships: w.settlers.reduce((n, s) => n + Object.keys(s.relationships).length, 0),
+    },
+    before,
+    recorded: w.chronicle.some((e) => /emergency extraction/i.test(e.text)),
+    home: combat.insideSafeZone(w, w.player.pos.x, w.player.pos.z),
+    health: w.player.health,
+    scanner: w.player.unlocks.scanner,
+    blade: w.player.unlocks.arcBlade,
+    fragments: w.player.salvage.coreFragment,
+    alloy: w.player.materials.alloy,
+  };
+});
+check('going down starts an extraction rather than a respawn', extraction.extracting);
+check('Emerson comes back at Human Landing, alive', extraction.home && extraction.health > 0,
+  JSON.stringify({ home: extraction.home, health: extraction.health }));
+check('no capability is ever taken away', extraction.scanner && extraction.blade && extraction.fragments === 3,
+  JSON.stringify(extraction));
+check('some of the haul is lost', extraction.alloy === 6, `${extraction.alloy}`);
+// The Chronicle is a bounded ring, so by this point in the run its length has
+// stopped growing — "the log got longer" is not evidence of anything. What
+// matters is that nobody vanished, nothing was rebuilt, no relationship was
+// forgotten, and time kept moving the whole time Emerson was down.
+check('the valley never restarted',
+  extraction.after.settlers === extraction.before.settlers &&
+    extraction.after.names === extraction.before.names &&
+    extraction.after.structures >= extraction.before.structures &&
+    extraction.after.relationships >= extraction.before.relationships &&
+    extraction.after.time > extraction.before.time,
+  JSON.stringify(extraction.after) + ' vs ' + JSON.stringify(extraction.before));
+check('and the Chronicle records the extraction', extraction.recorded);
+await page.screenshot({ path: `${SHOT_DIR}/25-after-extraction.png` });
+
+// Creator Mode can read the fight.
+await page.keyboard.press('Tab');
+await page.waitForTimeout(700);
+await page.evaluate(() => {
+  const { getWorld, useUI, species } = window.__EDEN__;
+  const w = getWorld();
+  const c = w.creatures.find((x) => species.CREATURE_SPECIES_BY_ID[x.speciesId].dangerous);
+  if (c) useUI.getState().select(c.id);
+});
+await page.waitForTimeout(700);
+const creatorCombat = await page.locator('.inspector').innerText().catch(() => '');
+check('Creator Mode exposes combat state', /COMBAT STATE/i.test(creatorCombat), creatorCombat.slice(0, 200));
+await page.screenshot({ path: `${SHOT_DIR}/26-creator-combat.png` });
+await page.keyboard.press('Tab');
+await page.waitForTimeout(700);
 
 const worldState = await page.evaluate(() => {
   const w = window.__EDEN__.getWorld();

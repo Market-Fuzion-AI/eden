@@ -90,6 +90,26 @@ export function Inspector() {
         </div>
       )}
 
+      {/* Live combat state. Only appears on things that can be in a fight, so
+          the fight can be debugged while it is happening rather than after. */}
+      {data.combat && (
+        <>
+          <div className="section-title">COMBAT STATE</div>
+          <div className="combat-state">
+            <span className={`combat-chip s-${data.combat.state.replace(/\s+/g, '-')}`}>
+              {data.combat.state.toUpperCase()}
+            </span>
+            <span className="combat-timer">{data.combat.forSeconds.toFixed(1)}s</span>
+            {data.combat.distance > 0 && (
+              <span className="combat-timer">{Math.round(data.combat.distance)}m to Emerson</span>
+            )}
+          </div>
+          {data.combat.lines.map((line, i) => (
+            <div key={i} className="known-row">{line}</div>
+          ))}
+        </>
+      )}
+
       <div className="section-title">VITALS</div>
       {data.vitals.map((b) => (
         <Bar key={b.label} bar={b} />

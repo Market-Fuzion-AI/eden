@@ -29,6 +29,13 @@ export interface Rig {
   animate(ctx: AnimCtx): void;
   /** Approximate head height for status sprites / selection rings. */
   height: number;
+  /**
+   * Combat telegraph, 0..1. Present only on rigs that can threaten Emerson:
+   * the renderer feeds it the wind-up progress so the tell is part of the
+   * creature itself — a lowered head, a brightening core — rather than an
+   * icon floating above it.
+   */
+  setCharge?(amount: number, state: string): void;
 }
 
 const capsule = (r: number, len: number) => new THREE.CapsuleGeometry(r, len, 4, 10);
@@ -513,6 +520,11 @@ export function buildCreatureRig(def: CreatureSpeciesDef, variant: number, juven
   const wings: THREE.Object3D[] = [];
   let tail: THREE.Object3D | null = null;
   let height = 1;
+  /** Parts that brighten during a wind-up, so the tell is on the creature. */
+  const chargeParts: THREE.Mesh[] = [];
+  /** Counter-rotating rings, for the synthetic plan. */
+  const rings: THREE.Object3D[] = [];
+  let head: THREE.Object3D | null = null;
 
   const mkLegAt = (x: number, z: number, y: number, r: number, len: number) => {
     const pivot = new THREE.Group();
@@ -749,7 +761,59 @@ export function buildCreatureRig(def: CreatureSpeciesDef, variant: number, juven
       tail = tailM;
       mkLegAt(-0.19, -0.04, 0.66, 0.075, 0.38);
       mkLegAt(0.19, -0.04, 0.66, 0.075, 0.38);
+      head = neck;
+      // The eyes and the dorsal spikes are what light up before it commits.
+      for (const o of body.children) {
+        const m = o as THREE.Mesh;
+        if (m.isMesh && m.material === glowMat) chargeParts.push(m);
+      }
       height = 1.55;
+      break;
+    }
+    case 'warden': {
+      // Nothing on this world grew this. Hard flat planes, perfect symmetry,
+      // no face — a machine silhouette that could never be mistaken for fauna
+      // even as a distant shape against the sky.
+      // Hard, angular geometry does the "manufactured" work here — the toon
+      // ramp is already only three steps, so faceted forms read as machined.
+      const shell = toonMat(def.palette.body);
+      const core = mesh(new THREE.OctahedronGeometry(0.34, 0), shell, 0, 0, 0);
+      core.scale.set(1, 1.35, 1);
+      body.add(core);
+
+      // The lens. It is the only part that ever looks at anything, and it is
+      // what brightens through a wind-up — so it is sized to be legible from
+      // the far side of the ring, not just up close.
+      const lens = mesh(sphere(0.2, 12), glowMat, 0, 0, 0.31);
+      lens.scale.set(1.5, 0.7, 0.7);
+      body.add(lens);
+      chargeParts.push(lens);
+      const housing = mesh(new THREE.TorusGeometry(0.26, 0.06, 6, 14), accentMat, 0, 0, 0.3);
+      body.add(housing);
+
+      // Two counter-rotating rings on different axes: the read that says
+      // "still powered" from a hundred metres away.
+      const ringA = mesh(new THREE.TorusGeometry(0.62, 0.045, 6, 22), bellyMat, 0, 0, 0);
+      ringA.rotation.x = Math.PI / 2;
+      body.add(ringA);
+      rings.push(ringA);
+      const ringB = mesh(new THREE.TorusGeometry(0.5, 0.035, 6, 20), accentMat, 0, 0, 0);
+      ringB.rotation.y = Math.PI / 2.6;
+      body.add(ringB);
+      rings.push(ringB);
+
+      // Free-floating plates held at a distance by nothing visible at all.
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2;
+        const plate = mesh(box(0.14, 0.42, 0.06), shell, Math.sin(a) * 0.72, 0, Math.cos(a) * 0.72);
+        plate.rotation.y = a;
+        body.add(plate);
+        wings.push(plate);
+        const spark = mesh(sphere(0.05, 8), glowMat, Math.sin(a) * 0.72, -0.24, Math.cos(a) * 0.72);
+        body.add(spark);
+        chargeParts.push(spark);
+      }
+      height = 0.9;
       break;
     }
   }
@@ -760,13 +824,52 @@ export function buildCreatureRig(def: CreatureSpeciesDef, variant: number, juven
   const s = def.scale * (juvenile ? 0.58 : 1) * (0.92 + variant * 0.16);
   group.scale.setScalar(s);
 
+  // Baseline emissive levels, so a telegraph can return exactly to rest.
+  const baseEmissive = chargeParts.map((m) => (m.material as THREE.MeshToonMaterial).emissiveIntensity ?? 1);
+  let charge = 0;
+  let chargeState = 'calm';
+
   let phase = variant * 10;
   return {
     group,
     height: height * s + (def.hover ? def.hoverHeight ?? 0 : 0),
+    /**
+     * The visible tell. Wind-up brightens and pulses faster as it completes;
+     * a warning posture holds a steady lower glow. Both are readable from
+     * behind, which matters because that is where a fleeing player is.
+     */
+    setCharge(amount: number, state: string) {
+      charge = Math.max(0, Math.min(1, amount));
+      chargeState = state;
+      const winding = state === 'windup';
+      const warning = state === 'warn';
+      const strength = winding ? 0.5 + charge * 3.2 : warning ? 0.9 : 0;
+      for (let i = 0; i < chargeParts.length; i++) {
+        const mat = chargeParts[i].material as THREE.MeshToonMaterial;
+        mat.emissiveIntensity = baseEmissive[i] * (1 + strength);
+      }
+    },
     animate(ctx) {
       const speedNorm = Math.min(1, ctx.speed / Math.max(1, def.speed));
       phase += ctx.dt * (4 + ctx.speed * 2.5);
+      if (def.plan === 'warden') {
+        // Rings accelerate as it spins up to strike. Nothing else about the
+        // machine moves, which is exactly why the spin reads as intent.
+        const spin = 0.6 + (chargeState === 'windup' ? charge * 7 : chargeState === 'hostile' ? 1.4 : 0);
+        rings[0].rotation.z += ctx.dt * spin * 1.6;
+        rings[1].rotation.z -= ctx.dt * spin * 2.3;
+        body.position.y = Math.sin(ctx.time * 1.2 + variant * 7) * 0.12;
+        for (let i = 0; i < wings.length; i++) {
+          const a = (i / wings.length) * Math.PI * 2 + ctx.time * 0.35;
+          const spread = 0.72 + (chargeState === 'windup' ? charge * 0.3 : 0);
+          wings[i].position.set(Math.sin(a) * spread, Math.sin(ctx.time * 2 + i) * 0.1, Math.cos(a) * spread);
+          wings[i].rotation.y = a;
+        }
+        return;
+      }
+      // A warning posture lowers the head and stills the body: the biological
+      // tell, and the moment the player still has the option to walk away.
+      if (head) head.rotation.x = 0.7 - (chargeState === 'warn' ? 0.45 : 0) + (chargeState === 'windup' ? charge * 0.5 : 0);
       for (let i = 0; i < legs.length; i++) {
         // Diagonal gait for quadrupeds.
         const offset = legs.length === 4 ? ((i === 0 || i === 3) ? 0 : Math.PI) : (i % 2) * Math.PI;

@@ -13,6 +13,10 @@ import * as terrain from '../sim/terrain';
 import * as landmarks from '../sim/landmarks';
 import * as inspect from '../sim/inspect';
 import * as structures from '../sim/structures';
+import * as combat from '../sim/combat';
+import * as threats from '../sim/threats';
+import * as identify from '../sim/identify';
+import * as species from '../sim/species';
 import * as player from '../sim/player';
 import { getInteractions, updatePlayer } from '../sim/player';
 import { simTick } from '../sim/simulation';
@@ -85,6 +89,10 @@ export function installDebugBridge(): void {
     social,
     fabrication,
     scanner,
+    combat,
+    threats,
+    identify,
+    species,
     inspect,
     regions,
     terrain,

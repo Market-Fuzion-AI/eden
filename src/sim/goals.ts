@@ -42,8 +42,10 @@ import {
   pruneSocialKnowledge,
   transmitBelief,
 } from './socialKnowledge';
+import { CREATURE_SPECIES_BY_ID } from './species';
 import { heightAt, isWater } from './terrain';
 import type {
+  Creature,
   Goal,
   GoalType,
   RelationshipEvent,
@@ -610,10 +612,56 @@ function mkGoal(type: GoalType, label: string, t: number, opts: Partial<Goal> = 
   return { type, label, phase: 'travel', timer: 0, startedAt: t, deadline: t + 60, ...opts };
 }
 
+/** How close a roused predator has to be before a settler abandons their day. */
+const SETTLER_FLEE_RANGE = 18;
+
+/**
+ * The nearest dangerous creature that is actually roused.
+ *
+ * A dozing Rakhor is scenery; one that has noticed something is a reason to
+ * leave. This deliberately does not care whether Emerson is the one it noticed
+ * — a settler running from a fight they are not part of is exactly right.
+ */
+function nearestDanger(world: World, s: Settler): { creature: Creature; d: number } | null {
+  let best: { creature: Creature; d: number } | null = null;
+  for (const c of world.creatures) {
+    if (!c.combat || c.combat.state === 'calm' || c.combat.state === 'disengage') continue;
+    const d = dist(c.pos, s.pos);
+    if (d > SETTLER_FLEE_RANGE) continue;
+    if (!best || d < best.d) best = { creature: c, d };
+  }
+  return best;
+}
+
 export function settlerThink(world: World, s: Settler): void {
   const t = world.timeSec;
   const rng = world.rng;
   const day = daylight01(t);
+
+  // Danger outranks every other consideration, including a conversation and
+  // including starvation. The colonists are not combatants and v0.8 does not
+  // make them any: a settler who sees a roused predator gets away from it and
+  // resumes their life afterwards.
+  const danger = nearestDanger(world, s);
+  if (danger) {
+    const def = CREATURE_SPECIES_BY_ID[danger.creature.speciesId];
+    s.socialTimer = 0;
+    s.confronting = false;
+    s.resting = false;
+    s.goal = mkGoal('flee', `Get clear of the ${def.name}`, t, {
+      targetPos: awayFrom(world, s, danger.creature.pos),
+      deadline: t + 25,
+    });
+    s.goalReason = {
+      summary: [
+        `A ${def.name} is ${Math.round(danger.d)}m away and roused`,
+        'Not a fighter — distance is the only answer available',
+      ],
+      scores: [],
+    };
+    s.nextThinkAt = t + 1.2;
+    return;
+  }
 
   // A settler mid-conversation does not re-plan. Without this, one party can
   // wander off mid-exchange while the other keeps talking to empty air — and
@@ -2149,6 +2197,18 @@ export function settlerExecute(world: World, s: Settler, dt: number): void {
           if (paired) other.goal.phase = 'done';
         }
       }
+      break;
+    }
+    case 'flee': {
+      // Settlers do not fight. They run, they keep running while the thing is
+      // still there, and they stop when it is far enough behind them.
+      const danger = nearestDanger(world, s);
+      if (!danger) {
+        g.phase = 'done';
+        break;
+      }
+      stepToward(world, s, g.targetPos!, dt, { speed: SETTLER.walkSpeed * 1.5 });
+      if (danger.d > SETTLER_FLEE_RANGE * 1.6) g.phase = 'done';
       break;
     }
     case 'avoid': {

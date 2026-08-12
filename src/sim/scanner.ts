@@ -1,6 +1,7 @@
 import { SCANNER } from './config';
 import { MATERIALS, materialForNodeType } from './fabrication';
 import { placeName } from './landmarks';
+import { CREATURE_SPECIES_BY_ID } from './species';
 import type { MaterialId, World } from './types';
 import { dist } from './vec';
 
@@ -25,6 +26,8 @@ export interface ScanResult {
   /** True when an energy cell was spent to force an early, longer sweep. */
   boosted: boolean;
   radius: number;
+  /** Dangerous life in range, split by what it is made of. */
+  threats: { biological: number; synthetic: number };
 }
 
 /** Seconds until the scanner can fire again, or 0 when it is ready. */
@@ -53,7 +56,14 @@ export function scanWouldSpendCell(world: World): boolean {
  */
 export function performScan(world: World): ScanResult {
   const p = world.player;
-  const empty: ScanResult = { ok: false, found: [], counts: {}, boosted: false, radius: 0 };
+  const empty: ScanResult = {
+    ok: false,
+    found: [],
+    counts: {},
+    boosted: false,
+    radius: 0,
+    threats: { biological: 0, synthetic: 0 },
+  };
   if (p.dead) return { ...empty, reason: 'dead' };
   if (!p.unlocks.scanner) return { ...empty, reason: 'locked' };
 
@@ -77,14 +87,25 @@ export function performScan(world: World): ScanResult {
     node.discovered = true;
   }
 
+  // The sweep also reads life, which is the difference between knowing there
+  // is ore over the ridge and knowing what is standing on top of it.
+  const threats = { biological: 0, synthetic: 0 };
+  for (const c of world.creatures) {
+    const def = CREATURE_SPECIES_BY_ID[c.speciesId];
+    if (!def.dangerous) continue;
+    if (dist(c.pos, p.pos) > radius) continue;
+    if (def.synthetic) threats.synthetic += 1;
+    else threats.biological += 1;
+  }
+
   p.scan.lastAt = world.timeSec;
   p.scan.activeUntil = world.timeSec + (boosted ? SCANNER.boostedHighlight : SCANNER.highlight);
   p.scan.nodeIds = found;
   p.scan.radius = radius;
   p.scan.pulseStartedAt = world.timeSec;
 
-  world.ariQueue.push(describeScan(world, counts, boosted, radius));
-  return { ok: true, found, counts, boosted, radius };
+  world.ariQueue.push(describeScan(world, counts, boosted, radius, threats));
+  return { ok: true, found, counts, boosted, radius, threats };
 }
 
 /** ARI's read-out. Names what was found, or plainly says nothing was. */
@@ -93,6 +114,7 @@ function describeScan(
   counts: Partial<Record<MaterialId, number>>,
   boosted: boolean,
   radius: number,
+  threats: { biological: number; synthetic: number },
 ): string {
   const parts: string[] = [];
   for (const id of Object.keys(counts) as MaterialId[]) {
@@ -100,10 +122,19 @@ function describeScan(
     parts.push(`${n} ${MATERIALS[id].name}${n === 1 ? '' : ' signatures'}`);
   }
   const prefix = boosted ? 'Cell discharged — extended sweep. ' : '';
-  if (parts.length === 0) {
-    return `${prefix}No usable material signatures within ${Math.round(radius)} metres of ${placeName(world.player.pos)}.`;
+  // The warning goes last, so it is the sentence the player is left holding.
+  const warn: string[] = [];
+  if (threats.biological > 0) {
+    warn.push(`${threats.biological} large biological signature${threats.biological === 1 ? '' : 's'}`);
   }
-  return `${prefix}${parts.join(', ')} within range.`;
+  if (threats.synthetic > 0) {
+    warn.push(`${threats.synthetic} synthetic power source${threats.synthetic === 1 ? '' : 's'}`);
+  }
+  const tail = warn.length > 0 ? ` Also reading ${warn.join(' and ')} — be careful.` : '';
+  if (parts.length === 0) {
+    return `${prefix}No usable material signatures within ${Math.round(radius)} metres of ${placeName(world.player.pos)}.${tail}`;
+  }
+  return `${prefix}${parts.join(', ')} within range.${tail}`;
 }
 
 /** Node ids currently lit. Empty once the highlight has expired. */

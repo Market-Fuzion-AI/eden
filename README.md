@@ -10,7 +10,8 @@ The differentiator is underneath:
 
 > *The world continues to think and act without you.*
 
-Twenty-two autonomous settlers (8 Humans, 7 Veyra, 7 Caelari), nine native creature archetypes, and
+Twenty-two autonomous settlers (8 Humans, 7 Veyra, 7 Caelari), ten creature archetypes — nine native,
+one that is not native to anywhere anybody can name — and
 one very important small creature named **Lumi**. Every inhabitant selects its own goals from needs,
 personality, memory and what it believes about everyone else. They build, argue, share food, form
 expectations and change their minds whether or not you are watching. Creator Mode lets you read
@@ -109,6 +110,35 @@ discharges into the scanner for one long-range sweep.
 
 Left home, found something, brought it back, turned it into technology, went further. That is the loop.
 
+**v0.8** put something in the way of it —
+
+> *A world with teeth, not a combat game.*
+
+The Fabricator will cut you an **Arc Blade Mk I** out of the same three materials. It is the only
+weapon in EDEN and there is no second one coming: one blade, a light attack that chains three times,
+a heavy attack that commits, a dodge roll with real invulnerability, and a lock-on. Every one of them
+has a left-hand key as well as a mouse button — `J`, `K`, `Space`, `L` — because EDEN is tested on a
+laptop with no mouse, and a trackpad cannot hold a look-swipe and click at the same time.
+
+Two things out there will fight you. The **Rakhor** is territorial rather than murderous: it notices
+you at twenty metres, squares up when you come inside nine, and holds that warning for two and a half
+seconds before it commits — back away in that window and it lets you go. The **Warden Wisp** is not an
+animal at all. It hovers on the **Sunken Ring**, a circle of half-buried pylons in the ground between
+the Ashlands and the Skyreach that predates every colony signal in the valley, and it treats the ring
+as something to be guarded. Nobody in EDEN explains what it is guarding, or what the ring is, or who
+built it. v0.8 raises the question and leaves it standing.
+
+Nothing ever hits you without a visible wind-up first, nothing chases you past its own ground, and
+nothing hunts you inside Human Landing. Emerson going down does **not** reset the world: ARI fires an
+emergency beacon, he wakes up at the landing site having lost a quarter of what he was carrying, and
+the valley carries on the entire time — same settlers, same relationships, same half-built shelter,
+clock still running. Capabilities are never taken away. Settlers who see a roused predator drop what
+they were doing and run; they never fight, and they go back to their lives afterwards.
+
+Disabling a Warden leaves a **Synthetic Core Fragment**. Take one to Petra and she will tell you,
+straight out, that she has no idea what it is — only that it is nothing anyone here can make, and that
+it is still drawing power sitting on her bench.
+
 ## Running it
 
 ```bash
@@ -123,7 +153,12 @@ npm run build      # typecheck + production build
 npm test           # headless simulation tests (autonomy, determinism, bounded state)
 npm run preview    # serve the production build
 node scripts/smoke.mjs   # browser smoke test with screenshots (needs preview/dev running)
+node scripts/tour-v08.mjs # visual tour: screenshots of the v0.8 encounters
 ```
+
+The browser scripts pin the world seed (`EDEN_SEED`, default `31337`) so a run is reproducible.
+Properties that should hold across *many* valleys belong in the headless suite, which can generate
+hundreds of them; the browser scripts exist to walk one world end to end.
 
 ## The three experiences
 
@@ -177,14 +212,16 @@ the existing needs, utility and relationship systems decide to do.
 | `C` | Recenter the camera behind Emerson |
 | `[` `]` / pinch | Zoom the camera in and out |
 | `Shift` | Sprint |
-| `Space` | Jump |
+| `V` | Jump |
 | `E` | Salvage / extract / harvest · use the Fabricator · gather · talk · help build |
 | `Q` | Pathfinder Scanner sweep (once built) |
 | `H` | Use a Field Medkit |
 | `F` | Offer a glowberry (Lumi decides whether to take it) |
 | `R` | Ask a settler's permission to use their shelter |
-| Left click | Attack |
-| Right click | Dodge |
+| `J` / left click | Light attack — chains up to three |
+| `K` / right click | Heavy attack — slower, hits much harder |
+| `Space` | Dodge roll (brief invulnerability) |
+| `L` | Lock on / release |
 | `Tab` | Toggle Creator Mode |
 | `1 / 2 / 3` | Sim speed 1× / 5× / 20× |
 | `P` | Pause |
@@ -229,6 +266,8 @@ src/sim/      Pure TypeScript simulation. No Three.js, no React.
               provenance, confidence and decay) and the private
               generalizations drawn from them, player materials,
               data-driven fabrication recipes and the Pathfinder Scanner,
+              player combat (windowed strikes, dodge i-frames, lock-on) and
+              the threat state machine both dangerous archetypes share,
               wildlife, Lumi, chronicle (with structured
               who/where/why/effects payloads), landmarks, three biome
               regions, deterministic dialogue, temporal summaries,
