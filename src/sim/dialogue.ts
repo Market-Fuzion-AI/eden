@@ -176,6 +176,16 @@ function technicianLines(world: World, s: Settler, firstMeeting: boolean): Dialo
   // A recovered core fragment outranks anything else she has to say. She is a
   // technician looking at hardware she cannot account for, and she says so
   // plainly — nobody in EDEN explains the Sunken Ring, because nobody can.
+  if (p.unlocks.capacitor && !world.flags.petraSpokeAfterCapacitor) {
+    world.flags.petraSpokeAfterCapacitor = true;
+    say('It took. I will be honest with you — I did not expect it to.');
+    say(
+      'Whatever that core is, it does not leak and it does not sag under load. I wired it into the discharge path and the blade just... accepted it, like it had been waiting for the part.',
+    );
+    say('I would very much like a second one. For study. Not for the blade.');
+    return out;
+  }
+
   if (p.salvage.coreFragment > 0) {
     say('That thing you brought back. I ran it through everything I have.');
     say(
@@ -186,6 +196,11 @@ function technicianLines(world: World, s: Settler, firstMeeting: boolean): Dialo
         ? 'And you have more than one. So there is more than one of them still running out there. I would very much like to know what they are running for.'
         : 'It still draws power, Emerson. Sitting on my bench, with nothing attached to it. Bring me another and I will keep looking.',
     );
+    if (!p.unlocks.capacitor) {
+      say(
+        'I can do one useful thing with it, mind. Wire it into the blade as a capacitor. It will not cut deeper — it will hit like the thing on the other end owes you money.',
+      );
+    }
     return out;
   }
 

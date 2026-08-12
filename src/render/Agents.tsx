@@ -45,6 +45,10 @@ function AgentView({ id }: { id: string }) {
 
   const spriteRef = useRef<THREE.Sprite>(null);
   const bubbleRef = useRef<THREE.Sprite>(null);
+  /** Ground telegraph ring — the tell that survives distance. */
+  const ringRef = useRef<THREE.Mesh>(null);
+  /** Impact flare, synthetics only. */
+  const sparkRef = useRef<THREE.Mesh>(null);
   const visualPos = useRef(new THREE.Vector3());
   const initialized = useRef(false);
   /** True while a hit flash is being applied, so it gets cleared exactly once. */
@@ -98,9 +102,45 @@ function AgentView({ id }: { id: string }) {
     // Combat telegraph. Every attack in EDEN is preceded by something visible
     // on the creature itself, and this is where the simulation's threat state
     // becomes that visible thing.
-    if (e.kind === 'creature' && e.combat && rig.setCharge) {
+    let phaseState = 'calm';
+    let phaseProgress = 0;
+    if (e.kind === 'creature' && e.combat) {
       const phase = threatPhase(world, e);
-      rig.setCharge(phase.progress, phase.state);
+      phaseState = phase.state;
+      phaseProgress = phase.progress;
+      rig.setCharge?.(phase.progress, phase.state);
+    }
+
+    // The ground tell.
+    //
+    // A ring painted on the earth under a creature that is warning or
+    // committing. This is the channel that actually solves reading a Rakhor at
+    // twenty metres: pose changes shrink with distance, but a two-metre ring on
+    // the ground stays a two-metre ring, and it is visible over scrub and past
+    // the animal's own silhouette.
+    const ring = ringRef.current;
+    if (ring) {
+      const warning = phaseState === 'warn';
+      const committing = phaseState === 'windup' || phaseState === 'charge';
+      if (warning || committing) {
+        ring.visible = true;
+        ring.position.set(0, -rig.group.position.y + groundY(e.pos.x, e.pos.z) + 0.06, 0);
+        const mat = ring.material as THREE.MeshBasicMaterial;
+        if (committing) {
+          // Closes inward as the attack lands: a countdown you can see.
+          ring.scale.setScalar(2.6 - phaseProgress * 1.5);
+          mat.color.set('#ff5f6a');
+          mat.opacity = 0.45 + phaseProgress * 0.4;
+        } else {
+          // Warning: a slow pulse that says "not yet, but soon".
+          const pulse = 0.5 + Math.sin(state.clock.elapsedTime * 4.5) * 0.5;
+          ring.scale.setScalar(2.5 + pulse * 0.35);
+          mat.color.set('#ffb03f');
+          mat.opacity = 0.3 + pulse * 0.3;
+        }
+      } else {
+        ring.visible = false;
+      }
     }
 
     rig.animate({
@@ -112,8 +152,12 @@ function AgentView({ id }: { id: string }) {
       agitated: e.kind === 'settler' && Boolean(e.confronting),
     });
 
-    // Hit flash: a short white-hot pulse on everything that took the blow, so
-    // a landed strike is unambiguous even in a cluttered frame.
+    // Hit reaction.
+    //
+    // A flash alone was not enough physical confirmation in v0.8: a hit read as
+    // a lighting change rather than an impact. It now also shoves the whole rig
+    // back along the direction the blow came from and snaps it upright again,
+    // which is what makes a landed strike feel like it connected with a body.
     if (e.kind === 'creature' && e.hitAt !== undefined) {
       const since = world.timeSec - e.hitAt;
       const flash = since >= 0 && since < 0.18 ? 1 - since / 0.18 : 0;
@@ -125,8 +169,35 @@ function AgentView({ id }: { id: string }) {
           const mat = m.material as THREE.MeshToonMaterial;
           if (!mat.emissive) return;
           const base = (mat.userData.baseEmissive ??= mat.emissive.clone());
-          mat.emissive.copy(base as THREE.Color).lerp(WHITE, flash * 0.85);
+          // Bright enough to be unmissable, short of erasing the creature's own
+          // colour — a target you cannot identify mid-fight is worse than a
+          // subtle hit.
+          mat.emissive.copy(base as THREE.Color).lerp(WHITE, flash * 0.6);
         });
+      }
+      // Recoil rides on top of the smoothed position rather than replacing it,
+      // so a shove never desynchronises the rig from where the creature is.
+      const recoilT = since >= 0 && since < 0.26 ? 1 - since / 0.26 : 0;
+      if (recoilT > 0 && e.hitFrom) {
+        const force = (e.hitForce ?? 0.5) * recoilT * recoilT;
+        rig.group.position.x += e.hitFrom.x * force * 0.55;
+        rig.group.position.z += e.hitFrom.z * force * 0.55;
+        rig.group.rotation.x = -force * 0.4;
+      } else if (phaseState !== 'staggered') {
+        rig.group.rotation.x = 0;
+      }
+      // Synthetics throw sparks instead of flinching — a machine taking a hit
+      // should sound and look like metal, not meat.
+      const spark = sparkRef.current;
+      if (spark) {
+        const synthetic = e.kind === 'creature' && CREATURE_SPECIES_BY_ID[e.speciesId].synthetic;
+        const life = since >= 0 && since < 0.3 ? 1 - since / 0.3 : 0;
+        spark.visible = Boolean(synthetic) && life > 0.02;
+        if (spark.visible) {
+          spark.position.set(0, rig.height * 0.55, 0);
+          spark.scale.setScalar(0.5 + (1 - life) * 2.4);
+          (spark.material as THREE.MeshBasicMaterial).opacity = life * 0.8;
+        }
       }
     }
 
@@ -191,6 +262,14 @@ function AgentView({ id }: { id: string }) {
     <primitive object={rig.group}>
       <sprite ref={spriteRef} scale={[0.55, 0.55, 1]} visible={false} />
       <sprite ref={bubbleRef} visible={false} renderOrder={10} />
+      <mesh ref={ringRef} visible={false} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.82, 1, 32]} />
+        <meshBasicMaterial color="#ffb03f" transparent opacity={0.5} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+      <mesh ref={sparkRef} visible={false}>
+        <sphereGeometry args={[0.22, 8, 6]} />
+        <meshBasicMaterial color="#d8f4ff" transparent opacity={0.8} depthWrite={false} />
+      </mesh>
     </primitive>
   );
 }

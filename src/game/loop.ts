@@ -5,6 +5,7 @@ import { simTick } from '../sim/simulation';
 import { buildSummary, snapshot, type WorldSnapshot } from '../sim/summary';
 import { useUI, type SimSpeed } from '../state/store';
 import { inputState, readMoveAxes } from './input';
+import { soundTick } from './sound';
 
 /**
  * The game loop. World simulation advances in fixed SIM_DT steps scaled by
@@ -87,6 +88,10 @@ function frame(now: number): void {
       updatePlayer(world, dt, { moveX: 0, moveZ: 0, sprint: false, jump: false, camYaw: inputState.camYaw });
     }
   }
+
+  // Combat audio observes the world it has just finished stepping. Presentation
+  // only — nothing here writes back into the simulation.
+  soundTick(world);
 
   // Structural changes → version bumps for React.
   if (world.dirty.entities) {

@@ -749,11 +749,16 @@ export function buildCreatureRig(def: CreatureSpeciesDef, variant: number, juven
         tooth.rotation.x = Math.PI;
         body.add(tooth);
       }
-      for (let i = 0; i < 4; i++) {
-        const spike = mesh(cone(0.075, 0.24, 5), accentMat, 0, 1.08, 0.14 - i * 0.2);
-        spike.scale.set(0.45, 1, 1);
+      // The dorsal ridge. Deliberately oversized and lit rather than plain
+      // plating: this is the telegraph channel that has to carry at twenty
+      // metres, where a change in head pitch is a couple of pixels.
+      const ridgeMat = toonMat(def.palette.accent, { emissive: def.palette.glow, emissiveIntensity: 0.12 });
+      for (let i = 0; i < 5; i++) {
+        const spike = mesh(cone(0.13 - i * 0.012, 0.46 - i * 0.03, 5), ridgeMat, 0, 1.16, 0.2 - i * 0.21);
+        spike.scale.set(0.5, 1, 1);
         spike.rotation.x = -0.35;
         body.add(spike);
+        chargeParts.push(spike);
       }
       const tailM = mesh(cone(0.13, 0.9, 6), bodyMat, 0, 0.76, -0.66);
       tailM.rotation.x = -Math.PI / 2 - 0.12;
@@ -762,7 +767,8 @@ export function buildCreatureRig(def: CreatureSpeciesDef, variant: number, juven
       mkLegAt(-0.19, -0.04, 0.66, 0.075, 0.38);
       mkLegAt(0.19, -0.04, 0.66, 0.075, 0.38);
       head = neck;
-      // The eyes and the dorsal spikes are what light up before it commits.
+      // The eyes light too — a second channel, in case the ridge is hidden by
+      // the angle the player happens to be looking from.
       for (const o of body.children) {
         const m = o as THREE.Mesh;
         if (m.isMesh && m.material === glowMat) chargeParts.push(m);
@@ -834,16 +840,27 @@ export function buildCreatureRig(def: CreatureSpeciesDef, variant: number, juven
     group,
     height: height * s + (def.hover ? def.hoverHeight ?? 0 : 0),
     /**
-     * The visible tell. Wind-up brightens and pulses faster as it completes;
-     * a warning posture holds a steady lower glow. Both are readable from
-     * behind, which matters because that is where a fleeing player is.
+     * The visible tell.
+     *
+     * v0.8 leaned almost entirely on head pitch, which is a handful of pixels
+     * at fifteen metres — the exact distance at which a player most needs to
+     * know a predator is about to commit. The tell now runs on several
+     * channels at once: the dorsal ridge and eyes brighten hard, the whole
+     * body drops and coils, and `Agents.tsx` paints a ring on the ground.
+     * Any one of them is readable alone.
      */
     setCharge(amount: number, state: string) {
       charge = Math.max(0, Math.min(1, amount));
       chargeState = state;
-      const winding = state === 'windup';
-      const warning = state === 'warn';
-      const strength = winding ? 0.5 + charge * 3.2 : warning ? 0.9 : 0;
+      let strength = 0;
+      if (state === 'windup') strength = 1.4 + charge * 5.5;
+      else if (state === 'charge') strength = 1.2 + charge * 5;
+      else if (state === 'warn') {
+        // A slow, unmistakable pulse rather than a steady lift: something
+        // rhythmic catches the eye at distance where brightness alone does not.
+        strength = 1.8 + Math.sin(charge * Math.PI * 6) * 1.1;
+      } else if (state === 'circle') strength = 0.9;
+      else if (state === 'lunge' || state === 'beam') strength = 6;
       for (let i = 0; i < chargeParts.length; i++) {
         const mat = chargeParts[i].material as THREE.MeshToonMaterial;
         mat.emissiveIntensity = baseEmissive[i] * (1 + strength);
@@ -852,24 +869,44 @@ export function buildCreatureRig(def: CreatureSpeciesDef, variant: number, juven
     animate(ctx) {
       const speedNorm = Math.min(1, ctx.speed / Math.max(1, def.speed));
       phase += ctx.dt * (4 + ctx.speed * 2.5);
+      const staggering = chargeState === 'staggered';
       if (def.plan === 'warden') {
-        // Rings accelerate as it spins up to strike. Nothing else about the
-        // machine moves, which is exactly why the spin reads as intent.
-        const spin = 0.6 + (chargeState === 'windup' ? charge * 7 : chargeState === 'hostile' ? 1.4 : 0);
+        // Rings accelerate as it spins up to fire. Nothing else about the
+        // machine moves, which is exactly why the spin reads as intent — and
+        // when it is rocked, the spin stalls and the whole frame tumbles.
+        const charging = chargeState === 'charge' || chargeState === 'windup';
+        const spin = staggering ? 0.1 : 0.6 + (charging ? charge * 9 : chargeState === 'hostile' ? 1.4 : 0);
         rings[0].rotation.z += ctx.dt * spin * 1.6;
         rings[1].rotation.z -= ctx.dt * spin * 2.3;
-        body.position.y = Math.sin(ctx.time * 1.2 + variant * 7) * 0.12;
+        body.position.y = staggering
+          ? -0.5 + Math.sin(ctx.time * 22) * 0.14
+          : Math.sin(ctx.time * 1.2 + variant * 7) * 0.12;
+        body.rotation.z = staggering ? Math.sin(ctx.time * 17) * 0.3 : 0;
         for (let i = 0; i < wings.length; i++) {
           const a = (i / wings.length) * Math.PI * 2 + ctx.time * 0.35;
-          const spread = 0.72 + (chargeState === 'windup' ? charge * 0.3 : 0);
+          // The plates pull inward as it charges and fly apart when rocked:
+          // the silhouette itself says which of the two is happening.
+          const spread = staggering ? 1.05 : 0.72 - (charging ? charge * 0.22 : 0);
           wings[i].position.set(Math.sin(a) * spread, Math.sin(ctx.time * 2 + i) * 0.1, Math.cos(a) * spread);
           wings[i].rotation.y = a;
         }
         return;
       }
-      // A warning posture lowers the head and stills the body: the biological
-      // tell, and the moment the player still has the option to walk away.
-      if (head) head.rotation.x = 0.7 - (chargeState === 'warn' ? 0.45 : 0) + (chargeState === 'windup' ? charge * 0.5 : 0);
+      // The biological tell. The head drops, and — far more visible at range —
+      // the whole animal coils: body lowered, pitched forward, tail up.
+      const crouch =
+        chargeState === 'warn' ? 0.55 : chargeState === 'windup' ? 0.35 + charge * 0.5 : chargeState === 'circle' ? 0.25 : 0;
+      if (head) head.rotation.x = 0.7 - crouch * 0.8 + (chargeState === 'windup' ? charge * 0.5 : 0);
+      if (staggering) {
+        // Rocked: knocked off its feet, reeling, unmistakably interruptible.
+        body.position.y = -0.24 + Math.sin(ctx.time * 26) * 0.05;
+        body.rotation.z = Math.sin(ctx.time * 19) * 0.34;
+        body.rotation.x = 0.3;
+      } else {
+        body.position.y = -crouch * 0.3;
+        body.rotation.x = crouch * 0.34;
+        body.rotation.z = 0;
+      }
       for (let i = 0; i < legs.length; i++) {
         // Diagonal gait for quadrupeds.
         const offset = legs.length === 4 ? ((i === 0 || i === 3) ? 0 : Math.PI) : (i % 2) * Math.PI;

@@ -1,13 +1,14 @@
 import { COMBAT, FABRICATOR, GATHER, NORM, PLAYER, RATES, SETTLER, WILDLIFE, WORLD } from './config';
 import { chronicle } from './chronicle';
 import {
-  beginDodge,
   beginExtraction,
   beginStrike,
   finishExtraction,
   inCombat,
+  isHitStunned,
   lockTick,
   lockedTarget,
+  requestDodge,
   strikeTick,
   toggleLock,
   type StrikeAttempt,
@@ -84,12 +85,14 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
   // Timers.
   p.dodgeCooldown = Math.max(0, p.dodgeCooldown - dt);
   p.dodgeTimer = Math.max(0, p.dodgeTimer - dt);
+  p.dodgeTrail = Math.max(0, p.dodgeTrail - dt);
 
   // Combat advances in real time alongside movement, never at the simulation's
   // speed multiplier — a strike must not get faster because the world does.
   const hits = strikeTick(world, dt);
   for (const h of hits) {
     world.flags.lastHitAt = world.timeSec;
+    if (h.staggered) world.flags.lastStaggerAt = world.timeSec;
     if (h.killed) world.flags.lastKillAt = world.timeSec;
   }
   lockTick(world);
@@ -109,10 +112,13 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
   // barely move him, and only the recovery lets him walk out of it. Without
   // this a light attack can be spammed while sprinting and nothing has weight.
   const committed = p.strike !== null && p.strike.phase !== 'recover';
+  // A hit knocks Emerson off his stride for a fraction of a second. Short by
+  // design, and `hitStunImmuneUntil` guarantees it can never chain.
+  const flinching = isHitStunned(world);
   let targetSpeed = 0;
   if (p.dodgeTimer > 0) {
     targetSpeed = COMBAT.dodgeSpeed;
-  } else if (committed) {
+  } else if (committed || flinching) {
     targetSpeed = 0;
   } else if (moving) {
     targetSpeed = (sprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed) * Math.min(1, mag);
@@ -139,7 +145,7 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
     if (err < -Math.PI) err += Math.PI * 2;
     p.heading += err * Math.min(1, PLAYER.turnRate * 0.8 * dt);
     travelHeading = moving ? headingFromInput(input.camYaw, input.moveX, input.moveZ) : p.heading;
-  } else if (moving && !committed) {
+  } else if (moving && !committed && !flinching) {
     // Turn toward the travel direction. Sharp reversals rotate faster, so a
     // 180 feels decisive instead of like a slow arc.
     const desired = headingFromInput(input.camYaw, input.moveX, input.moveZ);
@@ -298,20 +304,22 @@ export function playerStrike(world: World, kind: 'light' | 'heavy'): StrikeAttem
 }
 
 /**
- * Roll. The direction is the movement input if there is any, and straight
- * backwards if there is not — a standing dodge should always open distance.
+ * Roll.
+ *
+ * The direction is the movement input if there is any. Standing still, it goes
+ * backwards — away from the locked target if there is one, and away from
+ * whatever Emerson is facing otherwise — because a standing dodge whose whole
+ * job is to answer an incoming attack should always open distance.
  */
 export function playerDodge(world: World, input?: { moveX: number; moveZ: number; camYaw: number }): boolean {
   const p = world.player;
   let heading = p.heading + Math.PI;
+  const target = lockedTarget(world);
+  if (target) heading = Math.atan2(p.pos.x - target.pos.x, p.pos.z - target.pos.z);
   if (input && Math.hypot(input.moveX, input.moveZ) > 0.05) {
     heading = headingFromInput(input.camYaw, input.moveX, input.moveZ);
   }
-  if (!beginDodge(world)) return false;
-  p.dodgeHeading = heading;
-  // An unlocked roll turns Emerson the way he rolled; a locked one never does.
-  if (!p.lockedId) p.heading = heading;
-  return true;
+  return requestDodge(world, heading);
 }
 
 /** Toggle lock-on, and tell the player when there is nothing worth locking. */

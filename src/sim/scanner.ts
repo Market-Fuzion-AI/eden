@@ -105,6 +105,18 @@ export function performScan(world: World): ScanResult {
   p.scan.pulseStartedAt = world.timeSec;
 
   world.ariQueue.push(describeScan(world, counts, boosted, radius, threats));
+  // Scanning at the ring itself gets one extra observation, once. It deepens
+  // the implication without answering anything: EDEN still never says what the
+  // site is, who built it, or what the Wardens are guarding.
+  if (threats.synthetic > 0 && !world.flags.scannedRing) {
+    const nearRing = Math.hypot(p.pos.x + 86, p.pos.z + 14) < 45;
+    if (nearRing) {
+      world.flags.scannedRing = true;
+      world.ariQueue.push(
+        'Deeper read on the site: the metallurgy is not colony work and it is not Veyra or Caelari either. Age estimate failed — the isotope spread is wider than my model has a bracket for. There are inactive systems under the soil, and the machine above them is running in phase with something down there.',
+      );
+    }
+  }
   return { ok: true, found, counts, boosted, radius, threats };
 }
 

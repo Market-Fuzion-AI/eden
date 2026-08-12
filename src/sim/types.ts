@@ -386,6 +386,10 @@ export interface Creature extends AgentCommon {
   visualVariant: number;
   /** Sim time of the last hit taken, for the flinch flash. */
   hitAt?: number;
+  /** Direction the last hit came from, so the recoil shoves the right way. */
+  hitFrom?: V2;
+  /** How hard the last hit landed, 0..1 — scales the recoil. */
+  hitForce?: number;
   /**
    * Combat state, present only on creatures capable of threatening anybody.
    * Its absence is what makes a mossling harmless.
@@ -434,27 +438,53 @@ export interface StrikeState {
 }
 
 /**
+ * A queued combat input.
+ *
+ * At most one is ever held. Pressing during a committed swing used to drop the
+ * press entirely; it is now remembered just long enough to come out the moment
+ * control returns, which is the whole difference between a chain that feels
+ * responsive and one that feels ignored.
+ */
+export interface BufferedInput {
+  kind: 'light' | 'heavy' | 'dodge';
+  /** Real seconds since it was pressed. Expires, so it can never bank up. */
+  age: number;
+  /** Movement direction at the moment of the press, for a buffered dodge. */
+  heading: number;
+}
+
+/**
  * How a dangerous creature currently regards Emerson.
  *
- * Every transition is explicit and every attack is preceded by `windup`, so
+ * Every transition is explicit and every attack is preceded by a wind-up, so
  * damage is never a surprise. `warn` is the state that makes retreat a real
- * option: the creature is posturing, not yet committed.
+ * option: the creature is posturing, not yet committed. `circle` and `lunge`
+ * are the Rakhor's; `charge` and `beam` are the Warden's.
  */
 export type ThreatState =
   | 'calm'
   | 'alert'
   | 'warn'
   | 'hostile'
+  | 'circle'
   | 'windup'
+  | 'lunge'
+  | 'charge'
+  | 'beam'
   | 'strike'
   | 'recover'
+  | 'staggered'
+  | 'retreat'
   | 'disengage';
+
+/** What a dangerous creature is doing when Emerson is nowhere near it. */
+export type ThreatPurpose = 'patrol' | 'stalk' | 'drink' | 'survey';
 
 export interface CombatMemory {
   state: ThreatState;
   /** Sim time the current state began. */
   since: number;
-  /** Who it is engaged with. Only ever Emerson in v0.8. */
+  /** Who it is engaged with. Only ever Emerson so far. */
   targetId: EntityId | null;
   /** Last moment the target was actually perceived. */
   lastSeenAt: number;
@@ -464,9 +494,54 @@ export interface CombatMemory {
   territory: V2;
   /** True once it has landed a hit this engagement (used for chronicle once-flags). */
   hasStruck: boolean;
+  /**
+   * The direction a charged shot is committed to, fixed when the charge starts.
+   * Null when nothing is charging. Locking it at the start is what makes the
+   * charge a telegraph rather than an animation played before a guaranteed hit.
+   */
+  aim: V2 | null;
+  /**
+   * Accumulated stagger. Decays continuously; crossing the creature's
+   * resistance drops it into `staggered`. Never shown as a meter in Live Mode.
+   */
+  staggerLoad: number;
+  /** Sim time until which this creature cannot be staggered again. */
+  staggerImmuneUntil: number;
+  /** Which way it is circling, +1 or -1. Fixed per approach so it reads. */
+  circleDir: number;
+  /** Sim time the close-range burst is next available (Warden only). */
+  nextBurstAt: number;
+  /** What it does when left alone. */
+  purpose: ThreatPurpose;
+  /** Where its current non-combat errand is taking it. */
+  purposeTarget: V2 | null;
+  /** Sim time the current errand expires and a new one is chosen. */
+  purposeUntil: number;
+  /** The small animal a stalking predator is currently following, if any. */
+  stalkingId: EntityId | null;
 }
 
-export type RecipeId = 'scanner-mk1' | 'arc-blade-mk1' | 'medkit' | 'energy-cell';
+/**
+ * A Warden's beam while it is actually firing.
+ *
+ * Lives on the world rather than the creature so the renderer can draw it
+ * without reaching into combat state, and so it survives the creature being
+ * destroyed mid-shot.
+ */
+export interface BeamShot {
+  id: string;
+  sourceId: EntityId;
+  from: V2;
+  /** Unit direction, fixed at the moment of firing — the beam does not track. */
+  dir: V2;
+  length: number;
+  firedAt: number;
+  endsAt: number;
+  /** Height above the ground the beam is drawn at. */
+  y: number;
+}
+
+export type RecipeId = 'scanner-mk1' | 'arc-blade-mk1' | 'arc-blade-capacitor' | 'medkit' | 'energy-cell';
 
 /** A fabrication job in flight. Driven by sim time, so speed changes are safe. */
 export interface FabricationJob {
@@ -714,7 +789,7 @@ export interface PlayerState {
    * Permanent capabilities earned through fabrication. Never revoked — an
    * emergency extraction costs materials, never a capability.
    */
-  unlocks: { scanner: boolean; arcBlade: boolean };
+  unlocks: { scanner: boolean; arcBlade: boolean; capacitor: boolean };
   /** The gathering interaction in progress, if any. */
   harvest: HarvestAction | null;
   scan: ScanState;
@@ -722,16 +797,30 @@ export interface PlayerState {
   equipped: EquippedWeapon;
   /** The swing in progress, if any. */
   strike: StrikeState | null;
+  /** At most one queued combat action. See `BufferedInput`. */
+  buffered: BufferedInput | null;
+  /** Sim time the last strike in the current chain began, for the chain window. */
+  lastStrikeAt: number;
   /** Sim time until which a dodge roll makes Emerson untouchable. */
   invulnUntil: number;
+  /** Real seconds left of the roll's visual trail. Presentation only. */
+  dodgeTrail: number;
   /** Currently locked target, or null. */
   lockedId: EntityId | null;
   /** Sim time of the last damage taken — gates out-of-combat regeneration. */
   lastHurtAt: number;
+  /** Brief flinch on taking a hit. Never long enough to chain into helplessness. */
+  hitStunUntil: number;
+  /** Sim time until which Emerson cannot be flinched again. */
+  hitStunImmuneUntil: number;
+  /** Direction the last hit came from, for the flinch and the damage indicator. */
+  lastHurtFrom: V2 | null;
   /** Salvage recovered from synthetics. */
   salvage: Record<SalvageId, number>;
   /** Emergency extraction in progress: fade out, relocate, fade in. */
   extraction: { startedAt: number; endsAt: number } | null;
+  /** What the last extraction actually cost, so the HUD can say so plainly. */
+  extractionLoss: { materialId: MaterialId; amount: number }[];
   /** How many times ARI has had to pull Emerson out. */
   extractions: number;
 }
@@ -776,6 +865,8 @@ export interface World {
   pickups: { materialId: MaterialId; amount: number; at: number }[];
   /** Recent synthetic salvage, likewise. */
   pickupsSalvage: { salvageId: SalvageId; amount: number; at: number }[];
+  /** Warden beams currently in flight. Bounded and short-lived. */
+  beams: BeamShot[];
   /**
    * Injected by `index.ts` so combat can name a place without importing the
    * landmark table (which would close an import cycle through worldgen).

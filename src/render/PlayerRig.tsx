@@ -3,7 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { getWorld } from '../sim';
 import { COMBAT } from '../sim/config';
-import { inCombat, lockedTarget } from '../sim/combat';
+import { inCombat, lockedTarget, specFor } from '../sim/combat';
 import { CREATURE_SPECIES_BY_ID } from '../sim/species';
 import { heightAt } from '../sim/terrain';
 import { useUI } from '../state/store';
@@ -40,7 +40,35 @@ export function PlayerRig() {
    * once and parented to a pivot so a swing rotates the whole assembly rather
    * than animating geometry.
    */
-  const { bladeGroup, bladePivot } = useMemo(() => {
+  /**
+   * Dodge afterimage.
+   *
+   * Three translucent copies of a simplified silhouette dropped along the path
+   * of the roll and faded out. Emerson himself never disappears — the point is
+   * to confirm "I dodged", not to make the character hard to follow.
+   */
+  const ghosts = useMemo(() => {
+    const list: THREE.Mesh[] = [];
+    for (let i = 0; i < 3; i++) {
+      const m = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.28, 0.85, 3, 8),
+        new THREE.MeshBasicMaterial({ color: '#7fe7ff', transparent: true, opacity: 0, depthWrite: false }),
+      );
+      m.visible = false;
+      list.push(m);
+    }
+    return list;
+  }, []);
+  const ghostGroup = useMemo(() => {
+    const g = new THREE.Group();
+    for (const m of ghosts) g.add(m);
+    return g;
+  }, [ghosts]);
+  /** Where each ghost was dropped, and when. */
+  const ghostTrail = useRef<{ x: number; y: number; z: number; at: number }[]>([]);
+  const lastGhostAt = useRef(0);
+
+  const { bladeGroup, bladePivot, capacitorGlow } = useMemo(() => {
     const root = new THREE.Group();
     // The pivot is the grip. Everything is built pointing along +y so the
     // blade reads as held rather than carried, and so a swing is a rotation
@@ -67,7 +95,16 @@ export function PlayerRig() {
     const tip = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.18, 4), toonMat('#eaf9ff'));
     tip.position.y = 1.0;
     pivot.add(tip);
-    return { bladeGroup: root, bladePivot: { current: pivot } };
+    // The Capacitor accent: a second lit channel down the spine, hidden until
+    // the upgrade exists.
+    const accent = new THREE.Mesh(
+      new THREE.BoxGeometry(0.035, 0.7, 0.062),
+      new THREE.MeshBasicMaterial({ color: '#c9b6ff', transparent: true, opacity: 0, depthWrite: false }),
+    );
+    accent.position.y = 0.54;
+    accent.visible = false;
+    pivot.add(accent);
+    return { bladeGroup: root, bladePivot: { current: pivot }, capacitorGlow: accent };
   }, []);
   const camTarget = useMemo(() => new THREE.Vector3(), []);
   const camPos = useMemo(() => new THREE.Vector3(), []);
@@ -153,13 +190,16 @@ export function PlayerRig() {
     const blade = bladeGroup;
     if (blade) {
       blade.visible = armed && bladeDeploy.current > 0.03;
-      // Swing progression: wound back through the wind-up, driven through the
-      // active window, trailing off through the recovery.
+      // Swing progression: 0 at rest, negative through the wind-up as the arm
+      // is wound back, driven positive through the active window, trailing off
+      // through the recovery.
       let swing = 0;
       let heavy = false;
+      let step = 1;
       if (p.strike) {
         heavy = p.strike.kind === 'heavy';
-        const spec = heavy ? COMBAT.heavy : COMBAT.light;
+        step = p.strike.chain;
+        const spec = specFor(p.strike.kind, p.strike.chain);
         if (p.strike.phase === 'windup') swing = -1 * (1 - p.strike.timer / spec.windup);
         else if (p.strike.phase === 'active') swing = -1 + 2.4 * (1 - p.strike.timer / spec.active);
         else swing = 1.4 * Math.max(0, p.strike.timer / spec.recover);
@@ -172,13 +212,31 @@ export function PlayerRig() {
       blade.position.set(p.pos.x, p.y, p.pos.z);
       blade.rotation.set(0, p.heading, 0);
       bladePivot.current.position.set(0.3, 0.95 - stow * 0.16, 0.14 - stow * 0.42);
-      // A light attack is a sweep across the body; a heavy one is an overhead
-      // chop. They have to look as different as they feel, or the player
-      // cannot tell from the animation which one they committed to.
+
+      // Each swing has its own motion. The chain is only a chain if the three
+      // steps look different — otherwise it is a counter with a damage bonus,
+      // which is exactly what v0.8 shipped.
       if (heavy) {
-        bladePivot.current.rotation.set(-0.6 + swing * 1.5, 0.12, -0.2);
+        // Overhead chop: raised high behind, driven down the centre line.
+        bladePivot.current.rotation.set(-0.7 + swing * 1.7, 0.1, -0.15);
+      } else if (step === 2) {
+        // Reverse horizontal: comes back the other way, blade near flat.
+        bladePivot.current.rotation.set(-0.35 - stow * 2.4, -swing * 1.55, -1.15 + engage * 0.35);
+      } else if (step >= 3) {
+        // Finisher: a big committed diagonal, from high right to low left.
+        bladePivot.current.rotation.set(-0.9 + swing * 1.1 - stow * 2.4, swing * 1.2, -0.15 - engage * 1.3);
       } else {
+        // Opener: quick diagonal cut across the body.
         bladePivot.current.rotation.set(-0.45 + swing * 0.15 - stow * 2.4, swing * 1.5, -0.35 - engage * 0.85);
+      }
+
+      // The Capacitor's tell. A second accent along the spine rather than a
+      // recolour: the player should notice the blade changed, not think they
+      // picked up a different weapon.
+      capacitorGlow.visible = p.unlocks.capacitor;
+      if (capacitorGlow.visible) {
+        const pulse = 0.55 + Math.sin(state.clock.elapsedTime * 3.4) * 0.2 + engage * 0.5;
+        (capacitorGlow.material as THREE.MeshBasicMaterial).opacity = Math.min(1, pulse);
       }
     }
 
@@ -188,21 +246,53 @@ export function PlayerRig() {
     if (slash) {
       const s = p.strike;
       if (s && s.phase === 'active') {
-        const spec = s.kind === 'heavy' ? COMBAT.heavy : COMBAT.light;
+        const spec = specFor(s.kind, s.chain);
         const t = 1 - s.timer / spec.active;
         const reach = spec.range * 0.42;
+        // Each motion sweeps its own way, so the trail matches the arm.
+        const heavySwing = s.kind === 'heavy';
+        const reverse = !heavySwing && s.chain === 2;
+        const from = heavySwing ? -1.2 : reverse ? -1.15 : 1.15;
+        const to = heavySwing ? 1.3 : reverse ? 1.2 : -1.15;
+        const height = heavySwing ? 0.85 : s.chain === 2 ? 1.05 : 1.2;
         slash.visible = true;
         slash.position.set(
           p.pos.x + Math.sin(p.heading) * reach,
-          p.y + (s.kind === 'heavy' ? 0.9 : 1.15),
+          p.y + height,
           p.pos.z + Math.cos(p.heading) * reach,
         );
-        slash.rotation.set(-Math.PI / 2, 0, -p.heading + (s.kind === 'heavy' ? -1.1 + t * 2.4 : 1.1 - t * 2.2));
-        slash.scale.setScalar(s.kind === 'heavy' ? 1.35 : 1);
-        (slash.material as THREE.MeshBasicMaterial).opacity = 0.85 * (1 - t * 0.7);
+        slash.rotation.set(-Math.PI / 2, 0, -p.heading + from + (to - from) * t);
+        slash.scale.setScalar(heavySwing ? 1.45 : s.chain >= 3 ? 1.25 : 1);
+        const mat = slash.material as THREE.MeshBasicMaterial;
+        mat.opacity = 0.9 * (1 - t * 0.65);
+        mat.color.set(p.unlocks.capacitor ? '#c9b6ff' : '#7fe7ff');
       } else {
         slash.visible = false;
       }
+    }
+
+    // Dodge afterimage. Ghosts are dropped along the roll and fade over
+    // `dodgeTrail`, so the streak outlives the roll itself by a moment.
+    if (p.dodgeTimer > 0 && state.clock.elapsedTime - lastGhostAt.current > 0.055) {
+      lastGhostAt.current = state.clock.elapsedTime;
+      ghostTrail.current.push({ x: p.pos.x, y: p.y, z: p.pos.z, at: state.clock.elapsedTime });
+      if (ghostTrail.current.length > ghosts.length) ghostTrail.current.shift();
+    }
+    if (p.dodgeTrail <= 0 && ghostTrail.current.length > 0) ghostTrail.current.length = 0;
+    for (let i = 0; i < ghosts.length; i++) {
+      const entry = ghostTrail.current[i];
+      const g = ghosts[i];
+      if (!entry) {
+        g.visible = false;
+        continue;
+      }
+      const age = state.clock.elapsedTime - entry.at;
+      const life = Math.max(0, 1 - age / COMBAT.dodgeTrail);
+      g.visible = life > 0.02;
+      g.position.set(entry.x, entry.y + 0.85, entry.z);
+      g.rotation.y = p.heading;
+      (g.material as THREE.MeshBasicMaterial).opacity = life * 0.3;
+      g.scale.setScalar(0.85 + (1 - life) * 0.25);
     }
 
     // Lock-on marker, drawn in the world at the target's feet rather than as a
@@ -379,6 +469,7 @@ export function PlayerRig() {
     <>
       <primitive object={rig.group} />
       <primitive object={bladeGroup} visible={false} />
+      <primitive object={ghostGroup} />
       <mesh ref={slashRef} visible={false}>
         <ringGeometry args={[0.7, 1.15, 18, 1, 0, Math.PI * 0.8]} />
         <meshBasicMaterial color="#7fe7ff" transparent opacity={0.7} side={THREE.DoubleSide} depthWrite={false} />

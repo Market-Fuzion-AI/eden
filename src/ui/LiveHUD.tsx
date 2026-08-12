@@ -64,6 +64,9 @@ export function LiveHUD() {
   const lockedDef = locked ? CREATURE_SPECIES_BY_ID[locked.speciesId] : null;
   const lockedMax = lockedDef?.dangerous?.health ?? 100;
   const recentSalvage = world.pickupsSalvage.filter((x) => world.timeSec - x.at < 5);
+  // Shown for a few seconds after a retrieval, then gone.
+  const recentLoss =
+    !p.extraction && p.lastHurtAt > 0 && world.timeSec - p.lastHurtAt < 14 ? p.extractionLoss : [];
 
   const region = regionShortName(regionAt(p.pos.x, p.pos.z));
   const place = placeName(p.pos);
@@ -136,10 +139,14 @@ export function LiveHUD() {
           {/* The scanner read-out. Without the Pathfinder installed Emerson
               gets the shape and the posture and has to make his own call. */}
           {ident.scan && (
-            <div className="ident-scan">
-              <span className={`ident-cat ${ident.scan.category.toLowerCase()}`}>{ident.scan.category}</span>
-              <span className={`ident-threat t-${ident.scan.threat.toLowerCase()}`}>{ident.scan.threat}</span>
-            </div>
+            <>
+              <div className="ident-scan">
+                <span className={`ident-cat ${ident.scan.category.toLowerCase()}`}>{ident.scan.category}</span>
+                <span className={`ident-threat t-${ident.scan.threat.toLowerCase()}`}>{ident.scan.threat}</span>
+              </div>
+              {/* How it behaves, never what it is worth in numbers. */}
+              {ident.dangerous && <div className="ident-behaviour">{ident.scan.behaviour}</div>}
+            </>
           )}
         </div>
       )}
@@ -261,6 +268,20 @@ export function LiveHUD() {
         <div className="death-overlay">
           <div className="death-text">EMERGENCY EXTRACTION</div>
           <div className="death-sub">ARI has the beacon — the valley carries on without you…</div>
+        </div>
+      )}
+
+      {/* What going down actually cost. A penalty the player cannot see is a
+          penalty they cannot learn from. */}
+      {recentLoss.length > 0 && (
+        <div className="loss-card">
+          <div className="loss-title">Lost in extraction</div>
+          {recentLoss.map((l) => (
+            <div key={l.materialId} className="loss-row">
+              <span className="fab-swatch" style={{ background: MATERIALS[l.materialId].color }} />
+              −{l.amount} {MATERIALS[l.materialId].name}
+            </div>
+          ))}
         </div>
       )}
     </div>

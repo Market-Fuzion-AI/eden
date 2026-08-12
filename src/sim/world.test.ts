@@ -3,7 +3,7 @@ import { SIM_DT, WORLD } from './config';
 import { LANDMARKS, landmarkAt, placeName } from './landmarks';
 import { REGIONS, regionAt, regionShortName, regionWeights, SPECIES_REGION } from './regions';
 import { simTick } from './simulation';
-import { heightAt, isWalkable, isWater, setTerrainSeed, slopeAt, terrainSeed } from './terrain';
+import { heightAt, isWalkable, isWater, riverX, setTerrainSeed, slopeAt, terrainSeed } from './terrain';
 import { createWorld } from './worldgen';
 import type { World } from './types';
 import { SETTLER_ROSTER } from './species';
@@ -192,6 +192,46 @@ describe('starting geography', () => {
     }
     // And the autonomous construction from v0.4 still runs on the new terrain.
     expect(world.structures.filter((st) => st.state === 'complete').length).toBeGreaterThan(1);
+  });
+});
+
+describe('water geography', () => {
+  it('keeps standing water in the Riverlands across many valleys', () => {
+    // v0.8 shipped a terrain weakness this test now pins down: on roughly one
+    // seed in ten the Ashlands canyon carve landed on an already-low mesa and
+    // cut through the global water plane, pooling water in canyon floors on
+    // the far side of the map. A regional floor lifts sub-waterline ground
+    // outside the wet parts of the world; the river is exempted by proximity
+    // rather than by region, because its northern end runs outside the
+    // Riverlands circle and a region mask alone would have severed it.
+    let offending = 0;
+    for (let seed = 1; seed <= 120; seed++) {
+      setTerrainSeed(seed);
+      for (let x = -168; x <= 168; x += 6) {
+        for (let z = -168; z <= 168; z += 6) {
+          if (Math.hypot(x, z) > 164) continue;
+          if (!isWater(x, z)) continue;
+          if (regionAt(x, z) === 'riverlands') continue;
+          // Water near the channel is the river, wherever the region boundary
+          // happens to fall.
+          if (Math.abs(x - riverX(z)) < 20) continue;
+          offending++;
+        }
+      }
+    }
+    expect(offending, 'no standing water outside the Riverlands and the river').toBe(0);
+  });
+
+  it('still has a river that runs the length of the valley', () => {
+    setTerrainSeed(31337);
+    let wet = 0;
+    let total = 0;
+    for (let z = -100; z <= 100; z += 5) {
+      total++;
+      if (isWater(riverX(z), z)) wet++;
+    }
+    // The floor must never fill in the thing it is protecting.
+    expect(wet / total).toBeGreaterThan(0.8);
   });
 });
 

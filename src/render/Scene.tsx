@@ -1,5 +1,6 @@
 import { useUI } from '../state/store';
 import { Agents } from './Agents';
+import { Beams } from './Beams';
 import { CampVisuals } from './CampVisuals';
 import { CreatorRig } from './CreatorRig';
 import { EdenEnvironment } from './Environment';
@@ -30,6 +31,7 @@ export function Scene() {
       <StructureVisuals />
       <MistLayer />
       <Agents />
+      <Beams />
       <PlayerRig />
       <ScannerFX />
       {mode === 'creator' && <CreatorRig />}

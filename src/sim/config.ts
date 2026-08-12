@@ -397,24 +397,93 @@ export const FABRICATOR = { range: 4.6 } as const;
  * being unfair. Every enemy attack is preceded by a visible wind-up long
  * enough to react to.
  */
+/**
+ * The three steps of the light chain.
+ *
+ * v0.8 made all three mechanically identical and scaled only the damage, which
+ * meant the "chain" was a counter rather than a sequence — nothing about the
+ * second swing looked or reached differently from the first. Each step now has
+ * its own timing, reach, arc and stagger contribution, so the finisher is a
+ * decision rather than a formality: it is slower to start, hits a wider arc,
+ * and carries most of the chain's stagger.
+ */
+export const LIGHT_CHAIN = [
+  // 1 — fast diagonal cut. Quick to start, narrow, cheap.
+  { windup: 0.1, active: 0.14, recover: 0.2, damage: 24, range: 3.0, arcCos: 0.2, stagger: 12 },
+  // 2 — reverse horizontal cut. Wider, so a second target can catch it.
+  { windup: 0.11, active: 0.16, recover: 0.22, damage: 27, range: 3.1, arcCos: 0.0, stagger: 15 },
+  // 3 — finisher. Slowest of the three and the one that actually staggers.
+  { windup: 0.18, active: 0.2, recover: 0.4, damage: 38, range: 3.4, arcCos: 0.15, stagger: 34 },
+] as const;
+
 export const COMBAT = {
-  /** Player strike timing, in real seconds. */
-  light: { windup: 0.14, active: 0.16, recover: 0.26, damage: 26, range: 3.0, arcCos: 0.15 },
-  heavy: { windup: 0.34, active: 0.2, recover: 0.5, damage: 52, range: 3.4, arcCos: 0.3 },
-  /** A light chain resets if the next press comes later than this. */
-  chainWindow: 0.55,
+  /** Light chain steps, 1-based via `LIGHT_CHAIN[chain - 1]`. */
+  chain: LIGHT_CHAIN,
   maxChain: 3,
+  /**
+   * Heavy attack. Deliberately not "light with a bigger number": it starts far
+   * slower, roots Emerson for longer, and carries enough stagger on its own to
+   * break a creature out of a wind-up. Its job is punishing a recovery window.
+   */
+  heavy: { windup: 0.32, active: 0.2, recover: 0.46, damage: 54, range: 3.6, arcCos: 0.32, stagger: 62 },
+
+  /**
+   * Input buffer.
+   *
+   * A press during a committed swing used to be dropped on the floor, so
+   * chaining required catching a 0.26s window — on a keyboard, at 60fps, that
+   * is a coin flip. One press may now be queued and it fires the instant the
+   * current strike is over. Exactly one: a mashed key must not bank a queue of
+   * attacks that keep coming out after the player has stopped pressing.
+   */
+  bufferWindow: 0.32,
+  /** A chain continues only if the next strike starts within this of the last. */
+  chainWindow: 0.62,
+
+  /**
+   * Soft target assist. Unlocked melee snaps Emerson's facing toward a hostile
+   * already inside this cone, by at most `assistMaxTurn` radians. It exists to
+   * cancel the small aiming error of steering with WASD while looking with a
+   * trackpad — never to aim for the player.
+   */
+  assistRange: 4.2,
+  assistCos: 0.35,
+  assistMaxTurn: 0.42,
 
   /** Dodge: a displacement model, plus a short mercy window. */
-  dodgeSpeed: 11,
+  dodgeSpeed: 12,
   dodgeDuration: 0.3,
-  dodgeCooldown: 0.55,
+  dodgeCooldown: 0.42,
   /** Invulnerable for most of the roll — conservative, but forgiving to learn. */
-  dodgeIFrames: 0.24,
+  dodgeIFrames: 0.26,
+  /** How long the afterimage trail lingers behind a roll. */
+  dodgeTrail: 0.34,
 
   /** Lock-on. */
   lockRange: 26,
   lockBreakRange: 34,
+
+  /**
+   * Stagger. One number per creature, no poise stats and nothing on screen.
+   * Load decays continuously, so chipping away with light attacks over a long
+   * fight never accumulates into a permanent lock — you have to actually land
+   * a sequence.
+   */
+  /*
+   * Decay was originally fast enough that a full light chain into a heavy had
+   * bled off most of its own build-up before the finisher landed — the chain
+   * could never actually pay off, which defeated the point of having one.
+   * Slow enough now that a clean sequence rocks a Rakhor, still fast enough
+   * that one hit every few seconds accumulates to nothing.
+   */
+  staggerDecay: 10,
+  staggerDuration: 0.9,
+  /** Nothing may be staggered again until this long after recovering. */
+  staggerImmunity: 2.2,
+
+  /** Emerson's own reaction to being hit: brief, and never a stun chain. */
+  hitStun: 0.22,
+  hitStunImmunity: 1.4,
 
   /** Emerson recovers slowly out of combat, and not at all during it. */
   regenDelay: 6,
@@ -434,6 +503,51 @@ export const THREAT = {
   leash: 46,
   /** Human Landing is home: nothing hunts inside this radius of the hearth. */
   safeRadius: 42,
+
+  /**
+   * Rakhor. A territorial predator circles before it commits, which is what
+   * separates it from a melee drone that runs at you and bites forever.
+   */
+  rakhor: {
+    circleDuration: 1.9,
+    circleSpeed: 0.85,
+    /** Distance it prefers to hold while sizing Emerson up. */
+    circleRadius: 5.2,
+    lungeSpeed: 13,
+    lungeDuration: 0.34,
+    /** Wounded below this fraction of health, it may break off for good. */
+    fleeHealthFrac: 0.22,
+  },
+
+  /**
+   * Warden. A guardian, not a brawler: it holds the ring at range, charges a
+   * beam you have to move out of, and only uses the close-range burst to push
+   * Emerson back out when he crowds it.
+   */
+  warden: {
+    /** Where it wants to be: far enough that closing is the player's problem. */
+    standoff: 11.5,
+    /**
+     * A guardian's provocation is entering the ground it guards, not walking
+     * into arm's reach. Sharing the melee provoke range made the Warden refuse
+     * to escalate until the player was closer than it ever wanted to be —
+     * which is to say, it could not start the fight it exists to have.
+     */
+    provokeRange: 16,
+    beamCharge: 1.35,
+    beamDuration: 0.32,
+    beamRange: 20,
+    /** Half-width of the beam. Sidestepping it is the intended answer. */
+    beamHalfWidth: 1.15,
+    beamDamage: 22,
+    /** Close-range shove. Solves the "hug the turret" degenerate strategy. */
+    burstRange: 5.2,
+    burstCharge: 0.7,
+    burstDamage: 14,
+    burstCooldown: 5,
+    /** Patrol: it walks its own pylons when nothing is intruding. */
+    patrolRadius: 15,
+  },
 } as const;
 
 /** Glowberry abundance, adjustable from Creator Mode. */

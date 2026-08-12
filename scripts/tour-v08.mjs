@@ -210,6 +210,145 @@ await page.waitForTimeout(2400);
 await page.screenshot({ path: `${SHOT_DIR}/v08-extraction.png` });
 console.log('  · v08-extraction');
 
+// v0.9 additions --------------------------------------------------------
+// Each of the three light steps at its active window, the heavy, the dodge
+// trail, the Rakhor's multi-channel tell, and the Warden's beam.
+await page.evaluate(() => {
+  const { getWorld, combat } = window.__EDEN__;
+  const w = getWorld();
+  // The extraction shot above left Emerson on the floor. Finish the retrieval
+  // before staging anything else, or every frame below is a death screen.
+  if (w.player.extraction) combat.finishExtraction(w);
+  w.player.dead = false;
+  w.player.health = 100;
+  w.player.unlocks.capacitor = true;
+});
+// Let the retrieval settle on the live loop before freezing it.
+await page.waitForTimeout(900);
+await page.evaluate(() => {
+  // Staged poses only: with the loop running, a 0.2s active window is long
+  // gone by the time the headless renderer produces a frame.
+  window.__EDEN__.useUI.getState().setPaused(true);
+});
+for (const [name, kind, chain] of [['v09-light1', 'light', 1], ['v09-light2', 'light', 2], ['v09-light3', 'light', 3], ['v09-heavy', 'heavy', 1]]) {
+  await page.evaluate(
+    ({ kind, chain }) => {
+      const { getWorld, combat } = window.__EDEN__;
+      const w = getWorld();
+      const c = w.creatures
+        .filter((x) => x.speciesId === 'rakhor')
+        .sort(
+          (a, b) =>
+            window.__EDEN__.terrain.slopeAt(a.pos.x, a.pos.z) - window.__EDEN__.terrain.slopeAt(b.pos.x, b.pos.z),
+        )[0];
+      if (!c) return;
+      c.health = 1e6;
+      w.player.pos.x = c.pos.x - 1.7;
+      w.player.pos.z = c.pos.z - 1.7;
+      // With the loop paused, updatePlayer never snaps him to the ground, and
+      // the camera target ends up inside the hill.
+      w.player.y = window.__EDEN__.terrain.groundY(w.player.pos.x, w.player.pos.z);
+      w.player.heading = Math.atan2(c.pos.x - w.player.pos.x, c.pos.z - w.player.pos.z);
+      window.__EDEN__.input.inputState.camYaw = w.player.heading - 0.75;
+      window.__EDEN__.input.inputState.camPitch = -0.2;
+      window.__EDEN__.input.inputState.camDist = 5.2;
+      w.player.lastHurtAt = w.timeSec;
+      w.player.strike = null;
+      w.player.buffered = null;
+      // Park the requested swing inside its active window and hold it there.
+      w.player.strike = { kind, phase: 'windup', timer: 0.001, chain, hitIds: [] };
+      combat.strikeTick(w, 0.002);
+    },
+    { kind, chain },
+  );
+  await page.waitForTimeout(2400);
+  await page.screenshot({ path: `${SHOT_DIR}/${name}.png` });
+  console.log('  ·', name);
+}
+
+// The Rakhor's tell, from the distance it has to read at.
+await shot(
+  'v09-rakhor-tell',
+  `
+  const c = w.creatures
+    .filter((x) => x.speciesId === 'rakhor')
+    .sort((a, b) => EDEN.terrain.slopeAt(a.pos.x, a.pos.z) - EDEN.terrain.slopeAt(b.pos.x, b.pos.z))[0];
+  c.health = 90;
+  c.combat.state = 'warn';
+  c.combat.since = w.timeSec;
+  w.player.lastHurtAt = w.timeSec;
+  return { from: { x: c.pos.x - 12, z: c.pos.z - 12 }, at: c.pos };
+  `,
+  { dist: 7, pitch: -0.14, yawOffset: 0.4 },
+);
+
+// The same tell mid-commit, ring closing.
+await shot(
+  'v09-rakhor-windup',
+  `
+  const c = w.creatures
+    .filter((x) => x.speciesId === 'rakhor')
+    .sort((a, b) => EDEN.terrain.slopeAt(a.pos.x, a.pos.z) - EDEN.terrain.slopeAt(b.pos.x, b.pos.z))[0];
+  c.combat.state = 'windup';
+  c.combat.since = w.timeSec - 0.5;
+  c.combat.aim = { x: 0, z: 1 };
+  w.player.lastHurtAt = w.timeSec;
+  return { from: { x: c.pos.x - 9, z: c.pos.z - 9 }, at: c.pos };
+  `,
+  { dist: 6.5, pitch: -0.12, yawOffset: -0.4 },
+);
+
+// A staggered creature — the reward for landing a sequence.
+await shot(
+  'v09-stagger',
+  `
+  const c = w.creatures
+    .filter((x) => x.speciesId === 'rakhor')
+    .sort((a, b) => EDEN.terrain.slopeAt(a.pos.x, a.pos.z) - EDEN.terrain.slopeAt(b.pos.x, b.pos.z))[0];
+  c.combat.state = 'staggered';
+  c.combat.since = w.timeSec;
+  c.hitAt = w.timeSec;
+  c.hitFrom = { x: 0, z: 1 };
+  c.hitForce = 1;
+  w.player.lastHurtAt = w.timeSec;
+  return { from: { x: c.pos.x - 4, z: c.pos.z - 4 }, at: c.pos };
+  `,
+  { dist: 5.5, pitch: -0.16, yawOffset: -0.5 },
+);
+
+// The Warden's beam in flight.
+await page.evaluate(() => {
+  const { getWorld, species } = window.__EDEN__;
+  const w = getWorld();
+  const warden = w.creatures.find((c) => species.CREATURE_SPECIES_BY_ID[c.speciesId].synthetic);
+  if (!warden) return;
+  const spot = { x: warden.pos.x - 14, z: warden.pos.z - 4 };
+  w.player.pos.x = spot.x;
+  w.player.pos.z = spot.z;
+  w.player.y = window.__EDEN__.terrain.groundY(spot.x, spot.z);
+  const yaw = Math.atan2(warden.pos.x - spot.x, warden.pos.z - spot.z);
+  w.player.heading = yaw;
+  window.__EDEN__.input.inputState.camYaw = yaw - 0.55;
+  window.__EDEN__.input.inputState.camPitch = -0.12;
+  window.__EDEN__.input.inputState.camDist = 8;
+  w.player.lastHurtAt = w.timeSec;
+  w.player.y = window.__EDEN__.terrain.groundY(spot.x, spot.z);
+  warden.combat.state = 'beam';
+  warden.combat.since = w.timeSec;
+  const a = Math.atan2(spot.x - warden.pos.x, spot.z - warden.pos.z);
+  w.beams.push({
+    id: 'tour', sourceId: warden.id, from: { ...warden.pos },
+    dir: { x: Math.sin(a), z: Math.cos(a) },
+    length: 20, firedAt: w.timeSec, endsAt: w.timeSec + 60,
+    y: window.__EDEN__.terrain.groundY(warden.pos.x, warden.pos.z) + 2.7,
+  });
+});
+await page.waitForTimeout(2800);
+await page.screenshot({ path: `${SHOT_DIR}/v09-warden-beam.png` });
+console.log('  · v09-warden-beam');
+
+await page.evaluate(() => window.__EDEN__.useUI.getState().setPaused(false));
+
 // 10. Creator Mode reading the fight.
 await page.keyboard.press('Tab');
 await page.waitForTimeout(900);

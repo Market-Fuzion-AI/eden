@@ -14,6 +14,7 @@ import { useMedkit } from '../sim/fabrication';
 import { performScan } from '../sim/scanner';
 import { useUI } from '../state/store';
 import { addLook, requestRecenter } from './camera';
+import { primeAudio } from './audio';
 
 /**
  * Global input: keyboard state + one-shot actions. Camera yaw/pitch live here
@@ -72,6 +73,9 @@ export function installInput(): void {
 
   window.addEventListener('keydown', (e) => {
     const ui = useUI.getState();
+    // Browsers refuse to start an AudioContext outside a user gesture. Every
+    // key press is one, so this is where combat audio actually comes alive.
+    primeAudio();
 
     if (e.code === 'Tab') {
       e.preventDefault();
@@ -237,6 +241,7 @@ export function installCanvasLook(canvas: HTMLElement): () => void {
   const onPointerDown = (e: PointerEvent) => {
     if (!liveAndPlayable()) return;
     if (e.button !== 0 && e.button !== 2) return;
+    primeAudio();
     dragging = true;
     dragTravel = 0;
     dragPointerId = e.pointerId;

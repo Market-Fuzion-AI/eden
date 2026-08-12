@@ -5,6 +5,7 @@ import { settlerExecute, settlerNeedsTick, settlerThink } from './goals';
 import { fabricationTick } from './fabrication';
 import { separateAgents } from './movement';
 import { scanTick } from './scanner';
+import { beamTick } from './threats';
 import { setTerrainSeed, terrainSeed } from './terrain';
 import { tickOfferedFood } from './player';
 import { creatureExecute, creatureNeedsTick, creatureThink } from './wildlife';
@@ -46,6 +47,8 @@ export function simTick(world: World, dt: number): void {
   // time shortens the wait without ever completing a job twice.
   fabricationTick(world);
   scanTick(world);
+  // Warden beams are short-lived world entities; retire the finished ones.
+  beamTick(world);
 
   // Settlers.
   for (const s of world.settlers) {

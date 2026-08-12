@@ -2,7 +2,7 @@ import { COMBAT, THREAT } from './config';
 import { chronicle } from './chronicle';
 import { CREATURE_SPECIES_BY_ID } from './species';
 import type { Creature, EntityId, StrikeState, ThreatState, World } from './types';
-import { dist, v2 } from './vec';
+import { dist, v2, type V2 } from './vec';
 
 /**
  * Player combat.
@@ -58,6 +58,25 @@ export interface StrikeAttempt {
   ok: boolean;
   reason?: StrikeRefusal;
   chain?: number;
+  /** True when the press was queued rather than performed. */
+  buffered?: boolean;
+}
+
+/** The timing and reach of one swing. */
+export interface StrikeSpec {
+  windup: number;
+  active: number;
+  recover: number;
+  damage: number;
+  range: number;
+  arcCos: number;
+  stagger: number;
+}
+
+/** Which spec a given strike is running on. */
+export function specFor(kind: 'light' | 'heavy', chain: number): StrikeSpec {
+  if (kind === 'heavy') return COMBAT.heavy;
+  return COMBAT.chain[Math.max(0, Math.min(COMBAT.chain.length - 1, chain - 1))];
 }
 
 /** Can Emerson swing right now? */
@@ -73,34 +92,94 @@ export function canStrike(world: World): StrikeAttempt {
 }
 
 /**
- * Begin a strike. Light attacks chain up to `COMBAT.maxChain` when pressed
- * during the recovery of the previous swing; a heavy attack always starts fresh.
+ * Soft target assist.
+ *
+ * Steering with WASD while looking with a trackpad leaves a few degrees of
+ * aiming error, and whiffing a strike you clearly aimed at something a metre
+ * away is the least satisfying outcome in the game. This nudges Emerson's
+ * facing toward a hostile *already inside his forward arc*, by a bounded
+ * amount. It cannot acquire a target behind him and it cannot spin him around;
+ * at `assistMaxTurn` the correction is under 25 degrees.
  */
-export function beginStrike(world: World, kind: 'light' | 'heavy'): StrikeAttempt {
-  const check = canStrike(world);
-  if (!check.ok) return check;
+function applyTargetAssist(world: World): void {
   const p = world.player;
-  const spec = kind === 'light' ? COMBAT.light : COMBAT.heavy;
-
-  let chain = 1;
-  if (kind === 'light' && p.strike && p.strike.kind === 'light' && p.strike.phase === 'recover') {
-    chain = Math.min(COMBAT.maxChain, p.strike.chain + 1);
+  // Lock-on already owns facing. Two systems fighting over it reads as drift.
+  if (p.lockedId) return;
+  const fx = Math.sin(p.heading);
+  const fz = Math.cos(p.heading);
+  let best: Creature | null = null;
+  let bestScore = -Infinity;
+  for (const c of world.creatures) {
+    if (!c.combat || c.lumi) continue;
+    const dx = c.pos.x - p.pos.x;
+    const dz = c.pos.z - p.pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d > COMBAT.assistRange || d < 0.05) continue;
+    const dot = (dx * fx + dz * fz) / d;
+    if (dot < COMBAT.assistCos) continue;
+    // Prefer whatever is most nearly in front, then whatever is closest.
+    const score = dot * 4 - d * 0.2;
+    if (score > bestScore) {
+      best = c;
+      bestScore = score;
+    }
   }
-  p.strike = { kind, phase: 'windup', timer: spec.windup, chain, hitIds: [] };
-  return { ok: true, chain };
+  if (!best) return;
+  const desired = Math.atan2(best.pos.x - p.pos.x, best.pos.z - p.pos.z);
+  let err = (desired - p.heading) % (Math.PI * 2);
+  if (err > Math.PI) err -= Math.PI * 2;
+  if (err < -Math.PI) err += Math.PI * 2;
+  p.heading += Math.max(-COMBAT.assistMaxTurn, Math.min(COMBAT.assistMaxTurn, err));
 }
 
-/** Damage numbers rise a little through a light chain, so a finisher lands. */
-function strikeDamage(strike: StrikeState): number {
-  const spec = strike.kind === 'light' ? COMBAT.light : COMBAT.heavy;
-  if (strike.kind === 'heavy') return spec.damage;
-  return Math.round(spec.damage * (1 + (strike.chain - 1) * 0.18));
+/**
+ * Begin a strike, or queue it.
+ *
+ * A press during the recovery of a light attack continues the chain. A press
+ * during a committed swing is buffered — exactly one — and fires the instant
+ * that swing is over. v0.8 dropped those presses on the floor, which meant
+ * chaining required hitting a 0.26-second window on a keyboard.
+ */
+export function beginStrike(world: World, kind: 'light' | 'heavy'): StrikeAttempt {
+  const p = world.player;
+  const check = canStrike(world);
+  if (!check.ok) {
+    // Only a swing already in progress is worth remembering. Being unarmed or
+    // mid-extraction is not a timing problem, and queueing it would fire an
+    // attack seconds later for no reason the player could connect to a press.
+    if (check.reason === 'busy' || check.reason === 'dodging') {
+      p.buffered = { kind, age: 0, heading: p.heading };
+      return { ok: false, reason: check.reason, buffered: true };
+    }
+    return check;
+  }
+
+  let chain = 1;
+  if (
+    kind === 'light' &&
+    p.strike &&
+    p.strike.kind === 'light' &&
+    p.strike.phase === 'recover' &&
+    world.timeSec - p.lastStrikeAt <= COMBAT.chainWindow
+  ) {
+    // Wrap rather than clamp. Clamping meant a player holding the attack key
+    // got an unbroken stream of *finishers* — the slowest, hardest-hitting
+    // swing, for free, forever. The sequence loops back to the opener instead.
+    chain = (p.strike.chain % COMBAT.maxChain) + 1;
+  }
+  const spec = specFor(kind, chain);
+  applyTargetAssist(world);
+  p.strike = { kind, phase: 'windup', timer: spec.windup, chain, hitIds: [] };
+  p.lastStrikeAt = world.timeSec;
+  p.buffered = null;
+  return { ok: true, chain };
 }
 
 export interface StrikeHit {
   creature: Creature;
   damage: number;
   killed: boolean;
+  staggered: boolean;
 }
 
 /**
@@ -111,10 +190,22 @@ export interface StrikeHit {
  */
 export function strikeTick(world: World, dt: number): StrikeHit[] {
   const p = world.player;
-  const s = p.strike;
-  if (!s) return [];
-  const spec = s.kind === 'light' ? COMBAT.light : COMBAT.heavy;
   const hits: StrikeHit[] = [];
+
+  // Age the queued press, and drop it once it is stale. Without the expiry a
+  // press made two seconds ago would still fire, which reads as the game
+  // acting on its own.
+  if (p.buffered) {
+    p.buffered.age += dt;
+    if (p.buffered.age > COMBAT.bufferWindow) p.buffered = null;
+  }
+
+  const s = p.strike;
+  if (!s) {
+    releaseBuffer(world);
+    return hits;
+  }
+  const spec = specFor(s.kind, s.chain);
 
   // Advance, carrying the overshoot into the next phase rather than discarding
   // it. A dropped frame must not silently lengthen a swing — and it must never
@@ -132,21 +223,41 @@ export function strikeTick(world: World, dt: number): StrikeHit[] {
       s.timer += spec.recover;
     } else {
       p.strike = null;
+      releaseBuffer(world);
       return hits;
     }
   }
+
+  // A queued press comes out as soon as the swing is recoverable, which is
+  // what makes the chain feel like it is following the player's hands.
+  if (s.phase === 'recover') releaseBuffer(world);
 
   if (s.phase !== 'active') return hits;
   hits.push(...resolveActiveWindow(world, s, spec));
   return hits;
 }
 
+/** Fire the queued action, if there is one and it is now legal. */
+function releaseBuffer(world: World): void {
+  const p = world.player;
+  const q = p.buffered;
+  if (!q) return;
+  if (q.kind === 'dodge') {
+    if (!canDodge(world)) return;
+    p.buffered = null;
+    beginDodge(world);
+    p.dodgeHeading = q.heading;
+    if (!p.lockedId) p.heading = q.heading;
+    return;
+  }
+  if (!canStrike(world).ok) return;
+  // Clear before recursing so a refusal cannot re-queue the same press forever.
+  p.buffered = null;
+  beginStrike(world, q.kind);
+}
+
 /** Everything the current swing connects with this step. */
-function resolveActiveWindow(
-  world: World,
-  s: StrikeState,
-  spec: { range: number; arcCos: number },
-): StrikeHit[] {
+function resolveActiveWindow(world: World, s: StrikeState, spec: StrikeSpec): StrikeHit[] {
   const p = world.player;
   const hits: StrikeHit[] = [];
 
@@ -164,10 +275,19 @@ function resolveActiveWindow(
     if (blocked(world, p.pos.x, p.pos.z, c.pos.x, c.pos.z)) continue;
 
     s.hitIds.push(c.id);
-    const damage = strikeDamage(s);
     const before = c.health;
-    damageCreatureByPlayer(world, c, damage);
-    hits.push({ creature: c, damage, killed: before > 0 && c.health <= 0 });
+    const wasStaggered = c.combat?.state === 'staggered';
+    // The Capacitor is the one upgrade in the game, and it buys stagger rather
+    // than damage: it changes which openings are available, not how fast the
+    // healthbar empties.
+    const stagger = spec.stagger * (p.unlocks.capacitor ? 1.55 : 1);
+    damageCreatureByPlayer(world, c, spec.damage, stagger, { x: dx / d, z: dz / d });
+    hits.push({
+      creature: c,
+      damage: spec.damage,
+      killed: before > 0 && c.health <= 0,
+      staggered: !wasStaggered && c.combat?.state === 'staggered',
+    });
   }
   return hits;
 }
@@ -188,6 +308,10 @@ export function canDodge(world: World): boolean {
  * Roll. Both a displacement *and* a short mercy window — the displacement is
  * what makes it read, the i-frames are what make imperfect timing survivable
  * while the player is still learning.
+ *
+ * The i-frames start immediately rather than after a startup, because the
+ * whole contract of a telegraph is that pressing dodge *when you see the tell*
+ * works. Any startup delay silently moves that goalpost.
  */
 export function beginDodge(world: World): boolean {
   if (!canDodge(world)) return false;
@@ -195,8 +319,26 @@ export function beginDodge(world: World): boolean {
   p.dodgeTimer = COMBAT.dodgeDuration;
   p.dodgeCooldown = COMBAT.dodgeCooldown + COMBAT.dodgeDuration;
   p.invulnUntil = world.timeSec + COMBAT.dodgeIFrames;
+  p.dodgeTrail = COMBAT.dodgeTrail;
   p.strike = null;
   return true;
+}
+
+/** Roll, or queue the roll if a swing is still committed. */
+export function requestDodge(world: World, heading: number): boolean {
+  const p = world.player;
+  if (p.dead || p.extraction) return false;
+  if (canDodge(world)) {
+    beginDodge(world);
+    p.dodgeHeading = heading;
+    if (!p.lockedId) p.heading = heading;
+    return true;
+  }
+  // Mid-swing, or still on cooldown by a hair. Remember it briefly rather than
+  // dropping it — reacting to a telegraph one frame early should not be a
+  // punishment for having attacked.
+  p.buffered = { kind: 'dodge', age: 0, heading };
+  return false;
 }
 
 export function isInvulnerable(world: World): boolean {
@@ -254,28 +396,83 @@ export function lockTick(world: World): void {
  * Apply player damage. Kept here rather than in wildlife.ts so the combat
  * rules — stagger, provocation, salvage — live in one place.
  */
-export function damageCreatureByPlayer(world: World, c: Creature, amount: number): void {
+export function damageCreatureByPlayer(
+  world: World,
+  c: Creature,
+  amount: number,
+  stagger = 0,
+  from?: V2,
+): void {
   const t = world.timeSec;
   c.health = Math.max(0, c.health - amount);
   c.hitAt = t;
-  // A hit interrupts a wind-up: landing the first blow is worth something.
+  if (from) c.hitFrom = { ...from };
+  const def = CREATURE_SPECIES_BY_ID[c.speciesId];
+  // How hard this landed relative to the creature — drives the recoil, so a
+  // finisher visibly rocks a Rakhor and barely moves a Warden.
+  c.hitForce = Math.max(0.25, Math.min(1, stagger / Math.max(1, def.dangerous?.staggerResist ?? 60)));
+
   if (c.combat) {
-    if (c.combat.state === 'windup') setThreatState(world, c, 'recover');
     c.combat.targetId = 'emerson';
     c.combat.lastSeenAt = t;
+    // Re-think almost immediately. A creature's think is scheduled up to three
+    // seconds out, and without this a staggered creature stayed rocked until
+    // its next scheduled tick happened to come round — the reward for landing
+    // a chain arrived late and at a random length.
+    c.nextThinkAt = Math.min(c.nextThinkAt, t + 0.05);
+    // Being attacked ends any ambiguity about whether this is a fight.
     if (c.combat.state === 'calm' || c.combat.state === 'alert' || c.combat.state === 'warn') {
       setThreatState(world, c, 'hostile');
     }
+    applyStagger(world, c, stagger);
   }
   if (c.health <= 0) defeatCreature(world, c);
+}
+
+/**
+ * Accumulate stagger and, past the creature's resistance, break it out of
+ * whatever it was doing.
+ *
+ * The immunity window is what stops a stagger from becoming a stun-lock: a
+ * creature that has just been rocked cannot be rocked again for a couple of
+ * seconds, so the reward for landing a chain is one guaranteed opening, not
+ * permanent control of the fight.
+ */
+export function applyStagger(world: World, c: Creature, amount: number): void {
+  const m = c.combat;
+  if (!m || amount <= 0) return;
+  if (world.timeSec < c.combat!.staggerImmuneUntil) return;
+  const def = CREATURE_SPECIES_BY_ID[c.speciesId];
+  const resist = def.dangerous?.staggerResist ?? 60;
+  m.staggerLoad += amount;
+  if (m.staggerLoad < resist) return;
+  m.staggerLoad = 0;
+  m.staggerImmuneUntil = world.timeSec + COMBAT.staggerDuration + COMBAT.staggerImmunity;
+  setThreatState(world, c, 'staggered');
+  // A staggered creature has lost its turn: push its next attack out so it
+  // does not recover straight into a swing the player had no time to read.
+  m.nextAttackAt = Math.max(m.nextAttackAt, world.timeSec + COMBAT.staggerDuration + 0.35);
+}
+
+/** Bleed stagger load off over time, so chip damage never accumulates forever. */
+export function staggerDecayTick(world: World, c: Creature, dt: number): void {
+  const m = c.combat;
+  if (!m || m.staggerLoad <= 0) return;
+  m.staggerLoad = Math.max(0, m.staggerLoad - COMBAT.staggerDecay * dt);
 }
 
 /** Remove a defeated creature and award whatever it leaves behind. */
 export function defeatCreature(world: World, c: Creature): void {
   const def = CREATURE_SPECIES_BY_ID[c.speciesId];
+  // Idempotent. Two hits resolving in the same step — a strike and a beam, or
+  // a swing that catches a creature already at zero — must not pay out twice.
+  if (!world.creatures.includes(c)) return;
   world.creatures = world.creatures.filter((o) => o !== c);
   world.dirty.entities = true;
   if (world.player.lockedId === c.id) world.player.lockedId = null;
+
+  world.flags.lastKillAt = world.timeSec;
+  world.flags.lastKillSynthetic = Boolean(def.synthetic);
 
   if (def.synthetic) {
     // The only source of core fragments in the world: there is no node for
@@ -315,16 +512,36 @@ function placeOf(world: World, c: Creature): string {
 // Damage to Emerson
 // ---------------------------------------------------------------------------
 
-/** Apply damage to Emerson. Returns true when it actually landed. */
-export function damagePlayer(world: World, amount: number, sourceName: string): boolean {
+/**
+ * Apply damage to Emerson. Returns true when it actually landed.
+ *
+ * A hit briefly interrupts him — enough to be felt, never enough to chain.
+ * `hitStunImmunity` guarantees that two enemies cannot alternate flinches into
+ * permanent helplessness, which is the failure mode that makes a player feel
+ * cheated rather than beaten.
+ */
+export function damagePlayer(world: World, amount: number, sourceName: string, from?: V2): boolean {
   const p = world.player;
   if (p.dead || p.extraction) return false;
   if (isInvulnerable(world)) return false;
   p.health = Math.max(0, p.health - amount);
   p.lastHurtAt = world.timeSec;
+  p.lastHurtFrom = from ? { ...from } : null;
   world.flags.playerHitAt = world.timeSec;
+  if (world.timeSec >= p.hitStunImmuneUntil) {
+    p.hitStunUntil = world.timeSec + COMBAT.hitStun;
+    p.hitStunImmuneUntil = world.timeSec + COMBAT.hitStunImmunity;
+    // A hit spoils a swing but never a roll: the dodge stays the one thing
+    // that always works.
+    if (p.strike && p.strike.phase === 'windup') p.strike = null;
+  }
   if (p.health <= 0) beginExtraction(world, sourceName);
   return true;
+}
+
+/** Is Emerson mid-flinch? Movement and attacks are suppressed, dodging is not. */
+export function isHitStunned(world: World): boolean {
+  return world.timeSec < world.player.hitStunUntil;
 }
 
 // ---------------------------------------------------------------------------
@@ -348,9 +565,12 @@ export function beginExtraction(world: World, cause: string): void {
   p.dead = true;
   p.health = 0;
   p.strike = null;
+  p.buffered = null;
   p.lockedId = null;
   p.harvest = null;
-  p.extraction = { startedAt: world.timeSec, endsAt: world.timeSec + 4 };
+  // Short on purpose. Being dead is not the interesting part of EDEN and the
+  // player should be back on their feet before the setback stops stinging.
+  p.extraction = { startedAt: world.timeSec, endsAt: world.timeSec + 3 };
   p.extractions += 1;
   chronicle(world, 'emerson', `Emerson went down near ${world.landmarkNameAt?.(p.pos) ?? 'the valley'}. ARI triggered an emergency extraction.`, {
     actorIds: ['emerson'],
@@ -377,12 +597,19 @@ export function finishExtraction(world: World): void {
   p.stamina = 70;
   p.dead = false;
   p.extraction = null;
+  p.hitStunUntil = 0;
+  p.buffered = null;
   p.invulnUntil = world.timeSec + 2;
 
-  // A real but forgiving cost: part of the haul, never a capability.
+  // A real but forgiving cost: part of the haul, never a capability. What it
+  // actually cost is recorded rather than silently deducted — a penalty the
+  // player cannot see is a penalty they cannot learn from.
+  p.extractionLoss = [];
   for (const key of ['alloy', 'ore', 'crystal'] as const) {
     const lost = Math.floor(p.materials[key] * EXTRACTION_MATERIAL_LOSS);
+    if (lost <= 0) continue;
     p.materials[key] = Math.max(0, p.materials[key] - lost);
+    p.extractionLoss.push({ materialId: key, amount: lost });
   }
 
   world.ariQueue.push(
@@ -407,7 +634,22 @@ export function setThreatState(world: World, c: Creature, state: ThreatState): v
 /** Is this creature currently a danger to Emerson? */
 export function isHostile(c: Creature): boolean {
   const s = c.combat?.state;
-  return s === 'hostile' || s === 'windup' || s === 'strike' || s === 'recover';
+  return (
+    s === 'hostile' ||
+    s === 'circle' ||
+    s === 'windup' ||
+    s === 'lunge' ||
+    s === 'charge' ||
+    s === 'beam' ||
+    s === 'strike' ||
+    s === 'recover' ||
+    s === 'staggered'
+  );
+}
+
+/** Is this creature currently unable to act because Emerson rocked it? */
+export function isStaggered(world: World, c: Creature): boolean {
+  return c.combat?.state === 'staggered' && world.timeSec - c.combat.since < COMBAT.staggerDuration;
 }
 
 /** Nothing hunts inside Human Landing. */

@@ -8,7 +8,7 @@ import {
   fabricationProgress,
   startFabrication,
 } from '../sim/fabrication';
-import type { MaterialId } from '../sim/types';
+import type { MaterialId, SalvageId } from '../sim/types';
 import { useUI } from '../state/store';
 
 /**
@@ -69,6 +69,7 @@ export function FabricatorPanel() {
             const built = alreadyBuilt(world, recipe);
             const check = canFabricate(world, recipe.id);
             const costs = Object.entries(recipe.costs) as [MaterialId, number][];
+            const salvageCosts = Object.entries(recipe.salvage ?? {}) as [SalvageId, number][];
             return (
               <div key={recipe.id} className={`fab-recipe ${check.ok ? 'ready' : ''} ${built ? 'built' : ''}`}>
                 <div className="fab-recipe-head">
@@ -86,6 +87,17 @@ export function FabricatorPanel() {
                       </span>
                     );
                   })}
+                  {/* Salvage reads differently from ore on purpose: one is a
+                      shopping trip, the other means going back out there. */}
+                  {salvageCosts.map(([id, need]) => (
+                    <span
+                      key={id}
+                      className={`fab-cost salvage ${p.salvage[id] >= need ? 'met' : 'short'}`}
+                    >
+                      <span className="fab-swatch" style={{ background: '#7fe7ff' }} />
+                      Synthetic Core Fragment {p.salvage[id]} / {need}
+                    </span>
+                  ))}
                 </div>
                 {recipe.note && <div className="fab-note">{recipe.note}</div>}
                 <button
@@ -99,7 +111,9 @@ export function FabricatorPanel() {
                       ? 'FABRICATOR BUSY'
                       : check.ok
                         ? 'FABRICATE'
-                        : 'INSUFFICIENT MATERIAL'}
+                        : check.reason === 'missing-salvage'
+                          ? 'NEEDS SYNTHETIC SALVAGE'
+                          : 'INSUFFICIENT MATERIAL'}
                 </button>
               </div>
             );

@@ -1,4 +1,5 @@
-import type { EntityId, MaterialId, RecipeId, ResourceType, World } from './types';
+import { chronicle } from './chronicle';
+import type { EntityId, MaterialId, RecipeId, ResourceType, SalvageId, World } from './types';
 
 /**
  * EDEN's first player progression loop: gather → return → fabricate → become
@@ -79,13 +80,19 @@ export function materialForNodeType(type: ResourceType): MaterialDef | null {
 // Recipes
 // ---------------------------------------------------------------------------
 
-export type RecipeOutput = 'scanner' | 'arc-blade' | 'medkit' | 'energy-cell';
+export type RecipeOutput = 'scanner' | 'arc-blade' | 'capacitor' | 'medkit' | 'energy-cell';
 
 export interface RecipeDef {
   id: RecipeId;
   name: string;
   description: string;
   costs: Partial<Record<MaterialId, number>>;
+  /**
+   * Salvage this recipe consumes. The only thing that costs salvage is the
+   * Capacitor, and the only source of salvage is a disabled Warden — which is
+   * what turns "survived a guardian" into "got better at surviving".
+   */
+  salvage?: Partial<Record<SalvageId, number>>;
   /** Sim-seconds the fabricator runs for. */
   duration: number;
   output: RecipeOutput;
@@ -117,6 +124,18 @@ export const RECIPES: RecipeDef[] = [
     once: true,
   },
   {
+    id: 'arc-blade-capacitor',
+    name: 'Arc Blade Capacitor',
+    description:
+      'A recovered synthetic core, wired into the blade\'s discharge path. Petra cannot tell you what it is. She can tell you it holds a charge like nothing the colony can make.',
+    costs: { alloy: 3, ore: 4, crystal: 2 },
+    salvage: { coreFragment: 1 },
+    duration: 5,
+    output: 'capacitor',
+    once: true,
+    note: 'Requires a Synthetic Core Fragment.',
+  },
+  {
     id: 'medkit',
     name: 'Field Medkit',
     description:
@@ -145,7 +164,12 @@ export const RECIPE_BY_ID: Record<string, RecipeDef> = Object.fromEntries(RECIPE
 // Fabricator state machine
 // ---------------------------------------------------------------------------
 
-export type FabricateRefusal = 'busy' | 'already-built' | 'missing-materials' | 'unknown-recipe';
+export type FabricateRefusal =
+  | 'busy'
+  | 'already-built'
+  | 'missing-materials'
+  | 'missing-salvage'
+  | 'unknown-recipe';
 
 export interface FabricateResult {
   ok: boolean;
@@ -160,6 +184,8 @@ export function alreadyBuilt(world: World, recipe: RecipeDef): boolean {
       return world.player.unlocks.scanner;
     case 'arc-blade':
       return world.player.unlocks.arcBlade;
+    case 'capacitor':
+      return world.player.unlocks.capacitor;
     default:
       return false;
   }
@@ -173,6 +199,13 @@ export function canFabricate(world: World, recipeId: RecipeId): FabricateResult 
   for (const [id, need] of Object.entries(recipe.costs)) {
     if (world.player.materials[id as MaterialId] < (need ?? 0)) {
       return { ok: false, reason: 'missing-materials' };
+    }
+  }
+  // Salvage is reported separately: "you need more ore" and "you need to go
+  // survive a Warden" are very different pieces of advice.
+  for (const [id, need] of Object.entries(recipe.salvage ?? {})) {
+    if (world.player.salvage[id as SalvageId] < (need ?? 0)) {
+      return { ok: false, reason: 'missing-salvage' };
     }
   }
   return { ok: true };
@@ -192,6 +225,9 @@ export function startFabrication(world: World, recipeId: RecipeId): FabricateRes
   const recipe = RECIPE_BY_ID[recipeId];
   for (const [id, need] of Object.entries(recipe.costs)) {
     world.player.materials[id as MaterialId] -= need ?? 0;
+  }
+  for (const [id, need] of Object.entries(recipe.salvage ?? {})) {
+    world.player.salvage[id as SalvageId] -= need ?? 0;
   }
   world.fabrication = {
     recipeId: recipe.id,
@@ -241,6 +277,22 @@ export function fabricationTick(world: World): void {
           'ARC BLADE MK I ONLINE. Discharge is stable. Emerson — this changes where you can go, not what the valley is. Most of what lives out there still wants nothing to do with you.',
         );
         world.flags.arcBladeBuiltAt = world.timeSec;
+      }
+      break;
+    case 'capacitor':
+      if (!p.unlocks.capacitor) {
+        p.unlocks.capacitor = true;
+        world.flags.capacitorBuiltAt = world.timeSec;
+        world.ariQueue.push(
+          'ARC BLADE CAPACITOR INSTALLED. Discharge is holding half again the charge it did. Heavy strikes will put things on the back foot now, Emerson — that fragment was worth what it cost you.',
+        );
+        chronicle(world, 'emerson', 'Petra wired a recovered synthetic core into the Arc Blade.', {
+          actorIds: ['emerson'],
+          actorNames: ['Emerson'],
+          pos: { ...p.pos },
+          cause: ['A Warden Wisp was disabled and its core recovered'],
+          effects: ['The blade hits harder against a guarded stance', 'Nobody can explain the core'],
+        });
       }
       break;
     case 'medkit':

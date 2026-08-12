@@ -1,6 +1,7 @@
 import { SOCIAL, THREAT } from './config';
 import { formatClock, formatClockShort } from './chronicle';
 import { activeThreats, inCombat, insideSafeZone } from './combat';
+import { purposeLabel } from './threats';
 import { getEntity, getWorld } from './index';
 import { LANDMARKS, placeName } from './landmarks';
 import { memoryText } from './memory';
@@ -638,10 +639,18 @@ export function inspect(id: string): InspectorData | null {
       tone: tone((e.health / def.dangerous.health) * 100),
     };
     const d = dist(e.pos, world.player.pos);
+    const resist = def.dangerous.staggerResist;
     const lines = [
       `Damage ${def.dangerous.damage} · reach ${def.dangerous.attackRange}m · cooldown ${def.dangerous.cooldown}s`,
       `Notices at ${THREAT.noticeRange}m · warns inside ${THREAT.provokeRange}m`,
       `Leash ${Math.round(dist(e.pos, e.combat.territory))}m / ${THREAT.leash}m from its ground`,
+      // Stagger is invisible in Live Mode by design; Creator Mode is exactly
+      // where it should be legible, because that is where a fight gets debugged.
+      `Stagger ${Math.round(e.combat.staggerLoad)} / ${resist}` +
+        (world.timeSec < e.combat.staggerImmuneUntil
+          ? ` · immune for ${(e.combat.staggerImmuneUntil - world.timeSec).toFixed(1)}s`
+          : ''),
+      `Off duty it is: ${purposeLabel(e).toLowerCase()}`,
       e.combat.targetId ? `Engaged with ${e.combat.targetId}` : 'No target',
       world.timeSec < e.combat.nextAttackAt
         ? `Next attack available in ${(e.combat.nextAttackAt - world.timeSec).toFixed(1)}s`
@@ -666,6 +675,8 @@ function playerCombatDebug(world: World): CombatDebug {
     p.strike
       ? `Strike: ${p.strike.kind} · ${p.strike.phase} · chain ${p.strike.chain} · ${p.strike.timer.toFixed(2)}s left`
       : 'Not attacking',
+    p.buffered ? `Buffered: ${p.buffered.kind} (${(p.buffered.age * 1000).toFixed(0)}ms old)` : 'No queued input',
+    p.unlocks.capacitor ? 'Arc Blade Capacitor installed — stagger ×1.55' : 'No blade upgrade',
     world.timeSec < p.invulnUntil
       ? `Invulnerable for ${(p.invulnUntil - world.timeSec).toFixed(2)}s`
       : p.dodgeCooldown > 0

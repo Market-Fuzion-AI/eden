@@ -1706,3 +1706,56 @@
   border-top: 1px solid rgba(255, 95, 106, 0.25);
   padding-top: 10px;
 }
+
+/* --- v0.9 combat feel ----------------------------------------------------- */
+
+/* Scanner behaviour line: what it does, never what it is worth in numbers. */
+.ident-behaviour {
+  margin-top: 5px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  max-width: 210px;
+  margin-left: auto;
+}
+
+/* What an extraction actually cost. Shown briefly, then gone. */
+.loss-card {
+  position: absolute;
+  top: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  background: var(--panel-bg);
+  border: 1px solid rgba(255, 95, 106, 0.4);
+  text-align: center;
+  pointer-events: none;
+  animation: ari-in 0.3s ease;
+}
+.loss-title {
+  font-size: 9px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--bad);
+  margin-bottom: 5px;
+}
+.loss-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+/* Fabricator: salvage requirements read differently from material ones —
+   "you need more ore" and "you need to go survive a Warden" are different
+   pieces of advice and should not look the same. */
+.fab-cost.salvage {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+}
+.fab-cost.salvage.short {
+  color: var(--trust);
+  border-color: rgba(192, 139, 255, 0.45);
+}

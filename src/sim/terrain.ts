@@ -134,6 +134,30 @@ export function heightAt(x: number, z: number): number {
   // --- river carve (suppressed inside the rim) ----------------------------
   const d = Math.abs(x - riverX(z));
   h -= 7 * Math.exp(-(d * d) / (2 * 9 * 9)) * (1 - rim);
+
+  // --- regional water floor ------------------------------------------------
+  //
+  // Water belongs to the Riverlands. On roughly one valley in ten the Ashlands
+  // canyon carve (up to −9m) landed on top of an already-low mesa term and cut
+  // straight through the global water plane, filling canyon floors on the far
+  // side of the map with standing water that had no source and no business
+  // being there.
+  //
+  // The fix is a clamp, not a redesign. Outside the wet parts of the world the
+  // ground is lifted to just above the waterline — and *only* where it was
+  // going to be underwater anyway, so every point that was already dry keeps
+  // exactly the height it had. Camps, resource nodes and spawn points do not
+  // move.
+  //
+  // The exemption is deliberately not "the Riverlands region": the river's
+  // northern end runs outside that circle, and masking by region alone would
+  // have severed it. The channel itself is protected by proximity.
+  const riverMask = Math.exp(-(d * d) / (2 * 12 * 12)) * (1 - rim);
+  const wet = Math.max(w.riverlands, riverMask);
+  if (wet < 0.995) {
+    const floor = WORLD.waterLevel + 0.55;
+    if (h < floor) h += (floor - h) * (1 - wet);
+  }
   return h;
 }
 

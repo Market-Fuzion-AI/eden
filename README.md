@@ -139,6 +139,50 @@ Disabling a Warden leaves a **Synthetic Core Fragment**. Take one to Petra and s
 straight out, that she has no idea what it is — only that it is nothing anyone here can make, and that
 it is still drawing power sitting on her bench.
 
+**v0.9** made surviving it a skill —
+
+> *A world with teeth is only interesting if the teeth are fair.*
+
+v0.8 proved EDEN could hurt you. v0.9 is about whether you want to engage with
+that. The Arc Blade's light chain is now three genuinely different swings — a
+quick diagonal, a reverse cut, and a slower finisher that carries most of the
+stagger — and a press made mid-swing is **buffered** rather than dropped, so
+chaining no longer means catching a quarter-second window on a keyboard. The
+heavy attack is not a bigger light: it commits, it roots you, and it exists to
+punish an enemy's recovery.
+
+Landing a full sequence **staggers** what you hit. One number per creature, no
+poise bars, nothing on screen — but a Rakhor rocked out of its stance is an
+opening you earned, and the immunity window afterwards means it can never
+become a stun-lock. The same protection runs the other way: Emerson flinches
+when hit, briefly, and can never be chained into helplessness.
+
+Both encounters now fight in their own way. The **Rakhor** observes, warns,
+*circles* looking for an angle, then commits to a lunge — and the direction of
+that lunge is locked the instant the wind-up starts, which is what makes a
+well-timed dodge actually work. Its tell runs on four channels at once now: the
+dorsal ridge lights, the body drops and coils, the head lowers, and a ring
+paints on the ground beneath it, because a change of pose is a few pixels at
+twenty metres and a two-metre ring is not. Wound one badly enough and it
+breaks off rather than fighting to the death.
+
+The **Warden Wisp** does not brawl. It holds a standoff, charges a beam you can
+see coming, and fires along a line committed at the start of the charge —
+stepping out of that line is the answer. Crowd it and a close-range pulse burst
+shoves you back out. And both of them now have lives of their own: the Rakhor
+stalks smaller fauna around its range, the Warden walks its own pylons, and
+small animals give a roused predator a wide berth. In v0.8 the ancient machine
+guardian spent its days grazing on glowplants.
+
+Disabling a Warden still yields a **Synthetic Core Fragment** — and now there is
+exactly one thing to do with it. Petra will wire it into the blade as an **Arc
+Blade Capacitor**: not more damage, more *stagger*, which is the difference
+between a Warden you can only chip at and a Warden you can rock. That closes the
+loop — danger, survive, salvage, return, upgrade, become better at surviving.
+
+Combat has sound now, all of it synthesised in the browser from oscillators and
+generated noise. There are no audio files in this repository.
+
 ## Running it
 
 ```bash
@@ -153,7 +197,8 @@ npm run build      # typecheck + production build
 npm test           # headless simulation tests (autonomy, determinism, bounded state)
 npm run preview    # serve the production build
 node scripts/smoke.mjs   # browser smoke test with screenshots (needs preview/dev running)
-node scripts/tour-v08.mjs # visual tour: screenshots of the v0.8 encounters
+node scripts/tour-v08.mjs      # visual tour: screenshots of the encounters
+node scripts/playtest-v09.mjs  # the whole combat loop, driven end to end
 ```
 
 The browser scripts pin the world seed (`EDEN_SEED`, default `31337`) so a run is reproducible.
@@ -218,7 +263,7 @@ the existing needs, utility and relationship systems decide to do.
 | `H` | Use a Field Medkit |
 | `F` | Offer a glowberry (Lumi decides whether to take it) |
 | `R` | Ask a settler's permission to use their shelter |
-| `J` / left click | Light attack — chains up to three |
+| `J` / left click | Light attack — a three-swing sequence |
 | `K` / right click | Heavy attack — slower, hits much harder |
 | `Space` | Dodge roll (brief invulnerability) |
 | `L` | Lock on / release |
@@ -266,16 +311,18 @@ src/sim/      Pure TypeScript simulation. No Three.js, no React.
               provenance, confidence and decay) and the private
               generalizations drawn from them, player materials,
               data-driven fabrication recipes and the Pathfinder Scanner,
-              player combat (windowed strikes, dodge i-frames, lock-on) and
-              the threat state machine both dangerous archetypes share,
+              player combat (windowed strikes with a one-deep input buffer,
+              dodge i-frames, lock-on, soft target assist, stagger) and the
+              threat state machine both dangerous archetypes share,
               wildlife, Lumi, chronicle (with structured
               who/where/why/effects payloads), landmarks, three biome
               regions, deterministic dialogue, temporal summaries,
               terrain math, seeded RNG, creator interventions.
 src/state/    Thin Zustand store for UI-reactive state (mode, speed,
               selection, ~5 Hz UI pulse). Never per-tick data.
-src/game/     Fixed-timestep loop (30 Hz sim steps × speed multiplier)
-              and global input.
+src/game/     Fixed-timestep loop (30 Hz sim steps × speed multiplier),
+              global input, and procedurally-synthesised combat audio
+              (no audio files, no external assets).
 src/render/   React Three Fiber presentation adapter: procedural toon-shaded
               rigs (visual factories awaiting a future GLTF pipeline),
               terrain/water/flora, third-person + creator cameras.

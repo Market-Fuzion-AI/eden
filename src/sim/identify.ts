@@ -24,6 +24,8 @@ export interface Identification {
   scan?: {
     category: 'Biological' | 'Synthetic';
     threat: 'Passive' | 'Defensive' | 'Hostile' | 'Dormant';
+    /** What it does, in words. Never a stat: no health, no damage numbers. */
+    behaviour: string;
   };
   /** 0..1 remaining condition of something that can actually be fought. */
   healthFrac?: number;
@@ -50,14 +52,22 @@ function dispositionOf(world: World, e: Entity): string {
   if (e.combat) {
     switch (e.combat.state) {
       case 'hostile':
+      case 'circle':
       case 'windup':
+      case 'lunge':
+      case 'charge':
+      case 'beam':
       case 'strike':
       case 'recover':
         return 'hostile';
+      case 'staggered':
+        return 'reeling';
       case 'warn':
         return 'warning';
       case 'alert':
         return 'watching';
+      case 'retreat':
+        return 'wounded, withdrawing';
       case 'disengage':
         return 'withdrawing';
       default:
@@ -133,15 +143,15 @@ export function identifyFocus(world: World, camForwardX: number, camForwardZ: nu
       dangerous: false,
     };
   }
-  const role = def.synthetic
-    ? 'Unknown synthetic organism'
-    : def.dangerous
-      ? 'Native predator'
+  const role =
+    def.dangerous?.scanRole ??
+    (def.synthetic
+      ? 'Unknown synthetic organism'
       : def.traits.aggression > 0.6
         ? 'Native predator'
         : def.aquatic
           ? 'Native river life'
-          : 'Native lifeform';
+          : 'Native lifeform');
   const maxHealth = def.dangerous?.health ?? 100;
   return {
     id: e.id,
@@ -154,7 +164,14 @@ export function identifyFocus(world: World, camForwardX: number, camForwardZ: nu
     // The scanner is what turns "something is moving over there" into a
     // classification. Without it Emerson gets the name and the posture only.
     scan: world.player.unlocks.scanner
-      ? { category: def.synthetic ? 'Synthetic' : 'Biological', threat: threatDisposition(e) }
+      ? {
+          category: def.synthetic ? 'Synthetic' : 'Biological',
+          threat: threatDisposition(e),
+          // Behavioural, deliberately. Telling the player "warns before
+          // attacking" teaches them how to survive it; telling them "90 HP"
+          // teaches them to count.
+          behaviour: def.dangerous?.scanBehaviour ?? 'No threat response recorded',
+        }
       : undefined,
   };
 }

@@ -6,7 +6,7 @@ import { stand, stepToward } from './movement';
 import { CREATURE_SPECIES_BY_ID } from './species';
 import { isWater, riverX } from './terrain';
 import { makeCreature } from './worldgen';
-import { dispositionOf, threatExecute, threatThink } from './threats';
+import { dispositionOf, purposeLabel, threatExecute, threatThink } from './threats';
 import type { Creature, Goal, GoalType, World } from './types';
 import { angleTo, clamp100, dist, lerpAngle, v2, type V2 } from './vec';
 
@@ -250,13 +250,25 @@ export function creatureThink(world: World, c: Creature): void {
 
   maybeReplicate(world, c);
 
-  // Dangerous creatures consult the threat machine first. When it declines to
-  // take control they fall through to the ordinary life below — a predator
-  // that is not currently interested in anybody still forages and roams.
+  // Dangerous creatures are driven entirely by the threat machine, including
+  // when nothing is happening: a predator on its own time is stalking or
+  // patrolling, not foraging. v0.8 let them fall through to the generic
+  // routine, and the ancient machine guardian spent its days eating glowplants.
   if (c.combat && threatThink(world, c)) {
     c.goal = mkGoal('threat', threatLabel(c), t, { deadline: t + 30 });
     c.goalReason = { summary: threatReason(world, c), scores: [] };
     c.nextThinkAt = t + 0.25;
+    return;
+  }
+
+  // Small fauna give roused predators and firing guardians a wide berth. This
+  // is the whole of EDEN's cross-creature reaction: not a food chain, just
+  // enough for an encounter to look like it is happening inside an ecosystem
+  // rather than on an empty stage.
+  const danger = nearbyActiveDanger(world, c);
+  if (danger) {
+    alarmCreature(world, c, danger.pos);
+    c.nextThinkAt = t + 1.2;
     return;
   }
 
@@ -311,7 +323,7 @@ export function creatureThink(world: World, c: Creature): void {
 export function creatureExecute(world: World, c: Creature, dt: number): void {
   // Engaged creatures move under the threat machine instead of their goal, so
   // nothing tries to graze mid-lunge.
-  if (c.combat && c.goal.type === 'threat' && threatExecute(world, c, dt)) return;
+  if (c.combat && threatExecute(world, c, dt)) return;
 
   const t = world.timeSec;
   const def = CREATURE_SPECIES_BY_ID[c.speciesId];
@@ -479,27 +491,72 @@ function threatLabel(c: Creature): string {
       return 'Warning the intruder off';
     case 'hostile':
       return 'Driving off the intruder';
+    case 'circle':
+      return 'Circling for an opening';
     case 'windup':
       return 'Committing to a strike';
+    case 'lunge':
+      return 'Lunging';
+    case 'charge':
+      return 'Charging its emitter';
+    case 'beam':
+      return 'Firing';
     case 'strike':
       return 'Striking';
     case 'recover':
       return 'Recovering';
+    case 'staggered':
+      return 'Reeling';
+    case 'retreat':
+      return 'Breaking off, wounded';
     case 'disengage':
       return 'Returning to its ground';
     default:
-      return 'Alert';
+      // Nothing to do with Emerson at all — which is rather the point.
+      return purposeLabel(c);
   }
 }
 
 function threatReason(world: World, c: Creature): string[] {
   const def = CREATURE_SPECIES_BY_ID[c.speciesId];
   const d = Math.round(dist(c.pos, world.player.pos));
+  if ((c.combat?.state ?? 'calm') === 'calm') {
+    return [
+      purposeLabel(c),
+      def.synthetic ? 'It has been doing this a very long time' : 'Working its own range',
+      `Emerson is ${d}m away and has not been noticed`,
+    ];
+  }
   return [
     def.synthetic ? 'Guarding the Sunken Ring' : 'Defending its territory',
     `Emerson is ${d}m away`,
     `Disposition: ${dispositionOf(c)}`,
   ];
+}
+
+/**
+ * A roused predator or a firing guardian that this animal should be avoiding.
+ *
+ * Deliberately narrow: only genuinely active danger counts, and only within a
+ * short radius, so ordinary wildlife is not permanently fleeing something it
+ * cannot see on the far side of a hill. This is the whole of EDEN's
+ * cross-creature reaction — not a food chain, just enough that an encounter
+ * looks like it is happening inside an ecosystem rather than on a bare stage.
+ */
+function nearbyActiveDanger(world: World, c: Creature): Creature | null {
+  if (c.combat) return null; // predators are not frightened of themselves
+  for (const o of world.creatures) {
+    if (!o.combat || o === c) continue;
+    const s = o.combat.state;
+    const roused =
+      s === 'hostile' || s === 'circle' || s === 'windup' ||
+      s === 'lunge' || s === 'charge' || s === 'beam' || s === 'strike';
+    if (!roused) continue;
+    // A machine firing a beam clears a wider area than an animal squaring up.
+    const radius = CREATURE_SPECIES_BY_ID[o.speciesId].synthetic ? 16 : 12;
+    if (dist(o.pos, c.pos) < radius) return o;
+  }
+  return null;
 }
 
 /** Per-tick biology for creatures. */

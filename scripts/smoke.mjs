@@ -1156,7 +1156,8 @@ await page.evaluate(() => {
   window.__EDEN__.useUI.getState().setFabricatorOpen(true);
 });
 await page.waitForTimeout(400);
-await page.locator('.fab-recipe', { hasText: 'Arc Blade' }).locator('.fab-button').click();
+// Exact: 'Arc Blade' alone now also matches the Capacitor recipe.
+await page.locator('.fab-recipe', { hasText: 'Arc Blade Mk I' }).locator('.fab-button').click();
 await page.waitForTimeout(200);
 await page.screenshot({ path: `${SHOT_DIR}/21-arc-blade.png` });
 await page.evaluate(() => {
@@ -1185,6 +1186,11 @@ const atHome = await page.evaluate(() => {
   // Put one right on top of him and let the simulation run.
   const c = window.__EDEN__.goals ? null : null;
   const made = w.creatures.find((x) => x.speciesId === 'rakhor');
+  // Borrowed, not donated. Leaving a predator standing in the colony for the
+  // rest of the run is a situation the game never produces on its own, and
+  // from v0.9 settlers flee roused predators — so an un-restored borrow
+  // scatters the colonists and fails checks that have nothing to do with it.
+  const restore = made ? { x: made.pos.x, z: made.pos.z } : null;
   if (made) {
     made.pos.x = camp.pos.x + 3;
     made.pos.z = camp.pos.z;
@@ -1198,6 +1204,12 @@ const atHome = await page.evaluate(() => {
   }
   void c;
   void def;
+  if (made && restore) {
+    made.pos.x = restore.x;
+    made.pos.z = restore.z;
+    made.combat.state = 'calm';
+    made.combat.territory = { x: restore.x, z: restore.z };
+  }
   return {
     inside: combat.insideSafeZone(w, w.player.pos.x, w.player.pos.z),
     health: w.player.health,
@@ -1246,13 +1258,15 @@ const encounter = await page.evaluate(() => {
     w.player.pos.z = spot.z;
     const st = c.combat.state;
     if (seen[seen.length - 1] !== st) seen.push(st);
-    if (st === 'strike') break;
+    // v0.9: the Rakhor commits with a lunge rather than a generic strike.
+    if (st === 'lunge') break;
   }
   return {
     spot,
     seen,
     warnedFirst: seen.indexOf('warn') > -1 && seen.indexOf('warn') < seen.indexOf('hostile'),
-    windupBeforeStrike: seen.indexOf('strike') > 0 && seen[seen.indexOf('strike') - 1] === 'windup',
+    windupBeforeStrike: seen.indexOf('lunge') > 0 && seen[seen.indexOf('lunge') - 1] === 'windup',
+    circlesFirst: seen.indexOf('circle') > 0 && seen.indexOf('circle') < seen.indexOf('lunge'),
     health: w.player.health,
     hostile: combat.isHostile(c),
     disposition: threats.dispositionOf(c),
@@ -1261,6 +1275,7 @@ const encounter = await page.evaluate(() => {
 });
 check('a predator warns before it commits', encounter.warnedFirst, encounter.seen.join(' → '));
 check('and winds up before every strike', encounter.windupBeforeStrike, encounter.seen.join(' → '));
+check('and circles before committing', encounter.circlesFirst, encounter.seen.join(' → '));
 check('the strike actually costs health', encounter.health < 100, `${encounter.health}`);
 check('the scanner reads it as hostile', encounter.disposition === 'Hostile', encounter.disposition);
 await page.screenshot({ path: `${SHOT_DIR}/22-encounter.png` });

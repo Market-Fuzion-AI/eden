@@ -659,16 +659,23 @@ export function createWorld(seed: number): World {
     // built without leaving Human Landing, which is the whole point.
     materials: { alloy: 0, ore: 0, crystal: 0 },
     items: { medkit: 0, energyCell: 0 },
-    unlocks: { scanner: false, arcBlade: false },
+    unlocks: { scanner: false, arcBlade: false, capacitor: false },
     harvest: null,
     scan: { lastAt: -9999, activeUntil: -9999, pulseStartedAt: -9999, radius: 0, nodeIds: [] },
     equipped: 'none',
     strike: null,
+    buffered: null,
+    lastStrikeAt: -9999,
     invulnUntil: -9999,
+    dodgeTrail: 0,
     lockedId: null,
     lastHurtAt: -9999,
+    hitStunUntil: 0,
+    hitStunImmuneUntil: -9999,
+    lastHurtFrom: null,
     salvage: { coreFragment: 0 },
     extraction: null,
+    extractionLoss: [],
     extractions: 0,
   };
 
@@ -690,6 +697,7 @@ export function createWorld(seed: number): World {
     fabrication: null,
     pickups: [],
     pickupsSalvage: [],
+    beams: [],
     landmarkNameAt: (p: V2) => placeName(p),
     camps: [
       { speciesId: 'human', label: 'Human camp', pos: { ...ANCHORS.humanCamp } },

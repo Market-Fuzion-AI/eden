@@ -1,4 +1,4 @@
-import type { IntelligentSpeciesId, Sex } from './types';
+import type { IntelligentSpeciesId, Sex, ThreatPurpose } from './types';
 
 /**
  * Species definitions: identity, cultural starting tendencies (biases, never
@@ -164,8 +164,24 @@ export interface CreatureSpeciesDef {
   /**
    * Can threaten Emerson. Only these creatures carry a `combat` record, get a
    * lock-on reticle, or ever attack anybody.
+   *
+   * `staggerResist` is the stagger load it absorbs before it is knocked out of
+   * whatever it was doing — one number, no poise system, never shown in Live
+   * Mode. `purpose` is what it does when Emerson is nowhere near it, which is
+   * the difference between a creature and a spawn point.
    */
-  dangerous?: { health: number; damage: number; attackRange: number; cooldown: number };
+  dangerous?: {
+    health: number;
+    damage: number;
+    attackRange: number;
+    cooldown: number;
+    staggerResist: number;
+    purpose: ThreatPurpose;
+    /** One line for the scanner. Behavioural, never a stat dump. */
+    scanBehaviour: string;
+    /** How the scanner classifies the animal itself. */
+    scanRole: string;
+  };
   hover?: boolean;
   hoverHeight?: number;
   nocturnal?: boolean;
@@ -282,8 +298,19 @@ export const CREATURE_SPECIES: CreatureSpeciesDef[] = [
     replication: { cap: 2, chancePerThink: 0.004 },
     palette: { body: '#8a5a4a', belly: '#c9a06a', accent: '#4e2f28', glow: '#ff6a4a' },
     // The introductory encounter: territorial rather than murderous. It warns
-    // first, commits slowly, and gives up if you leave its ground.
-    dangerous: { health: 90, damage: 13, attackRange: 2.6, cooldown: 2.4 },
+    // first, commits slowly, and gives up if you leave its ground. Low stagger
+    // resistance — a light chain finisher will visibly rock it, which is what
+    // makes learning the chain worth doing.
+    dangerous: {
+      health: 90,
+      damage: 13,
+      attackRange: 2.6,
+      cooldown: 2.4,
+      staggerResist: 48,
+      purpose: 'stalk',
+      scanRole: 'Territorial predator',
+      scanBehaviour: 'Warns before attacking · circles before it commits',
+    },
   },
   {
     // EDEN's first synthetic fauna. Not a robot animal and not colony
@@ -301,9 +328,20 @@ export const CREATURE_SPECIES: CreatureSpeciesDef[] = [
     hover: true,
     hoverHeight: 2.7,
     synthetic: true,
-    // Harder than the Rakhor, and slower to commit — the extra wind-up is what
-    // keeps it fair.
-    dangerous: { health: 130, damage: 19, attackRange: 9.5, cooldown: 3.4 },
+    // Harder than the Rakhor, and slower to commit — the extra charge time is
+    // what keeps it fair. It holds range and fires; `attackRange` is the
+    // distance it wants to keep, not a bite. Braced against stagger, because a
+    // machine that flinches like an animal stops reading as a machine.
+    dangerous: {
+      health: 130,
+      damage: 19,
+      attackRange: 11.5,
+      cooldown: 3.4,
+      staggerResist: 120,
+      purpose: 'patrol',
+      scanRole: 'Ancient guardian',
+      scanBehaviour: 'Holds its perimeter · charges before it fires',
+    },
     // Machines do not breed.
     replication: { cap: 0, chancePerThink: 0 },
     palette: { body: '#a3abbd', belly: '#6d7688', accent: '#333b4c', glow: '#7fe7ff' },
