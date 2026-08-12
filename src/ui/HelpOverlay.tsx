@@ -6,38 +6,56 @@ import {
   setSensitivity,
   type Sensitivity,
 } from '../game/camera';
+import { keyLabel } from '../game/bindings';
 import { useUI } from '../state/store';
 
-/** The short version — everything a first-time player needs and nothing else. */
-const CONTROLS: [string, string][] = [
-  ['W A S D / ↑ ↓ ← →', 'Move'],
-  ['Trackpad swipe / drag', 'Look around — no clicking needed'],
-  ['C', 'Recenter the camera behind you'],
-  ['Shift', 'Sprint'],
-  ['E', 'Interact · gather · talk · help build'],
-  ['F', 'Offer a glowberry'],
-  ['R', 'Ask permission to use a shelter'],
-  ['Tab', 'Creator Mode'],
-  ['Esc', 'This screen'],
+/**
+ * The controls card.
+ *
+ * Read from the bindings table rather than typed out, so the help can never
+ * drift from what the keys actually do — which is exactly how it came to
+ * advertise Space as dodge and V as jump.
+ *
+ * Gate 1 is a movement test, so this leads with movement and the camera. The
+ * rest of EDEN still works and is still bound; it is listed underneath, quietly,
+ * where it cannot compete for attention with the thing being tested.
+ */
+
+const MOVE: [string, string][] = [
+  ['W A S D', 'Move — relative to where the camera is looking'],
+  [keyLabel('jump'), 'Jump'],
+  ['Shift (hold)', 'Sprint'],
+  ['Shift (tap) + direction', 'Quick-step'],
 ];
 
-/**
- * Combat, shown as its own block.
- *
- * Every action here has a left-hand key as well as a mouse button, because
- * EDEN is tested on a laptop with no mouse: a trackpad cannot hold a look-drag
- * and click at the same time, so a mouse-only binding is an unusable binding.
- */
-const COMBAT_CONTROLS: [string, string][] = [
-  ['J  /  left click', 'Light attack — chains up to three'],
-  ['K  /  right click', 'Heavy attack — slower, hits much harder'],
-  ['Space', 'Dodge roll — brief invulnerability'],
-  ['L', 'Lock on / release'],
-  ['H', 'Use a medkit'],
-  ['V', 'Jump'],
+const CAMERA: [string, string][] = [
+  ['← →', 'Turn the camera'],
+  ['↑ ↓', 'Look up and down'],
+  [keyLabel('camRecenter'), 'Recenter behind Emerson'],
+  ['[  ]', 'Zoom out and in'],
+  ['Trackpad swipe', 'Look around — optional, the keyboard does everything'],
+];
+
+const WORLD: [string, string][] = [
+  [keyLabel('interact'), 'Interact · gather · talk'],
+  [keyLabel('creatorMode'), 'Creator Mode'],
+  [keyLabel('help'), 'This screen'],
 ];
 
 const SENSITIVITIES: Sensitivity[] = ['low', 'normal', 'high'];
+
+function Rows({ rows }: { rows: [string, string][] }) {
+  return (
+    <div className="help-grid">
+      {rows.map(([k, v]) => (
+        <div key={k} className="help-row">
+          <span className="help-key">{k}</span>
+          <span className="help-desc">{v}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function HelpOverlay() {
   const setHelpOpen = useUI((s) => s.setHelpOpen);
@@ -50,28 +68,20 @@ export function HelpOverlay() {
     <div className="help-overlay" onClick={() => setHelpOpen(false)}>
       <div className="help panel" onClick={(e) => e.stopPropagation()}>
         <div className="wordmark">EDEN</div>
-        <div className="help-sub">a living world · v0.8</div>
-        <div className="help-grid">
-          {CONTROLS.map(([k, v]) => (
-            <div key={k} className="help-row">
-              <span className="help-key">{k}</span>
-              <span className="help-desc">{v}</span>
-            </div>
-          ))}
-        </div>
+        <div className="help-sub">a living world · Gate 1 · the 3Cs</div>
 
-        <div className="help-section-title">IF SOMETHING COMES AT YOU</div>
-        <div className="help-grid">
-          {COMBAT_CONTROLS.map(([k, v]) => (
-            <div key={k} className="help-row">
-              <span className="help-key">{k}</span>
-              <span className="help-desc">{v}</span>
-            </div>
-          ))}
-        </div>
+        <div className="help-section-title">MOVE</div>
+        <Rows rows={MOVE} />
+
+        <div className="help-section-title">CAMERA</div>
+        <Rows rows={CAMERA} />
+
+        <div className="help-section-title">EVERYTHING ELSE</div>
+        <Rows rows={WORLD} />
+
         <div className="help-note dim-note">
-          Most of the valley wants nothing to do with you. What does will warn you first — back away and it will
-          usually let you go.
+          EDEN plays entirely from the keyboard. A trackpad or mouse can look around if you prefer it, but nothing
+          requires one.
         </div>
 
         <div className="setting-row">
@@ -120,19 +130,19 @@ export function HelpOverlay() {
           </span>
         </div>
         <div className="help-note dim-note">
-          Mouse capture is for players using a mouse: it hides the cursor and gives unlimited turning.
-          On a trackpad, leave it off and just swipe.
+          Look speed applies to the arrow keys as well as the trackpad. Mouse capture is for players using a mouse:
+          it hides the cursor and gives unlimited turning.
         </div>
 
         <div className="help-note">
-          The world does not wait for you. Its inhabitants choose their own goals — walk among them, talk to them, or
-          enter Creator Mode to read their minds.
+          Beacons west of the landing mark a traversal run. Walk it, jump it, and see whether Emerson does what you
+          meant.
         </div>
         <button className="btn help-resume" onClick={() => setHelpOpen(false)}>
           Enter Eden
         </button>
         <div className="help-more">
-          Q scan · [ ] or pinch to zoom · 1/2/3 speed · P pause · F3 debug
+          F3 QA overlay · F4 reset to the run · Q scan · J K attack · L lock on · H medkit · 1/2/3 speed · P pause
         </div>
       </div>
     </div>

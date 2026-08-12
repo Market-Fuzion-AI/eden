@@ -88,6 +88,30 @@ interface UIState {
 
 let focusNonce = 0;
 
+/**
+ * Persisted UI flags.
+ *
+ * Guarded because `localStorage` is not universally available: a private-mode
+ * browser can refuse it, and the headless test environment has none at all —
+ * which made this module unimportable from a test, and therefore made the
+ * input layer that depends on it untestable.
+ */
+function readFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeFlag(key: string, value: boolean): void {
+  try {
+    localStorage.setItem(key, value ? '1' : '0');
+  } catch {
+    // A remembered preference is a convenience, never a requirement.
+  }
+}
+
 export const useUI = create<UIState>((set) => ({
   mode: 'live',
   paused: false,
@@ -108,7 +132,7 @@ export const useUI = create<UIState>((set) => ({
   summary: null,
   helpOpen: false,
   fabricatorOpen: false,
-  learnedLook: localStorage.getItem('eden.learnedLook') === '1',
+  learnedLook: readFlag('eden.learnedLook'),
   debugOpen: false,
   chronicleOpen: true,
   spawnFoodArmed: false,
@@ -147,7 +171,7 @@ export const useUI = create<UIState>((set) => ({
   setHelpOpen: (helpOpen) => set({ helpOpen }),
   setFabricatorOpen: (fabricatorOpen) => set({ fabricatorOpen }),
   setLearnedLook: (learnedLook) => {
-    localStorage.setItem('eden.learnedLook', learnedLook ? '1' : '0');
+    writeFlag('eden.learnedLook', learnedLook);
     set({ learnedLook });
   },
   toggleDebug: () => set((s) => ({ debugOpen: !s.debugOpen })),

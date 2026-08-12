@@ -188,8 +188,9 @@ const move = await page.evaluate(async () => {
       for (let i = 0; i < 30; i++) window.__EDEN__.stepPlayer(1 / 60);
       const dx = p.pos.x - x0;
       const dz = p.pos.z - z0;
-      const len = Math.hypot(dx, dz) || 1;
-      return { right: (dx * rx + dz * rz) / len, fwd: (dx * fx + dz * fz) / len };
+      const travelled = Math.hypot(dx, dz);
+      const len = travelled || 1;
+      return { right: (dx * rx + dz * rz) / len, fwd: (dx * fx + dz * fz) / len, travelled };
     };
     results[yaw.toFixed(2)] = {
       D: probe('KeyD'),
@@ -210,12 +211,17 @@ for (const [yaw, r] of Object.entries(move)) {
   if (r.D.right < 0.9) { dOk = false; console.log(`    yaw ${yaw}: D right-dot ${r.D.right.toFixed(3)}`); }
   if (r.A.right > -0.9) { aOk = false; console.log(`    yaw ${yaw}: A right-dot ${r.A.right.toFixed(3)}`); }
   if (r.W.fwd < 0.9) { wOk = false; console.log(`    yaw ${yaw}: W fwd-dot ${r.W.fwd.toFixed(3)}`); }
-  if (r.ArrowRight.right < 0.9 || r.ArrowUp.fwd < 0.9) arrowOk = false;
+  // Gate 1 inverts what this used to assert. The arrow keys were movement
+  // aliases, which is exactly why a player without a trackpad could walk in
+  // four directions and never turn. They belong to the camera now, and any
+  // travel at all from an arrow key is the regression coming back.
+  if (r.ArrowRight.travelled > 0.05 || r.ArrowUp.travelled > 0.05) arrowOk = false;
 }
 check('D moves screen-right at every camera yaw', dOk);
 check('A moves screen-left at every camera yaw', aOk);
 check('W moves forward at every camera yaw', wOk);
-check('arrow keys mirror WASD', arrowOk);
+check('arrow keys no longer move Emerson', arrowOk,
+  `right ${move['0.00'].ArrowRight.travelled.toFixed(3)}m, up ${move['0.00'].ArrowUp.travelled.toFixed(3)}m`);
 
 // ---------------------------------------------------------------------------
 console.log('\nTRACKPAD CAMERA (no pointer lock)');
@@ -250,8 +256,16 @@ await page.evaluate(() => {
   for (let i = 0; i < 200; i++) window.__EDEN__.camera.addLook(0, -400, 'wheel');
 });
 await page.waitForTimeout(350);
-const clamped = await page.evaluate(() => window.__EDEN__.input.inputState.camPitch);
-check('pitch stays within its limits', clamped <= 0.51 && clamped >= -1.11, `${clamped.toFixed(3)}`);
+// Read the limits from the app rather than restating them here: hardcoding
+// them meant that raising the ceiling for the keyboard camera failed this check
+// without anything actually being wrong.
+const clamped = await page.evaluate(() => ({
+  pitch: window.__EDEN__.input.inputState.camPitch,
+  limit: window.__EDEN__.camera.PITCH_LIMIT,
+}));
+check('pitch stays within its limits',
+  clamped.pitch <= clamped.limit.max + 0.01 && clamped.pitch >= clamped.limit.min - 0.01,
+  `${clamped.pitch.toFixed(3)} vs [${clamped.limit.min}, ${clamped.limit.max}]`);
 
 // THE acceptance test: hold W, look around, keep moving.
 const held = await page.evaluate(async () => {
@@ -315,6 +329,279 @@ const zoom = await page.evaluate(async () => {
 });
 check('pinch zooms instead of looking', Math.abs(zoom.after - zoom.before) > 0.5, `${zoom.before} -> ${zoom.after}`);
 await page.screenshot({ path: `${SHOT_DIR}/17-live-camera.png` });
+
+// ---------------------------------------------------------------------------
+console.log('\nGATE 1 — KEYBOARD ONLY (the 3Cs)');
+// ---------------------------------------------------------------------------
+/*
+ * Everything below is driven by real keyboard events rather than by poking the
+ * input state, because the thing under test *is* the event plumbing: which key
+ * reaches which action, and whether two of them can be held at once. Human QA
+ * rejected the previous scheme on exactly those grounds.
+ *
+ * Headless WebGL renders at one or two frames a second here, so nothing waits
+ * a fixed number of frames — each step waits real seconds and asserts on what
+ * the world recorded.
+ */
+
+/** Put Emerson at the start of the run, at rest, with the camera behind him. */
+const toCourse = async () => {
+  await page.evaluate(() => {
+    const { getWorld, input, camera, course } = window.__EDEN__;
+    const world = getWorld();
+    course.resetToCourseStart(world);
+    input.inputState.keys.clear();
+    camera.resetKeyLook();
+    camera.drainLook();
+    input.inputState.camYaw = world.player.heading;
+    input.inputState.camPitch = -0.2;
+  });
+};
+
+await page.keyboard.press('F4');
+await page.waitForTimeout(600);
+const afterReset = await page.evaluate(() => {
+  const { getWorld, course } = window.__EDEN__;
+  const world = getWorld();
+  const start = course.courseStart(world);
+  return {
+    dist: Math.hypot(world.player.pos.x - start.x, world.player.pos.z - start.z),
+    onGround: world.player.onGround,
+    settlers: world.settlers.length,
+    t: world.timeSec,
+  };
+});
+check('F4 returns Emerson to the 3Cs start', afterReset.dist < 3, `${afterReset.dist.toFixed(1)}m away`);
+check('the reset does not restart the valley', afterReset.settlers > 0 && afterReset.t > 0,
+  `${afterReset.settlers} settlers at t=${afterReset.t.toFixed(0)}`);
+
+// THE Gate 1 acceptance test: walk and turn at the same time, keyboard only.
+await toCourse();
+const gateBefore = await page.evaluate(() => {
+  const { getWorld, input } = window.__EDEN__;
+  const p = getWorld().player;
+  return { x: p.pos.x, z: p.pos.z, yaw: input.inputState.camYaw, clock: p.clock };
+});
+// Sample the path continuously. Emerson turns to follow the camera, so he
+// travels an arc: end-to-end displacement understates how far he actually
+// walked, and at two frames a second it understates it badly.
+await page.evaluate(() => {
+  window.__gateWalk = { path: 0, topSpeed: 0, x: null, z: null };
+  const { getWorld } = window.__EDEN__;
+  const sample = () => {
+    const p = getWorld().player;
+    const s = window.__gateWalk;
+    if (s.x !== null) s.path += Math.hypot(p.pos.x - s.x, p.pos.z - s.z);
+    s.x = p.pos.x;
+    s.z = p.pos.z;
+    s.topSpeed = Math.max(s.topSpeed, p.speed);
+    s.raf = requestAnimationFrame(sample);
+  };
+  sample();
+});
+await page.keyboard.down('KeyW');
+await page.keyboard.down('ArrowRight');
+await page.waitForTimeout(3000);
+const walkSamples = await page.evaluate(() => {
+  cancelAnimationFrame(window.__gateWalk.raf);
+  return { path: window.__gateWalk.path, topSpeed: window.__gateWalk.topSpeed };
+});
+const during = await page.evaluate(() => {
+  const { getWorld, input } = window.__EDEN__;
+  const p = getWorld().player;
+  return {
+    x: p.pos.x, z: p.pos.z, clock: p.clock,
+    yaw: input.inputState.camYaw, held: input.inputState.keys.has('KeyW'),
+  };
+});
+await page.keyboard.up('ArrowRight');
+await page.keyboard.up('KeyW');
+await page.waitForTimeout(400);
+const gateTurned = Math.abs(during.yaw - gateBefore.yaw);
+const gateWalked = Math.hypot(during.x - gateBefore.x, during.z - gateBefore.z);
+check('the arrow keys turn the camera', gateTurned > 0.3, `${gateTurned.toFixed(2)} rad`);
+check('W is still held while the camera turns', during.held);
+/*
+ * Judged on distance actually covered and on the speed the simulation reported,
+ * both over Emerson's own clock. Headless WebGL runs at one or two frames a
+ * second and the loop clamps dt to 0.1 s, so three real seconds advance him
+ * less than half a second: a raw distance threshold here would really be a
+ * framerate threshold, failing on the machine rather than on a bug.
+ */
+const gateElapsed = Math.max(0.001, during.clock - gateBefore.clock);
+check('Emerson keeps walking while the camera turns',
+  walkSamples.path > 0.4 && walkSamples.path / gateElapsed > 2 && walkSamples.topSpeed > 2.5,
+  `${walkSamples.path.toFixed(2)}m path (${gateWalked.toFixed(2)}m net) in ${gateElapsed.toFixed(2)}s, ` +
+  `top ${walkSamples.topSpeed.toFixed(2)} m/s`);
+
+// Turn the camera most of the way round; W must follow the camera, not the world.
+const reversal = await page.evaluate(async () => {
+  const { getWorld, input, useUI } = window.__EDEN__;
+  const world = getWorld();
+  useUI.getState().setPaused(true);
+  const p = world.player;
+  const yaw0 = input.inputState.camYaw;
+  const yaw1 = yaw0 + Math.PI;
+  input.inputState.camYaw = yaw1;
+  input.inputState.keys.clear();
+  input.inputState.keys.add('KeyW');
+  // Let the heading swing round before measuring the direction travelled.
+  for (let i = 0; i < 45; i++) window.__EDEN__.stepPlayer(1 / 60);
+  const x0 = p.pos.x;
+  const z0 = p.pos.z;
+  for (let i = 0; i < 30; i++) window.__EDEN__.stepPlayer(1 / 60);
+  input.inputState.keys.clear();
+  const dx = p.pos.x - x0;
+  const dz = p.pos.z - z0;
+  const len = Math.hypot(dx, dz) || 1;
+  useUI.getState().setPaused(false);
+  return { fwd: (dx * Math.sin(yaw1) + dz * Math.cos(yaw1)) / len, travelled: Math.hypot(dx, dz) };
+});
+check('after turning 180°, W walks toward the new camera-forward', reversal.fwd > 0.9,
+  `dot ${reversal.fwd.toFixed(3)} over ${reversal.travelled.toFixed(2)}m`);
+
+// Space is Jump again. Sample continuously: at two frames a second a whole
+// jump can begin and end between two polls.
+await toCourse();
+await page.evaluate(() => {
+  window.__gate1 = { air: 0, sawAir: false };
+  const { getWorld } = window.__EDEN__;
+  const sample = () => {
+    const p = getWorld().player;
+    if (!p.onGround) {
+      window.__gate1.sawAir = true;
+      window.__gate1.air = Math.max(window.__gate1.air, p.vy);
+    }
+    window.__gate1.raf = requestAnimationFrame(sample);
+  };
+  sample();
+});
+await page.keyboard.down('Space');
+await page.waitForTimeout(1200);
+await page.keyboard.up('Space');
+await page.waitForTimeout(2500);
+const jumped = await page.evaluate(() => {
+  cancelAnimationFrame(window.__gate1.raf);
+  const { getWorld } = window.__EDEN__;
+  return {
+    ...window.__gate1,
+    lastJumpAt: getWorld().flags.lastJumpAt ?? 0,
+    onGround: getWorld().player.onGround,
+  };
+});
+check('Space jumps', jumped.sawAir && jumped.lastJumpAt > 0, JSON.stringify(jumped));
+check('and Emerson comes back down', jumped.onGround);
+
+// Sprint. Measured as achieved ground speed, not as the key being registered.
+const speeds = await page.evaluate(async () => {
+  const { getWorld, input, useUI } = window.__EDEN__;
+  useUI.getState().setPaused(true);
+  const p = getWorld().player;
+  const run = (keys) => {
+    p.moveSpeed = 0;
+    p.speed = 0;
+    p.stamina = 100;
+    input.inputState.keys.clear();
+    for (const k of keys) input.inputState.keys.add(k);
+    for (let i = 0; i < 60; i++) window.__EDEN__.stepPlayer(1 / 60);
+    const v = p.speed;
+    input.inputState.keys.clear();
+    for (let i = 0; i < 40; i++) window.__EDEN__.stepPlayer(1 / 60);
+    return v;
+  };
+  const walk = run(['KeyW']);
+  const sprint = run(['KeyW', 'ShiftLeft']);
+  useUI.getState().setPaused(false);
+  return { walk, sprint };
+});
+check('holding Shift sprints', speeds.sprint > speeds.walk * 1.3,
+  `${speeds.walk.toFixed(2)} -> ${speeds.sprint.toFixed(2)} m/s`);
+
+// F3 shows the QA readouts, and they are not on screen during ordinary play.
+const debugBefore = await page.locator('.debug').count();
+await page.keyboard.press('F3');
+await page.waitForTimeout(500);
+const debugText = await page.locator('.debug').innerText().catch(() => '');
+check('the QA overlay is hidden during normal play', debugBefore === 0);
+check('F3 shows movement, ground, slope, camera and input readouts',
+  /speed/.test(debugText) && /ground/.test(debugText) && /slope/.test(debugText) &&
+  /camera/.test(debugText) && /input/.test(debugText) && /collision/.test(debugText),
+  debugText.replace(/\n/g, ' | ').slice(0, 160));
+await page.screenshot({ path: `${SHOT_DIR}/18-qa-overlay.png` });
+await page.keyboard.press('F3');
+await page.waitForTimeout(300);
+
+// Creator Mode must not eat the bindings on the way back.
+await page.keyboard.press('Tab');
+await page.waitForTimeout(800);
+const inCreator = await page.evaluate(() => window.__EDEN__.useUI.getState().mode);
+await page.keyboard.press('Tab');
+await page.waitForTimeout(800);
+const roundTrip = await page.evaluate(async () => {
+  const { getWorld, input, useUI } = window.__EDEN__;
+  const mode = useUI.getState().mode;
+  useUI.getState().setPaused(true);
+  const p = getWorld().player;
+  const probe = (code) => {
+    p.moveSpeed = 0;
+    p.speed = 0;
+    const x0 = p.pos.x;
+    const z0 = p.pos.z;
+    input.inputState.keys.clear();
+    input.inputState.keys.add(code);
+    for (let i = 0; i < 45; i++) window.__EDEN__.stepPlayer(1 / 60);
+    input.inputState.keys.clear();
+    for (let i = 0; i < 30; i++) window.__EDEN__.stepPlayer(1 / 60);
+    return Math.hypot(p.pos.x - x0, p.pos.z - z0);
+  };
+  const w = probe('KeyW');
+  const arrow = probe('ArrowUp');
+  useUI.getState().setPaused(false);
+  return { mode, w, arrow, stuckKeys: input.inputState.keys.size };
+});
+check('Tab opens Creator Mode', inCreator === 'creator', inCreator);
+check('and returns to Live Mode', roundTrip.mode === 'live', roundTrip.mode);
+check('movement still works after the round trip', roundTrip.w > 1, `${roundTrip.w.toFixed(2)}m`);
+check('and the arrow keys still do not move him', roundTrip.arrow < 0.05, `${roundTrip.arrow.toFixed(3)}m`);
+check('no keys are left stuck down', roundTrip.stuckKeys === 0, `${roundTrip.stuckKeys} held`);
+
+// The course itself, as the player meets it.
+const courseFacts = await page.evaluate(() => {
+  const { getWorld, terrain, course } = window.__EDEN__;
+  const world = getWorld();
+  const kinds = {};
+  for (const p of world.course) kinds[p.kind] = (kinds[p.kind] ?? 0) + 1;
+  return {
+    props: world.course.length,
+    kinds,
+    wet: world.course.filter((p) => terrain.isWater(p.pos.x, p.pos.z)).length,
+    nearestThreat: Math.min(
+      ...world.creatures.filter((c) => c.combat).map((c) => course.distToCourse(world, c.pos)),
+    ),
+    nearestResource: Math.min(...world.resources.map((r) => course.distToCourse(world, r.pos))),
+  };
+});
+check('the 3Cs course is built and dry', courseFacts.props > 10 && courseFacts.wet === 0,
+  JSON.stringify(courseFacts.kinds));
+check('nothing dangerous is near the run', courseFacts.nearestThreat > 30,
+  `${courseFacts.nearestThreat.toFixed(0)}m`);
+check('no gather prompts sit on the run', courseFacts.nearestResource > 4.5,
+  `${courseFacts.nearestResource.toFixed(1)}m`);
+
+// The help card teaches the scheme QA asked for.
+await page.keyboard.press('Escape');
+await page.waitForTimeout(500);
+const helpText = await page.locator('.help').innerText().catch(() => '');
+check('the help card leads with WASD, the arrows and Space',
+  /W A S D/.test(helpText) && /←\s*→/.test(helpText) && /Space/.test(helpText) && /Jump/.test(helpText),
+  helpText.replace(/\n/g, ' | ').slice(0, 200));
+check('the help card no longer advertises Space as dodge or V as jump',
+  !/Space\s*·?\s*Dodge/i.test(helpText) && !/\bV\b\s+Jump/.test(helpText));
+check('the help card says the keyboard is enough',
+  /keyboard/i.test(helpText), helpText.replace(/\n/g, ' | ').slice(0, 160));
+await page.screenshot({ path: `${SHOT_DIR}/19-gate1-help.png` });
+await page.keyboard.press('Escape');
+await page.waitForTimeout(400);
 
 // ---------------------------------------------------------------------------
 console.log('\nNPC CONVERSATION');

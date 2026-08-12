@@ -1059,6 +1059,35 @@
 }
 .debug-warn { color: var(--warn); }
 
+/*
+ * QA readouts (Gate 1). Fixed-width columns on purpose: these numbers are read
+ * while the player is moving, and a value that jumps sideways as it changes
+ * width is unreadable at speed.
+ */
+.debug-title {
+  color: var(--accent);
+  letter-spacing: 0.12em;
+  margin-bottom: 4px;
+}
+.debug-rows { margin-bottom: 6px; }
+.debug-row {
+  display: flex;
+  gap: 8px;
+  white-space: pre;
+}
+.debug-label {
+  width: 66px;
+  flex: none;
+  opacity: 0.6;
+}
+.debug-value { font-variant-numeric: tabular-nums; }
+.debug-sep {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 6px 0;
+}
+.debug-note { opacity: 0.5; }
+
 /* Scrollbars */
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }

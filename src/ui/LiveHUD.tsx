@@ -252,10 +252,12 @@ export function LiveHUD() {
             <span className="prompt-key">{pr.key}</span> {pr.label}
           </div>
         ))}
-        {/* Taught once, then retired for good. Looking around needs no click
-            now, so this teaches the gesture rather than a mode. */}
+        {/* Taught once, then retired for good — the first arrow-key turn or
+            look-swipe retires it. It names the keyboard first because that is
+            what the game is played with; the trackpad is the alternative, not
+            the instruction. */}
         {!learnedLook && !helpOpen && !dialogue && !p.dead && (
-          <div className="prompt look-hint">Swipe or drag to look · C recenters the camera</div>
+          <div className="prompt look-hint">← → turn the camera · C recenters · trackpad swipe also looks</div>
         )}
       </div>
 

@@ -22,6 +22,14 @@ export interface AnimCtx {
   agitated?: boolean;
   /** Radians per second of turning, for body banking. */
   turnRate?: number;
+  /**
+   * Airborne state, for the jump pose. `air` is vertical velocity in m/s, so
+   * the rise and the fall read differently: legs tuck going up, reach going
+   * down. `landedAgo` is seconds since touchdown, driving the crouch.
+   */
+  airborne?: boolean;
+  air?: number;
+  landedAgo?: number;
 }
 
 export interface Rig {
@@ -296,6 +304,22 @@ export function buildSettlerRig(
         armR.rotation.z = -0.06 - speedNorm * 0.1;
       }
 
+      // --- jump, fall and landing ------------------------------------------
+      // Three readable poses rather than an animation system: tuck on the way
+      // up, reach on the way down, absorb on touchdown. Overriding the stride
+      // outright is deliberate — a character running in mid-air is the single
+      // most obvious tell that a jump is not really implemented.
+      if (ctx.airborne) {
+        const rising = (ctx.air ?? 0) > 0;
+        const t = Math.min(1, Math.abs(ctx.air ?? 0) / 6);
+        legL.rotation.x = rising ? -0.85 * t - 0.15 : 0.35 * t + 0.1;
+        legR.rotation.x = rising ? -0.5 * t - 0.1 : -0.45 * t - 0.05;
+        armL.rotation.x = rising ? -1.5 * t - 0.2 : -0.8 * t;
+        armR.rotation.x = rising ? -1.3 * t - 0.2 : -0.7 * t;
+        armL.rotation.z = 0.3 + t * 0.25;
+        armR.rotation.z = -0.3 - t * 0.25;
+      }
+
       const idleBreath = Math.sin(ctx.time * 2 + variant * 9) * 0.012;
       if (ctx.resting) {
         body.position.y = -0.52;
@@ -308,9 +332,14 @@ export function buildSettlerRig(
       } else {
         // Two bounces per stride cycle — one per footfall.
         body.position.y = Math.abs(Math.sin(phase)) * 0.055 * speedNorm + idleBreath;
+        // Landing absorbs: a short dip that decays over a quarter second. The
+        // difference between arriving on the ground and teleporting onto it.
+        const since = ctx.landedAgo ?? 99;
+        if (since < 0.25) body.position.y -= (1 - since / 0.25) * 0.16;
+        if (ctx.airborne) body.position.y = idleBreath;
         // Lean into the run, and bank into a turn. Cheap, and it is most of
         // what stops a character reading as a sliding statue.
-        body.rotation.x = speedNorm * 0.13;
+        body.rotation.x = ctx.airborne ? ((ctx.air ?? 0) > 0 ? -0.18 : 0.22) : speedNorm * 0.13;
         const turn = ctx.turnRate ?? 0;
         lean += (Math.max(-1, Math.min(1, turn * 0.28)) - lean) * Math.min(1, ctx.dt * 6);
         body.rotation.z = -lean * 0.22 * speedNorm;

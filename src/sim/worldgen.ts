@@ -1,4 +1,5 @@
 import { LUMI, START_TIME, THREAT } from './config';
+import { buildCourse, distToCourse, propTop } from './course';
 import { armThreat } from './threats';
 import { makeRng, type Rng } from './rng';
 import {
@@ -293,18 +294,50 @@ function buildSyntheticSite(world: World, rng: Rng): void {
  * never astride the only path anywhere, but reliably found by anybody who walks
  * the material route out to the Ashlands and up onto the Skyreach.
  */
+/**
+ * How far from the 3Cs run a dangerous creature must live.
+ *
+ * Notice range plus a wide margin, so nothing can see a player who is out there
+ * only to find out whether walking feels right — and so nothing wanders into
+ * sight of the course while going about its own business either.
+ */
+const COURSE_KEEP_OUT = THREAT.noticeRange + 20;
+
 function spawnDangers(world: World, rng: Rng): void {
   const camp = world.camps.find((c) => c.speciesId === 'human');
   const farFromHome = (p: V2) =>
     !camp || Math.hypot(p.x - camp.pos.x, p.z - camp.pos.z) > THREAT.safeRadius + THREAT.noticeRange + 20;
 
+  /**
+   * How unsuitable a spawn is: 0 is perfect, higher is worse.
+   *
+   * Scored rather than accepted-or-rejected because rejection means *no
+   * creature at all*, and losing one of the five is a far worse outcome than
+   * placing it a few metres closer to something than intended. An early Gate 1
+   * version simply gave up after twelve tries and quietly shipped a valley with
+   * three predators in it instead of five.
+   */
+  const unsuitability = (p: V2): number => {
+    let bad = 0;
+    if (!farFromHome(p)) bad += 1000;
+    const course = distToCourse(world, p);
+    if (course < COURSE_KEEP_OUT) bad += COURSE_KEEP_OUT - course;
+    return bad;
+  };
+
   const place = (speciesId: string, anchor: V2, radius: number): void => {
     const def = CREATURE_SPECIES.find((s) => s.id === speciesId);
     if (!def) return;
     let pos = findLand(rng, anchor, radius);
-    // Retry rather than accept a spawn that could reach into the safe zone.
-    for (let i = 0; i < 12 && !farFromHome(pos); i++) pos = findLand(rng, anchor, radius);
-    if (!farFromHome(pos)) return;
+    let score = unsuitability(pos);
+    for (let i = 0; i < 24 && score > 0; i++) {
+      const candidate = findLand(rng, anchor, radius);
+      const s = unsuitability(candidate);
+      if (s < score) {
+        pos = candidate;
+        score = s;
+      }
+    }
     const c = makeCreature(world, rng, def, pos);
     armThreat(c);
     world.creatures.push(c);
@@ -643,6 +676,10 @@ export function createWorld(seed: number): World {
     heading: Math.PI,
     speed: 0,
     onGround: true,
+    clock: 0,
+    coyoteUntil: 0,
+    jumpBufferedUntil: 0,
+    jumpHeld: false,
     health: 100,
     stamina: 100,
     berries: 0,
@@ -693,6 +730,7 @@ export function createWorld(seed: number): World {
     obstacles: [],
     landmarksBuilt: [],
     siteProps: [],
+    course: [],
     fabricatorPos: null,
     fabrication: null,
     pickups: [],
@@ -737,6 +775,30 @@ export function createWorld(seed: number): World {
   placeResources(world, rng);
   buildHumanLanding(world, rng);
   buildSyntheticSite(world, rng);
+  // The 3Cs test course. Built last so it can read the finished camp position.
+  buildCourse(world);
+  // Clear the run first, then add the course's own collision — in that order.
+  // Nothing grows inside the course: greybox geometry has to stay readable,
+  // and a tree in the middle of the slalom is a different test than intended.
+  world.flora = world.flora.filter((f) => distToCourse(world, f.pos) > 7);
+  // Collision has to go with the vegetation it belonged to. Filtering flora
+  // alone left the trees' obstacle circles standing on the course — invisible
+  // walls in the slalom, which is the single worst thing a movement test can
+  // have in it.
+  world.obstacles = world.obstacles.filter((o) => distToCourse(world, o.pos) > 7);
+  // Nothing to gather beside it either. A material seam within reach of the run
+  // puts an "E — salvage" prompt on screen every few strides, and a movement
+  // test the player keeps being interrupted during is not a movement test.
+  world.resources = world.resources.filter((r) => distToCourse(world, r.pos) > 5);
+  for (const prop of world.course) {
+    if (!prop.solid) continue;
+    world.obstacles.push({
+      pos: prop.pos,
+      radius: Math.max(prop.size.x, prop.size.z) * 0.86,
+      // A block stops being an obstacle once you are standing on it.
+      top: propTop(prop),
+    });
+  }
 
   // Emerson opens the game standing at Human Landing on dry, level ground.
   // Derived from the terrain rather than hard-coded: a literal spawn point

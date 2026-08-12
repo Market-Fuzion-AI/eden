@@ -117,3 +117,90 @@ export const recenter = { requested: false };
 export function requestRecenter(): void {
   recenter.requested = true;
 }
+
+// ---------------------------------------------------------------------------
+// Keyboard camera (Gate 1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Arrow-key camera.
+ *
+ * The arrow keys used to be movement aliases, which meant a keyboard-only
+ * player had no way to turn at all — the whole reason trackpad look felt
+ * mandatory. They are the camera now.
+ *
+ * Held keys drive an angular *velocity* that ramps up and eases down rather
+ * than a fixed rate applied per frame. That is the difference between a camera
+ * that feels like a robot arm and one that feels like a person turning their
+ * head: a short tap gives a small, deliberate adjustment, and a long hold
+ * settles into a comfortable constant sweep. Release decays faster than the
+ * ramp, so letting go stops the camera promptly instead of drifting.
+ */
+export const KEY_LOOK = {
+  /** Radians per second at full tilt. ~126°/s yaw, ~63°/s pitch. */
+  maxYaw: 2.2,
+  maxPitch: 1.1,
+  /** How quickly the velocity approaches the target, and returns to rest. */
+  accel: 11,
+  decay: 18,
+} as const;
+
+const keyLookVel = { yaw: 0, pitch: 0 };
+
+export interface KeyLookInput {
+  left: boolean;
+  right: boolean;
+  up: boolean;
+  down: boolean;
+}
+
+/**
+ * Advance the keyboard camera and return this frame's delta in radians.
+ *
+ * Sensitivity scales it like every other look source, so the setting means one
+ * thing across the whole game. Invert-Y applies to pitch only, matching the
+ * mouse path.
+ */
+export function keyLookTick(dt: number, input: KeyLookInput): { yaw: number; pitch: number } {
+  const scale = SENS_SCALE[cameraSettings.sensitivity];
+  const wantYaw = ((input.left ? 1 : 0) - (input.right ? 1 : 0)) * KEY_LOOK.maxYaw * scale;
+  const rawPitch = (input.up ? 1 : 0) - (input.down ? 1 : 0);
+  const wantPitch = (cameraSettings.invertY ? -rawPitch : rawPitch) * KEY_LOOK.maxPitch * scale;
+
+  const approach = (v: number, target: number): number => {
+    // Easing off is deliberately quicker than easing on: a camera that keeps
+    // coasting after the key is up reads as lag, not as smoothness.
+    const rate = Math.abs(target) > Math.abs(v) ? KEY_LOOK.accel : KEY_LOOK.decay;
+    return v + (target - v) * Math.min(1, rate * dt);
+  };
+  keyLookVel.yaw = approach(keyLookVel.yaw, wantYaw);
+  keyLookVel.pitch = approach(keyLookVel.pitch, wantPitch);
+  if (Math.abs(keyLookVel.yaw) < STILL) keyLookVel.yaw = 0;
+  if (Math.abs(keyLookVel.pitch) < STILL) keyLookVel.pitch = 0;
+
+  return { yaw: keyLookVel.yaw * dt, pitch: keyLookVel.pitch * dt };
+}
+
+/**
+ * Below this the camera is standing still, in radians per second.
+ *
+ * A little over a degree per second: not a speed anyone can see. The threshold
+ * used to be fifty times smaller, which meant the exponential tail of a release
+ * counted as "still turning" for another half-second — long enough that pressing
+ * C the instant you let go of an arrow key silently cancelled the recenter.
+ */
+const STILL = 0.02;
+
+/** True while the arrow keys are actually turning the camera. */
+export function keyLookActive(): boolean {
+  return Math.abs(keyLookVel.yaw) > STILL || Math.abs(keyLookVel.pitch) > STILL;
+}
+
+/** Drop any residual camera velocity — used when leaving Live Mode. */
+export function resetKeyLook(): void {
+  keyLookVel.yaw = 0;
+  keyLookVel.pitch = 0;
+}
+
+/** Vertical limits, shared by every look source so they cannot disagree. */
+export const PITCH_LIMIT = { min: -1.05, max: 0.62 };

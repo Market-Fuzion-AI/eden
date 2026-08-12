@@ -7,8 +7,16 @@ import { inCombat, lockedTarget, specFor } from '../sim/combat';
 import { CREATURE_SPECIES_BY_ID } from '../sim/species';
 import { heightAt } from '../sim/terrain';
 import { useUI } from '../state/store';
-import { inputState, installCanvasLook, isPointerLocked, releasePointerLock } from '../game/input';
-import { cameraSettings, drainLook, recenter } from '../game/camera';
+import { inputState, installCanvasLook, isPointerLocked, readLookKeys, releasePointerLock } from '../game/input';
+import {
+  cameraSettings,
+  drainLook,
+  keyLookActive,
+  keyLookTick,
+  PITCH_LIMIT,
+  recenter,
+  resetKeyLook,
+} from '../game/camera';
 import { buildSettlerRig } from './factories';
 import { toonMat } from './toon';
 
@@ -178,6 +186,11 @@ export function PlayerRig() {
       resting: false,
       social: false,
       turnRate: dt > 0 ? turned / dt : 0,
+      airborne: !p.onGround,
+      air: p.vy,
+      // Emerson's own clock, not the world's — the landing dip must last the
+      // same fraction of a second whatever speed the valley is running at.
+      landedAgo: p.clock - ((world.flags.lastLandAt as number) ?? -99),
     });
 
     // --- Arc Blade ---------------------------------------------------------
@@ -318,8 +331,11 @@ export function PlayerRig() {
 
     if (useUI.getState().mode !== 'live') {
       needsCamSnap.current = true;
-      // Discard look input accumulated while the god camera had the screen.
+      // Discard look input accumulated while the god camera had the screen —
+      // including keyboard camera velocity, or arrow keys pressed in Creator
+      // Mode would fling the chase camera on the way back.
       drainLook();
+      resetKeyLook();
       return;
     }
 
@@ -343,7 +359,17 @@ export function PlayerRig() {
     lookVel.current.pitch *= decay;
     if (Math.abs(lookVel.current.yaw) < 1e-4) lookVel.current.yaw = 0;
     if (Math.abs(lookVel.current.pitch) < 1e-4) lookVel.current.pitch = 0;
-    inputState.camPitch = Math.max(-1.1, Math.min(0.5, inputState.camPitch));
+
+    // Arrow-key camera. Its own smoothing lives in `camera.ts`; here it simply
+    // adds to the same yaw and pitch the pointer path drives, so the two are
+    // never two cameras fighting over one transform.
+    const keyLook = keyLookTick(dt, readLookKeys());
+    inputState.camYaw += keyLook.yaw;
+    inputState.camPitch += keyLook.pitch;
+    if ((keyLook.yaw !== 0 || keyLook.pitch !== 0) && !useUI.getState().learnedLook) {
+      useUI.getState().setLearnedLook(true);
+    }
+    inputState.camPitch = Math.max(PITCH_LIMIT.min, Math.min(PITCH_LIMIT.max, inputState.camPitch));
 
     // --- recenter ----------------------------------------------------------
     // Sweep smoothly behind Emerson rather than snapping. Any manual look
@@ -353,12 +379,14 @@ export function PlayerRig() {
       recentering.current = true;
     }
     if (recentering.current) {
-      if (pending.yaw !== 0 || pending.pitch !== 0) {
+      // Any manual look cancels it — from either input path. The player must
+      // never be fighting their own camera.
+      if (pending.yaw !== 0 || pending.pitch !== 0 || keyLookActive()) {
         recentering.current = false;
       } else {
         const k = 1 - Math.exp(-dt * 6);
         inputState.camYaw = dampAngle(inputState.camYaw, p.heading, k);
-        inputState.camPitch += (-0.24 - inputState.camPitch) * k;
+        inputState.camPitch += (-0.2 - inputState.camPitch) * k;
         let err = (p.heading - inputState.camYaw) % (Math.PI * 2);
         if (err > Math.PI) err -= Math.PI * 2;
         if (err < -Math.PI) err += Math.PI * 2;
@@ -399,11 +427,15 @@ export function PlayerRig() {
       let obstructed = false;
       for (const o of world.obstacles) {
         // Trees and boulders are tall enough to matter; anything the camera
-        // is already above is not in the way.
+        // is already above is not in the way. Obstacles that know their own
+        // height say so — a course block is barely a metre tall, and treating
+        // it like a tree pinned the camera against Emerson's back every time he
+        // stood on the platform next to it.
         const r = o.radius + 0.55;
         const dx = hx - o.pos.x;
         const dz = hz - o.pos.z;
-        if (dx * dx + dz * dz < r * r && hy < heightAt(o.pos.x, o.pos.z) + 3.4) {
+        const ceiling = o.top ?? heightAt(o.pos.x, o.pos.z) + 3.4;
+        if (dx * dx + dz * dz < r * r && hy < ceiling) {
           obstructed = true;
           break;
         }

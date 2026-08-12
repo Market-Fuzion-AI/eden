@@ -18,6 +18,8 @@ import * as threats from '../sim/threats';
 import * as identify from '../sim/identify';
 import * as species from '../sim/species';
 import * as player from '../sim/player';
+import * as course from '../sim/course';
+import * as bindings from './bindings';
 import { getInteractions, updatePlayer } from '../sim/player';
 import { simTick } from '../sim/simulation';
 import { buildSummary, snapshot } from '../sim/summary';
@@ -81,6 +83,8 @@ export function installDebugBridge(): void {
     camera,
     sim: { getInteractions },
     player,
+    course,
+    bindings,
     creator,
     goals,
     rel,

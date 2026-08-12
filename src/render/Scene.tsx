@@ -12,6 +12,7 @@ import { ResourceNodes } from './ResourceNodes';
 import { SocialLinks } from './SocialLinks';
 import { StructureVisuals } from './StructureVisuals';
 import { SyntheticSite } from './SyntheticSite';
+import { TestCourse } from './TestCourse';
 import { Terrain } from './Terrain';
 import { Vegetation } from './Vegetation';
 import { Water } from './Water';
@@ -27,6 +28,7 @@ export function Scene() {
       <CampVisuals />
       <LandingSite />
       <SyntheticSite />
+      <TestCourse />
       <ResourceNodes />
       <StructureVisuals />
       <MistLayer />

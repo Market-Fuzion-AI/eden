@@ -13,7 +13,9 @@ import {
 import { useMedkit } from '../sim/fabrication';
 import { performScan } from '../sim/scanner';
 import { useUI } from '../state/store';
-import { addLook, requestRecenter } from './camera';
+import { addLook, requestRecenter, type KeyLookInput } from './camera';
+import { held, isBound } from './bindings';
+import { resetToCourseStart } from '../sim/course';
 import { primeAudio } from './audio';
 
 /**
@@ -32,30 +34,66 @@ export const inputState = {
   camDist: 6.4,
 };
 
-/** Movement axes. moveX: +1 = screen right. moveZ: +1 = away from camera. */
+/**
+ * Movement axes. moveX: +1 = screen right. moveZ: +1 = away from camera.
+ *
+ * WASD only. The arrow keys used to be aliased here, which meant a player with
+ * no mouse had four keys that walked and none that turned — the single reason
+ * keyboard-only play was impossible. They are the camera now; see `bindings.ts`.
+ */
 export function readMoveAxes(): { moveX: number; moveZ: number; sprint: boolean; jump: boolean } {
   const k = inputState.keys;
   let moveX = 0;
   let moveZ = 0;
-  if (k.has('KeyW') || k.has('ArrowUp')) moveZ += 1;
-  if (k.has('KeyS') || k.has('ArrowDown')) moveZ -= 1;
-  if (k.has('KeyA') || k.has('ArrowLeft')) moveX -= 1;
-  if (k.has('KeyD') || k.has('ArrowRight')) moveX += 1;
+  if (held('moveForward', k)) moveZ += 1;
+  if (held('moveBack', k)) moveZ -= 1;
+  if (held('moveLeft', k)) moveX -= 1;
+  if (held('moveRight', k)) moveX += 1;
   const mag = Math.hypot(moveX, moveZ);
   if (mag > 1) {
     moveX /= mag;
     moveZ /= mag;
   }
-  // V jumps. Space became the dodge in v0.8: it is the single most-pressed key
-  // in a fight, and a trackpad player has no comfortable alternative for it.
-  return { moveX, moveZ, sprint: k.has('ShiftLeft') || k.has('ShiftRight'), jump: k.has('KeyV') };
+  return { moveX, moveZ, sprint: held('sprint', k), jump: held('jump', k) };
 }
 
-/** The movement input a dodge should travel along. */
-function dodgeInput(): { moveX: number; moveZ: number; camYaw: number } {
+/** Arrow-key camera state, read by the camera each frame. */
+export function readLookKeys(): KeyLookInput {
+  const k = inputState.keys;
+  return {
+    left: held('camLeft', k),
+    right: held('camRight', k),
+    up: held('camUp', k),
+    down: held('camDown', k),
+  };
+}
+
+/** The movement input a quick-step should travel along. */
+function stepInput(): { moveX: number; moveZ: number; camYaw: number } {
   const axes = readMoveAxes();
   return { moveX: axes.moveX, moveZ: axes.moveZ, camYaw: inputState.camYaw };
 }
+
+/**
+ * Sprint and quick-step share Shift.
+ *
+ * The brief asked for Shift + a direction to be the dodge, and Shift already
+ * owned sprint. Browser games cannot use Ctrl or Alt as a modifier — Ctrl+W
+ * closes the tab — so a third modifier was not available, and putting the
+ * dodge on a letter key would take a finger off WASD.
+ *
+ * They are separated by hold versus tap instead. Holding Shift sprints
+ * immediately, with no delay of any kind. Releasing it inside `TAP_MS` while a
+ * movement key is down fires a quick-step in that direction. A genuine sprint
+ * burst shorter than a fifth of a second is not a real input, so the two do not
+ * collide in practice — and if QA finds otherwise, the fallback is a dedicated
+ * key, which is why this lives behind one flag rather than being spread out.
+ */
+const TAP_MS = 190;
+let shiftDownAt = 0;
+let shiftHadDirection = false;
+/** Set when a quick-step fires, so the QA overlay can show it. */
+export const inputTelemetry = { lastQuickStepAt: 0, lastJumpAt: 0, quickSteps: 0 };
 
 export function isPointerLocked(): boolean {
   return Boolean(document.pointerLockElement);
@@ -107,26 +145,50 @@ export function installInput(): void {
       return;
     }
 
-    if (e.code === 'F3') {
+    if (isBound('qaOverlay', e.code)) {
       e.preventDefault();
       ui.toggleDebug();
       return;
     }
-    if (e.code === 'Digit1') ui.setSpeed(1);
-    if (e.code === 'Digit2') ui.setSpeed(5);
-    if (e.code === 'Digit3') ui.setSpeed(20);
-    if (e.code === 'KeyP') ui.setPaused(!ui.paused);
+    // Development reset: put Emerson back at the start of the 3Cs course
+    // without reloading, so a traversal run can be repeated immediately.
+    if (isBound('qaReset', e.code)) {
+      e.preventDefault();
+      resetToCourseStart(getWorld());
+      requestRecenter();
+      return;
+    }
+    if (isBound('speed1', e.code)) ui.setSpeed(1);
+    if (isBound('speed2', e.code)) ui.setSpeed(5);
+    if (isBound('speed3', e.code)) ui.setSpeed(20);
+    if (isBound('pause', e.code)) ui.setPaused(!ui.paused);
     // C is the Chronicle in Creator Mode and the camera recenter in Live Mode.
-    if (e.code === 'KeyC') {
+    if (isBound('camRecenter', e.code)) {
       if (ui.mode === 'creator') ui.toggleChronicle();
       else requestRecenter();
     }
     // Zoom without a trackpad pinch.
-    if (e.code === 'BracketLeft') inputState.camDist = Math.max(3, inputState.camDist - 0.6);
-    if (e.code === 'BracketRight') inputState.camDist = Math.min(11, inputState.camDist + 0.6);
+    if (isBound('camZoomIn', e.code)) inputState.camDist = Math.max(3, inputState.camDist - 0.6);
+    if (isBound('camZoomOut', e.code)) inputState.camDist = Math.min(11, inputState.camDist + 0.6);
+
+    // The arrow keys drive the camera. Stop the page scrolling under the canvas.
+    if (
+      isBound('camLeft', e.code) || isBound('camRight', e.code) ||
+      isBound('camUp', e.code) || isBound('camDown', e.code)
+    ) {
+      e.preventDefault();
+    }
+
+    // Shift down: sprint engages at once. Whether it *also* becomes a
+    // quick-step is decided on release — see TAP_MS above.
+    if (isBound('sprint', e.code) && !held('sprint', inputState.keys)) {
+      shiftDownAt = performance.now();
+      const axes = readMoveAxes();
+      shiftHadDirection = Math.hypot(axes.moveX, axes.moveZ) > 0.05;
+    }
 
     if (ui.mode === 'live' && !ui.helpOpen) {
-      if (e.code === 'KeyE') {
+      if (isBound('interact', e.code)) {
         const world = getWorld();
         // Standing at the fabricator opens it; otherwise gather, otherwise talk.
         if (fabricatorAtHand(world) && !ui.fabricatorOpen) {
@@ -140,7 +202,7 @@ export function installInput(): void {
         }
       }
       // Scanner sweep — the payoff of the first fabrication loop.
-      if (e.code === 'KeyQ') {
+      if (isBound('scan', e.code)) {
         const world = getWorld();
         const result = performScan(world);
         if (!result.ok && result.reason === 'locked' && !world.flags.scannerHinted) {
@@ -150,7 +212,7 @@ export function installInput(): void {
           );
         }
       }
-      if (e.code === 'KeyH') {
+      if (isBound('medkit', e.code)) {
         const world = getWorld();
         const healed = useMedkit(world);
         if (healed > 0) world.ariQueue.push(`Medkit administered. ${Math.round(healed)} points recovered.`);
@@ -158,16 +220,16 @@ export function installInput(): void {
       // Combat. Keyboard alternatives to the mouse buttons, because a trackpad
       // cannot hold a look-drag and click at the same time — every combat
       // action must be reachable from the left hand alone.
-      if (e.code === 'KeyJ' && !inputState.keys.has('KeyJ')) playerStrike(getWorld(), 'light');
-      if (e.code === 'KeyK' && !inputState.keys.has('KeyK')) playerStrike(getWorld(), 'heavy');
-      if (e.code === 'KeyL' && !inputState.keys.has('KeyL')) playerToggleLock(getWorld());
-      if (e.code === 'Space') {
-        // Never let the dodge key scroll the page out from under the canvas.
+      if (isBound('attackLight', e.code) && !inputState.keys.has(e.code)) playerStrike(getWorld(), 'light');
+      if (isBound('attackHeavy', e.code) && !inputState.keys.has(e.code)) playerStrike(getWorld(), 'heavy');
+      if (isBound('lockOn', e.code) && !inputState.keys.has(e.code)) playerToggleLock(getWorld());
+      if (isBound('jump', e.code)) {
+        // Space is Jump again. Never let it scroll the page under the canvas.
         e.preventDefault();
-        if (!inputState.keys.has('Space')) playerDodge(getWorld(), dodgeInput());
+        if (!inputState.keys.has(e.code)) inputTelemetry.lastJumpAt = performance.now();
       }
-      if (e.code === 'KeyF') playerOfferFood(getWorld());
-      if (e.code === 'KeyR') {
+      if (isBound('offer', e.code)) playerOfferFood(getWorld());
+      if (isBound('ask', e.code)) {
         const reply = playerAskPermission(getWorld());
         if (reply) {
           ui.openDialogue({
@@ -184,10 +246,30 @@ export function installInput(): void {
     inputState.keys.add(e.code);
   });
 
-  window.addEventListener('keyup', (e) => inputState.keys.delete(e.code));
+  window.addEventListener('keyup', (e) => {
+    // A short Shift press, with a direction held, is a quick-step rather than
+    // a sprint that happened to be brief.
+    if (isBound('sprint', e.code) && shiftDownAt > 0) {
+      const heldMs = performance.now() - shiftDownAt;
+      shiftDownAt = 0;
+      const ui = useUI.getState();
+      const axes = readMoveAxes();
+      const hasDirection = shiftHadDirection || Math.hypot(axes.moveX, axes.moveZ) > 0.05;
+      if (heldMs < TAP_MS && hasDirection && ui.mode === 'live' && !ui.helpOpen) {
+        if (playerDodge(getWorld(), stepInput())) {
+          inputTelemetry.lastQuickStepAt = performance.now();
+          inputTelemetry.quickSteps += 1;
+        }
+      }
+    }
+    inputState.keys.delete(e.code);
+  });
   // Only a genuine loss of focus clears held keys. Releasing the camera must
   // not, or looking around would keep stopping the player mid-stride.
-  window.addEventListener('blur', () => inputState.keys.clear());
+  window.addEventListener('blur', () => {
+    inputState.keys.clear();
+    shiftDownAt = 0;
+  });
 
   window.addEventListener('mousemove', (e) => {
     // Pointer-lock look, for players who opted into it. Drag-look is handled

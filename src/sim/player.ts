@@ -22,6 +22,7 @@ import { applyRelationship, peekRelationship, relationshipState } from './relati
 import { collectMaterial, materialForNodeType } from './fabrication';
 import { emersonKnows, witnessNorm } from './socialKnowledge';
 import { missingResources } from './structures';
+import { standingHeight } from './course';
 import { groundY, isWater } from './terrain';
 import type { Creature, ResourceNode, Settler, Structure, World } from './types';
 import { clamp100, dist, v2 } from './vec';
@@ -61,6 +62,24 @@ export function dirFromHeading(heading: number): { x: number; z: number } {
   return { x: Math.sin(heading), z: Math.cos(heading) };
 }
 
+/**
+ * Movement diagnostics for the Gate 1 QA overlay.
+ *
+ * Written by `updatePlayer`, read only by the overlay. Nothing in the
+ * simulation reads it back, so it cannot affect determinism — it exists so a
+ * human tester can see *why* a step felt wrong instead of guessing at it.
+ */
+export const moveTelemetry = {
+  /** Obstacles pushing on Emerson this frame. */
+  contacts: 0,
+  /** 0 = moved the full intended distance, 1 = went nowhere. */
+  blocked: 0,
+  /** True while a slope is too steep to walk straight up. */
+  slopeSlide: false,
+  /** True when the surface underfoot is a course prop rather than terrain. */
+  onProp: false,
+};
+
 let nextOfferId = 0;
 
 export function updatePlayer(world: World, dt: number, input: PlayerInput): void {
@@ -82,7 +101,9 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
     return;
   }
 
-  // Timers.
+  // Timers. `clock` is Emerson's own, and advances in real seconds — see the
+  // note on `PlayerState.clock`.
+  p.clock += dt;
   p.dodgeCooldown = Math.max(0, p.dodgeCooldown - dt);
   p.dodgeTimer = Math.max(0, p.dodgeTimer - dt);
   p.dodgeTrail = Math.max(0, p.dodgeTrail - dt);
@@ -128,7 +149,12 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
     }
   }
   // Getting going is snappier than stopping, which is what reads as "intent".
-  const accel = targetSpeed > p.moveSpeed ? PLAYER.accel : PLAYER.decel;
+  // In the air the player keeps most of their momentum and only some of their
+  // steering: a jump you can fully redirect mid-flight has no commitment, and
+  // one you cannot steer at all reads as a bug.
+  const airborne = !p.onGround;
+  const accelRate = targetSpeed > p.moveSpeed ? PLAYER.accel : PLAYER.decel;
+  const accel = airborne ? accelRate * PLAYER.airControl : accelRate;
   p.moveSpeed += (targetSpeed - p.moveSpeed) * Math.min(1, accel * dt);
   if (p.moveSpeed < 0.02) p.moveSpeed = 0;
 
@@ -152,7 +178,7 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
     let err = (desired - p.heading) % (Math.PI * 2);
     if (err > Math.PI) err -= Math.PI * 2;
     if (err < -Math.PI) err += Math.PI * 2;
-    const turnRate = PLAYER.turnRate * (1 + Math.abs(err) / Math.PI);
+    const turnRate = PLAYER.turnRate * (1 + Math.abs(err) / Math.PI) * (airborne ? PLAYER.airControl : 1);
     p.heading += err * Math.min(1, turnRate * dt);
     travelHeading = p.heading;
   }
@@ -171,14 +197,19 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
     // Emerson inside the second. Relaxing a few times converges on the corner
     // instead — which matters far more now that fights happen next to rocks
     // rather than in open meadow.
+    let contacts = 0;
     for (let pass = 0; pass < 4; pass++) {
       let corrected = false;
       for (const o of world.obstacles) {
+        // Standing on top of it: it is a floor now, not a wall. The margin lets
+        // him step off the edge without the circle grabbing him on the way down.
+        if (o.top !== undefined && p.y >= o.top - 0.12) continue;
         const ox = nx - o.pos.x;
         const oz = nz - o.pos.z;
         const od = Math.hypot(ox, oz);
         const min = o.radius + PLAYER.bodyRadius;
         if (od >= min) continue;
+        if (pass === 0) contacts++;
         if (od <= 0.001) {
           // Dead centre: no direction to push along. Use the travel heading.
           nx += Math.sin(stepHeading + Math.PI) * min;
@@ -218,10 +249,16 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
     }
     // Steep ground slows the climb rather than blocking it, so walking uphill
     // toward the Skyreach reads as effort instead of as an invisible wall.
-    const climb = groundY(nx, nz) - groundY(p.pos.x, p.pos.z);
+    // Course surfaces are flat by construction, so a platform never reads as a
+    // cliff the player is refused permission to walk onto.
+    const climb = airborne
+      ? 0
+      : standingHeight(world, nx, nz, p.y) - standingHeight(world, p.pos.x, p.pos.z, p.y);
+    moveTelemetry.slopeSlide = false;
     if (climb > 0.02) {
       const grade = climb / Math.max(0.001, effSpeed * dt);
       if (grade > 1.6) {
+        moveTelemetry.slopeSlide = true;
         // Too steep to walk straight up. Rather than simply refusing the step —
         // which pins the player against a cliff face with no way out but a
         // full stop — strip the uphill component and keep whatever runs along
@@ -255,26 +292,66 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
     p.pos.x = nx;
     p.pos.z = nz;
     p.speed = dt > 0 ? travelled / dt : 0;
+    const intended = effSpeed * dt;
+    moveTelemetry.contacts = contacts;
+    moveTelemetry.blocked = intended > 0.0001 ? Math.max(0, 1 - travelled / intended) : 0;
   } else {
     p.speed = 0;
+    moveTelemetry.contacts = 0;
+    moveTelemetry.blocked = 0;
+    moveTelemetry.slopeSlide = false;
   }
   if (!input.sprint) p.stamina = clamp100(p.stamina + 7 * dt);
 
-  // Vertical: simple jump + terrain snap.
-  const ground = groundY(p.pos.x, p.pos.z);
-  if (input.jump && p.onGround) {
+  // --- vertical ------------------------------------------------------------
+  //
+  // An action-game jump rather than a physical one. Three forgiveness
+  // mechanisms do most of the work of making it feel reliable: a coyote window
+  // so stepping off a lip still jumps, an input buffer so a press just before
+  // landing is not swallowed, and a short-hop cut so tapping and holding are
+  // different heights. Falling is faster than rising, which is most of why a
+  // low jump can still feel snappy rather than floaty.
+  // Airborne, only a surface actually beneath his feet catches him; on the
+  // ground, the full step-up tolerance applies. See `courseSupportAt`.
+  const landTolerance = p.onGround ? PLAYER.stepHeight : PLAYER.airLandTolerance;
+  const ground = standingHeight(world, p.pos.x, p.pos.z, p.y, landTolerance);
+  moveTelemetry.onProp = ground > groundY(p.pos.x, p.pos.z) + 0.02;
+
+  // Walking off an edge must drop him, not teleport him down. Before Gate 1
+  // `onGround` pinned `y` to the ground every frame, so a ledge was a step.
+  if (p.onGround && p.y > ground + 0.06) {
+    p.onGround = false;
+    p.vy = 0;
+  }
+  if (p.onGround) p.coyoteUntil = p.clock + PLAYER.coyoteTime;
+
+  const pressedJump = input.jump && !p.jumpHeld;
+  p.jumpHeld = input.jump;
+  if (pressedJump) p.jumpBufferedUntil = p.clock + PLAYER.jumpBuffer;
+
+  const mayJump = p.onGround || p.clock < p.coyoteUntil;
+  if (p.clock < p.jumpBufferedUntil && mayJump && !p.dodgeTimer) {
     p.vy = PLAYER.jumpVel;
     p.onGround = false;
+    p.coyoteUntil = 0;
+    p.jumpBufferedUntil = 0;
+    world.flags.lastJumpAt = p.clock;
   }
+
   if (!p.onGround) {
-    p.vy -= PLAYER.gravity * dt;
+    // Releasing early clamps the climb. Held, the jump goes to full height.
+    if (p.vy > PLAYER.jumpCutVel && !input.jump) p.vy = PLAYER.jumpCutVel;
+    const g = PLAYER.gravity * (p.vy < 0 ? PLAYER.fallGravityScale : 1);
+    p.vy -= g * dt;
     p.y += p.vy * dt;
     if (p.y <= ground) {
       p.y = ground;
       p.vy = 0;
       p.onGround = true;
+      world.flags.lastLandAt = p.clock;
     }
   } else {
+    // Grounded: follow the surface, including stepping up onto low geometry.
     p.y = ground;
   }
 

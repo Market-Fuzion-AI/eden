@@ -70,22 +70,64 @@ export const SETTLER = {
 };
 
 export const PLAYER = {
-  walkSpeed: 3.6,
+  walkSpeed: 3.7,
   /**
    * Movement responsiveness. Acceleration is deliberately much faster than
    * deceleration: starting must feel instant, while a short coast on stopping
    * is what stops Emerson reading as a debug capsule that teleports to a halt.
+   * The coast is short — long enough to have weight, not long enough to skate.
    */
-  accel: 14,
-  decel: 9,
+  accel: 16,
+  decel: 13,
   /** Radians per second toward the travel direction, doubled on a reversal. */
-  turnRate: 12,
+  turnRate: 13,
   bodyRadius: 0.45,
   talkRange: 3.4,
   talkDuration: 9,
-  sprintSpeed: 6.6,
-  jumpVel: 5.6,
-  gravity: 14,
+  sprintSpeed: 6.8,
+
+  /**
+   * Jump.
+   *
+   * Tuned as an action-game jump rather than a physical one: it rises fast,
+   * peaks at a little over a metre, and falls faster than it rose. Symmetric
+   * gravity is what makes a jump feel floaty even when the apex is low.
+   */
+  jumpVel: 6.9,
+  gravity: 19,
+  /** Descent multiplier. The asymmetry is most of what makes a jump feel snappy. */
+  fallGravityScale: 1.45,
+  /**
+   * Releasing the key early clamps the climb to this, giving a hop about
+   * two-fifths the height of a full jump.
+   *
+   * It replaces a per-frame damping factor that cut the rise by 55% *every
+   * frame*: a tap produced a 15 cm hop, which does not read as a short jump but
+   * as a jump that failed. A single clamp is also frame-rate independent, which
+   * the old form was not.
+   */
+  jumpCutVel: 4.4,
+  /**
+   * Grace after walking off an edge during which a jump still counts. Without
+   * it, jumping from the lip of a ledge silently fails often enough that the
+   * player blames the controller rather than their timing.
+   */
+  coyoteTime: 0.12,
+  /** A jump pressed just before landing fires on touchdown instead of being lost. */
+  jumpBuffer: 0.16,
+  /** How much steering authority remains in the air, 0..1. */
+  airControl: 0.55,
+  /** Vertical tolerance for stepping up onto low geometry without jumping. */
+  stepHeight: 0.42,
+  /**
+   * The same tolerance in the air — deliberately almost none.
+   *
+   * On the ground a generous step-up is what stops low geometry reading as a
+   * wall. In the air it is the opposite: it silently lifts the player onto
+   * ledges they did not clear, so a jump that fell short still succeeds and the
+   * height of an obstacle stops meaning anything.
+   */
+  airLandTolerance: 0.06,
   maxBerries: 6,
   maxMaterials: 10,
   // Combat tuning lives in COMBAT, below. The v0.1 attack/dodge numbers that

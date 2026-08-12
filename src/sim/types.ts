@@ -656,6 +656,19 @@ export interface FloraItem {
 export interface Obstacle {
   pos: V2;
   radius: number;
+  /**
+   * World height of the top of this obstacle, when it has one.
+   *
+   * Only the player uses it, and only to stop pushing: once his feet are level
+   * with the top he is standing on the thing, not walking into it. Without this
+   * a solid course block could never be landed on — the same circle that keeps
+   * him from walking through it also shoved him off the roof.
+   *
+   * Undefined means "blocks at any height", which is every tree and boulder in
+   * the valley. Settlers and creatures ignore the field entirely: they walk
+   * around these on the ground like anything else.
+   */
+  top?: number;
 }
 
 export interface Camp {
@@ -731,7 +744,26 @@ export interface BuiltLandmark {
 }
 
 /**
- * The Sunken Ring: half-buried structures nobody in the valley built.
+ * One piece of the 3Cs test course.
+ *
+ * Greybox geometry, deliberately: Gate 1 is about how Emerson moves, and the
+ * course exists to pose movement problems rather than to look like anything.
+ * `solid` props are also registered as obstacles so they cannot be walked
+ * through; everything standable is queried through `course.ts`.
+ */
+export interface CourseProp {
+  id: string;
+  kind: 'pad' | 'block' | 'plank' | 'rock' | 'marker';
+  pos: V2;
+  rot: number;
+  /** Radius for round props; half-extents for rotated boxes. */
+  size: { x: number; z: number };
+  /** Height of the top surface above the terrain beneath it. */
+  height: number;
+  solid: boolean;
+}
+
+/** * The Sunken Ring: half-buried structures nobody in the valley built.
  *
  * Scenery with a position, exactly like the landing site — the site is a place
  * to arrive at and a reason to wonder, not a system. Nothing here explains
@@ -755,6 +787,27 @@ export interface PlayerState {
   heading: number;
   speed: number;
   onGround: boolean;
+  /**
+   * Emerson's own clock, in real seconds.
+   *
+   * Separate from `world.timeSec` on purpose: the world advances at the sim
+   * speed multiplier and he does not. His jump timings were measured against
+   * the world clock, which meant that at 20× the coyote window and the input
+   * buffer both expired in a twentieth of the time they were supposed to — a
+   * correct jump silently failed, and only when the player had sped the world
+   * up, which is the hardest kind of bug to attribute.
+   */
+  clock: number;
+  /**
+   * Jump forgiveness, as deadlines on `clock`. `coyoteUntil` keeps a jump legal
+   * for a moment after walking off an edge; `jumpBufferedUntil` remembers a
+   * press made just before landing. Both exist because without them a correct
+   * input fails often enough that the player blames the controller.
+   */
+  coyoteUntil: number;
+  jumpBufferedUntil: number;
+  /** Last frame's jump key state, so a press is distinguishable from a hold. */
+  jumpHeld: boolean;
   health: number;
   stamina: number;
   berries: number;
@@ -850,6 +903,8 @@ export interface World {
   landmarksBuilt: BuiltLandmark[];
   /** The ancient synthetic site at the Sunken Ring. Scenery, placed once. */
   siteProps: SitePropItem[];
+  /** The 3Cs traversal course near Human Landing. Gate 1 test geometry. */
+  course: CourseProp[];
   /** Where the fabricator stands, for interaction and the technician's post. */
   fabricatorPos: V2 | null;
   camps: Camp[];
