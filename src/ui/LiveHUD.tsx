@@ -9,7 +9,6 @@ import { getInteractions, harvestProgress } from '../sim/player';
 import { MATERIALS } from '../sim/fabrication';
 import { availableWeapons, blasterChargeFrac } from '../sim/blaster';
 import { jetpackFuelFrac } from '../sim/jetpack';
-import { devMode } from '../sim/dev';
 import { missionObjective, missionTracking, signalBearing, signalStrengthAt } from '../sim/mission';
 import { scanCooldownRemaining, scanWouldSpendCell } from '../sim/scanner';
 import type { MaterialId } from '../sim/types';
@@ -17,6 +16,7 @@ import { useUI } from '../state/store';
 import { inputState } from '../game/input';
 import { DialoguePanel } from './DialoguePanel';
 import { SummaryPanel } from './SummaryPanel';
+import { DevControls } from './DevControls';
 
 /** Compass marks, laid out around the eight cardinal directions. */
 const CARDINALS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -42,6 +42,7 @@ export function LiveHUD() {
   const helpOpen = useUI((s) => s.helpOpen);
   const dialogue = useUI((s) => s.dialogue);
   const summary = useUI((s) => s.summary);
+  const devPanelOpen = useUI((s) => s.devPanelOpen);
 
   const world = getWorld();
   const p = world.player;
@@ -56,6 +57,11 @@ export function LiveHUD() {
   // talking to someone, the ambient readouts stand down. Nothing is disabled;
   // they come straight back when he steps away.
   const talking = Boolean(world.conversation);
+  // The identification card shares the top-right corner with Developer
+  // Controls, so it stands down for that too — a panel of key bindings with an
+  // identification card printed across it is exactly the unreadable overlap
+  // this rule exists to prevent. ARI, being bottom-left, is unaffected.
+  const hideIdent = talking || devPanelOpen;
 
   // Where Kai is, and which way he is looking — the two things a
   // third-person explorer actually needs on screen at all times.
@@ -68,7 +74,6 @@ export function LiveHUD() {
   const jetFuel = jetpackFuelFrac(world);
   const blasterCharge = blasterChargeFrac(world);
   const weapons = availableWeapons(world);
-  const dev = devMode();
   // THE SIGNAL. The objective line is a purpose, not an instruction, and the
   // carrier meter is the whole navigation system — no minimap, no waypoint
   // pinned through the terrain.
@@ -172,11 +177,13 @@ export function LiveHUD() {
         {!paused && speed !== 1 && <div className="hint-chip">{speed}×</div>}
         <div className="hint-chip dim">TAB Creator · ESC Help</div>
         {/* Developer Mode is marked, quietly and always. A build that hands the
-            player a full inventory must never be mistakable for the real one. */}
-        {dev && <div className="hint-chip dev">DEV MODE</div>}
+            player a full inventory must never be mistakable for the real one.
+            The badge is also the way in to Developer Controls, so nothing a
+            tester needs is reachable only through a function key. */}
+        <DevControls />
       </div>
 
-      {ident && !talking && (
+      {ident && !hideIdent && (
         <div className={`ident-card ${ident.notable ? 'notable' : ''} ${ident.dangerous ? 'danger' : ''}`}>
           <div className="ident-name">{ident.name}</div>
           <div className="ident-line">{ident.line}</div>

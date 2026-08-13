@@ -2224,3 +2224,132 @@
   border: 1px solid rgba(255, 176, 63, 0.4);
   padding: 1px 6px;
 }
+
+/* ---------------------------------------------------------------------------
+   Developer Controls
+
+   QA runs on the deployed build, and on macOS the bare function keys never
+   reach the page — so everything a tester depends on has to be clickable. This
+   is the panel behind the DEV MODE badge. It borrows the HUD's own language
+   rather than inventing a second one: same panel treatment, same chip type,
+   same warning amber that marks a build as not the real one.
+--------------------------------------------------------------------------- */
+.dev-badge {
+  cursor: pointer;
+  font-family: inherit;
+  pointer-events: auto;
+}
+.dev-badge:hover {
+  border-color: var(--warn);
+  color: #ffd79a;
+}
+
+.dev-panel {
+  pointer-events: auto;
+  width: 300px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  border-color: rgba(255, 176, 63, 0.5);
+}
+.dev-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.dev-panel-title {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--warn);
+}
+
+.dev-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+}
+.dev-label {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.dev-value {
+  font-size: 11px;
+  text-align: right;
+  color: var(--text);
+}
+.dev-value.on { color: var(--accent); }
+.dev-value.off { color: var(--text-dim); }
+
+/* A two-state switch, not a button whose label you have to decode. */
+.dev-seg {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+.dev-seg-btn {
+  flex: 1;
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  padding: 7px 0;
+  cursor: pointer;
+  color: var(--text-dim);
+  background: rgba(10, 20, 28, 0.6);
+  border: 1px solid var(--panel-border);
+}
+.dev-seg-btn:hover { color: var(--text); }
+.dev-seg-btn.active {
+  color: #06121a;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.dev-recheck {
+  width: 100%;
+  margin-top: 8px;
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  padding: 6px 0;
+  cursor: pointer;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--panel-border);
+}
+.dev-recheck:hover { color: var(--text); }
+
+.dev-note {
+  margin-top: 8px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.dev-sep {
+  height: 1px;
+  margin: 14px 0 10px;
+  background: var(--panel-border);
+}
+
+.dev-keys {
+  width: 100%;
+  margin-top: 6px;
+  border-collapse: collapse;
+}
+.dev-keys td {
+  padding: 3px 0;
+  font-size: 11px;
+  vertical-align: top;
+}
+.dev-key {
+  width: 110px;
+  color: var(--accent);
+  white-space: nowrap;
+  padding-right: 10px;
+}
+.dev-key-what { color: var(--text-dim); }

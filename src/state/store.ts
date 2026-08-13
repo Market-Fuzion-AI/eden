@@ -52,6 +52,8 @@ interface UIState {
   /** True once the player has used mouse-look — retires the teaching prompt. */
   learnedLook: boolean;
   debugOpen: boolean;
+  /** Developer Controls — a clickable panel, so QA never depends on a function key. */
+  devPanelOpen: boolean;
   chronicleOpen: boolean;
   spawnFoodArmed: boolean;
   pointerLocked: boolean;
@@ -80,6 +82,7 @@ interface UIState {
   setFabricatorOpen(open: boolean): void;
   setLearnedLook(v: boolean): void;
   toggleDebug(): void;
+  toggleDevPanel(): void;
   toggleChronicle(): void;
   setSpawnFoodArmed(armed: boolean): void;
   setPointerLocked(locked: boolean): void;
@@ -134,6 +137,7 @@ export const useUI = create<UIState>((set) => ({
   fabricatorOpen: false,
   learnedLook: readFlag('eden.learnedLook'),
   debugOpen: false,
+  devPanelOpen: false,
   chronicleOpen: true,
   spawnFoodArmed: false,
   pointerLocked: false,
@@ -175,6 +179,7 @@ export const useUI = create<UIState>((set) => ({
     set({ learnedLook });
   },
   toggleDebug: () => set((s) => ({ debugOpen: !s.debugOpen })),
+  toggleDevPanel: () => set((s) => ({ devPanelOpen: !s.devPanelOpen })),
   toggleChronicle: () => set((s) => ({ chronicleOpen: !s.chronicleOpen })),
   setSpawnFoodArmed: (spawnFoodArmed) => set({ spawnFoodArmed }),
   setPointerLocked: (pointerLocked) => set({ pointerLocked }),
