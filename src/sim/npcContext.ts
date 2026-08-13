@@ -1,4 +1,5 @@
 import { DIALOGUE } from './config';
+import { identityOf } from './identities';
 import { isNight } from './chronicle';
 import { placeName } from './landmarks';
 import { regionAt, regionShortName } from './regions';
@@ -24,23 +25,59 @@ import { dist } from './vec';
  * guidelines, and the tests assert them.
  */
 
+/**
+ * WHO THEY ARE — authored, permanent. Layer A.
+ *
+ * None of this changes because someone got hungry. A sleeping engineer is still
+ * an engineer.
+ */
 export interface NpcFacts {
   id: string;
   name: string;
   species: string;
   role: string;
+  /** Their standing duty to the colony. Empty for non-survivors. */
+  responsibility: string;
   personality: string[];
-  currentGoal: string;
+  expertise: string[];
+  values: string[];
+  /** How they read the colony's situation. */
+  outlook: string;
+  location: string;
+  region: string;
+}
+
+/**
+ * WHAT THEY ARE DOING RIGHT NOW — simulation, moment to moment. Layer B.
+ *
+ * Decided by the utility AI, which remains completely free. This is a *report*
+ * of the simulation, never an instruction to it.
+ */
+export interface ActivityFacts {
+  /** The goal the simulation currently has them on. */
+  activity: string;
   /**
-   * Whether `currentGoal` is a real task or a stand-in for "nothing much".
-   * The local voice builds sentences around the goal ("… takes the day"), which
-   * only works when there is an actual job to name.
+   * Whether `activity` is a real task or a stand-in for "nothing much".
+   * The local voice builds sentences around it ("… takes the day"), which only
+   * works when there is an actual job to name.
    */
   busy: boolean;
   needs: string[];
-  location: string;
-  region: string;
   mood: string;
+  resting: boolean;
+}
+
+/**
+ * WHAT THEY CARE ABOUT — authored, persistent. Layer C.
+ *
+ * The larger thing on their mind, which outlives whatever they happen to be
+ * doing this minute. Explicitly *not* a quest: nothing here creates an
+ * objective, a marker or a reward, and the model is told so.
+ */
+export interface PriorityFacts {
+  goal: string;
+  problem: string;
+  aspiration: string;
 }
 
 export interface RelationshipFacts {
@@ -53,7 +90,12 @@ export interface RelationshipFacts {
 }
 
 export interface DialogueContext {
+  /** Layer A — who they are. */
   npc: NpcFacts;
+  /** Layer B — what the simulation has them doing right now. */
+  doing: ActivityFacts;
+  /** Layer C — the larger thing they care about. Null for non-survivors. */
+  priority: PriorityFacts | null;
   relationship: RelationshipFacts;
   /** Memories involving Kai or recently formed. Bounded, most relevant first. */
   memories: string[];
@@ -307,20 +349,37 @@ export function buildDialogueContext(
   const rel = s.relationships.emerson;
   const speciesDef = INTELLIGENT_SPECIES[s.speciesId as IntelligentSpeciesId];
   const goal = describeGoal(world, s);
+  const identity = identityOf(s.name);
   return {
+    // Layer A. Read from the authored roster, never from simulation state, so
+    // it says the same thing whether they are working or asleep.
     npc: {
       id: s.id,
       name: s.name,
       species: speciesDef.name,
       role: settlerRole(s),
-      personality: personalityWords(s),
-      currentGoal: goal.label,
-      busy: goal.busy,
-      needs: needWords(s),
+      responsibility: identity?.responsibility ?? '',
+      // Authored character where there is one; otherwise derived from the
+      // procedural traits, so the Veyra and Caelari still read as themselves.
+      personality: identity?.traits ?? personalityWords(s),
+      expertise: identity?.expertise ?? [],
+      values: identity?.values ?? [],
+      outlook: identity?.outlook ?? '',
       location: placeName(s.pos),
       region: regionShortName(regionAt(s.pos.x, s.pos.z)),
-      mood: moodWords(s),
     },
+    // Layer B. Entirely the simulation's business.
+    doing: {
+      activity: goal.label,
+      busy: goal.busy,
+      needs: needWords(s),
+      mood: moodWords(s),
+      resting: s.resting,
+    },
+    // Layer C. Persists through whatever Layer B happens to be doing.
+    priority: identity
+      ? { goal: identity.goal, problem: identity.problem, aspiration: identity.aspiration }
+      : null,
     relationship: {
       firstMeeting: !rel || rel.interactions === 0,
       familiarity: familiarityBand(rel?.familiarity ?? 0),
@@ -356,26 +415,21 @@ export function buildDialogueContext(
  * colonist nobody can write for. Petra keeps the role the simulation already
  * gave her.
  */
-const HUMAN_ROLES = [
-  'Systems Engineer',
-  'Field Medic',
-  'Survey Researcher',
-  'Security',
-  'Logistics',
-  'Pilot',
-  'Biologist',
-];
-
+/**
+ * What this person's posting is.
+ *
+ * This used to be a hash of the entity id into a list of seven titles — stable,
+ * but arbitrary: nobody had decided Selene was a surveyor, the arithmetic had.
+ * Now it comes from the authored roster, which is why the settlers can hold a
+ * conversation that sounds like it belongs to someone.
+ */
 export function settlerRole(s: Settler): string {
-  if (s.roleAnchor?.role === 'fabricator') return 'Fabrication Technician';
+  const identity = identityOf(s.name);
+  if (identity) return identity.role;
   if (s.speciesId !== 'human') {
     // The other two peoples are not part of the Eden Initiative and do not have
     // expedition postings. What they do is their own business.
     return `${INTELLIGENT_SPECIES[s.speciesId as IntelligentSpeciesId].name}`;
   }
-  // Stable hash of the settler's id, so the same person always has the same
-  // posting in every run of a given seed.
-  let h = 0;
-  for (let i = 0; i < s.id.length; i++) h = (h * 31 + s.id.charCodeAt(i)) >>> 0;
-  return HUMAN_ROLES[h % HUMAN_ROLES.length];
+  return 'Survivor';
 }

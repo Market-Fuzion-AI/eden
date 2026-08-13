@@ -1,3 +1,4 @@
+import { settlerRole } from './npcContext';
 import { CREATURE_SPECIES_BY_ID, INTELLIGENT_SPECIES } from './species';
 import { dispositionOf as threatDisposition } from './threats';
 import type { Entity, IntelligentSpeciesId, World } from './types';
@@ -123,10 +124,14 @@ export function identifyFocus(world: World, camForwardX: number, camForwardZ: nu
 
   if (e.kind === 'settler') {
     const def = INTELLIGENT_SPECIES[e.speciesId as IntelligentSpeciesId];
+    // Their posting, not "Human settler". The player learns who these people
+    // are by meeting them, and a name with a job attached is the smallest thing
+    // that turns a crowd into individuals. Species stays visible beside it.
+    const role = settlerRole(e);
     return {
       id: e.id,
       name: e.name.toUpperCase(),
-      line: `${def.name} settler`,
+      line: role === def.name ? `${def.name} settler` : `${role} · ${def.name}`,
       disposition,
       notable: false,
       dangerous: false,

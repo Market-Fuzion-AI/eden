@@ -469,9 +469,18 @@ function placeResources(world: World, rng: Rng): void {
     return node;
   };
 
-  // Berry patches: a couple near each camp (pre-known), the rest wild.
+  // Berry patches near each camp (pre-known), the rest wild.
+  //
+  // Scaled to the camp's population rather than fixed at two. Human Landing
+  // grew from eight founders to twelve when the survivors were authored, and
+  // two patches that comfortably fed eight left people genuinely starving at
+  // twelve — the settlers were not at fault, there was simply not enough food
+  // within reach of the camp. One patch per four residents keeps the ratio that
+  // was already working, and leaves the Veyra and Caelari camps untouched.
   for (const camp of world.camps) {
-    for (let i = 0; i < 2; i++) {
+    const residents = world.settlers.filter((s) => s.speciesId === camp.speciesId).length;
+    const patches = Math.max(2, Math.ceil(residents / 4));
+    for (let i = 0; i < patches; i++) {
       const p = findLand(rng, camp.pos, 22);
       const node = addResource('glowberry', p, rng.int(5, 7), 1 / 55);
       node.discovered = true;

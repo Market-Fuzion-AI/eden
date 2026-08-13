@@ -185,8 +185,8 @@ describe('starting a conversation', () => {
 
     const context = buildDialogueContext(world, s, null);
     // ...but what they tell Kai, and what a model would be told, is the job.
-    expect(context.npc.currentGoal).toBe(busyWith);
-    expect(context.npc.currentGoal).not.toMatch(/speaking with kai/i);
+    expect(context.doing.activity).toBe(busyWith);
+    expect(context.doing.activity).not.toMatch(/speaking with kai/i);
     // And it does not leak into their own line as third-person nonsense.
     expect(world.conversation!.transcript[0].text).not.toMatch(/speaking with kai/i);
   });
@@ -201,8 +201,8 @@ describe('starting a conversation', () => {
 
     beginConversation(world, s);
     const context = buildDialogueContext(world, s, null);
-    expect(context.npc.currentGoal).not.toMatch(/speaking with kai/i);
-    expect(context.npc.currentGoal.length).toBeGreaterThan(4);
+    expect(context.doing.activity).not.toMatch(/speaking with kai/i);
+    expect(context.doing.activity.length).toBeGreaterThan(4);
     expect(world.conversation!.transcript[0].text).not.toMatch(/speaking with kai/i);
   });
 

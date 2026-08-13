@@ -156,7 +156,7 @@ function pick<T>(list: T[], seed: string, salt: number): T {
 }
 
 export function localTurn(c: DialogueContext): DialogueTurn {
-  const { npc, relationship: rel } = c;
+  const { npc, doing, relationship: rel } = c;
   const seed = npc.id + (c.playerIntent?.intent ?? '');
 
   // What they open with depends on whether they know him — the single most
@@ -188,7 +188,7 @@ export function localTurn(c: DialogueContext): DialogueTurn {
         : [`Kai, isn't it.`, `You again. Good.`, `Twice in a week. People will talk.`];
     const opener = pick(openers, seed, 2);
     line = `${opener} ${situationLine(c)}`;
-    mood = npc.mood.includes('good spirits') ? 'happy' : npc.mood.includes('exhausted') ? 'concerned' : 'neutral';
+    mood = doing.mood.includes('good spirits') ? 'happy' : doing.mood.includes('exhausted') ? 'concerned' : 'neutral';
   }
 
   return {
@@ -213,22 +213,22 @@ export function localTurn(c: DialogueContext): DialogueTurn {
  * person itself; remembering is expressed through *how* they greet him instead.
  */
 function situationLine(c: DialogueContext): string {
-  const { npc, situation } = c;
+  const { doing, situation } = c;
   if (situation.danger) return `I'd not wander far right now. ${situation.danger}`;
-  if (npc.needs.includes('hungry')) return `I was about to go and find something to eat, if I'm honest.`;
-  if (npc.needs.includes('tired')) {
-    return npc.busy
-      ? `I'm running on very little. ${sentenceCase(npc.currentGoal)}, then I'm done.`
+  if (doing.needs.includes('hungry')) return `I was about to go and find something to eat, if I'm honest.`;
+  if (doing.needs.includes('tired')) {
+    return doing.busy
+      ? `I'm running on very little. ${sentenceCase(doing.activity)}, then I'm done.`
       : `I'm running on very little. One more hour and I'm done.`;
   }
-  if (npc.needs.includes('wants company')) return `I've been on my own most of the morning. It's good to see anyone.`;
-  return npc.busy ? `${npc.currentGoal}. Same as most days.` : `Nothing pressing this minute. It makes a change.`;
+  if (doing.needs.includes('wants company')) return `I've been on my own most of the morning. It's good to see anyone.`;
+  return doing.busy ? `${doing.activity}. Same as most days.` : `Nothing pressing this minute. It makes a change.`;
 }
 
 /** How they answer what Kai chose to say. */
 function replyToIntent(c: DialogueContext, seed: string): string {
   const intent = c.playerIntent!.intent;
-  const { npc } = c;
+  const { npc, doing } = c;
   switch (intent) {
     case 'friendly':
       return pick(
@@ -240,8 +240,8 @@ function replyToIntent(c: DialogueContext, seed: string): string {
       return pick(
         [
           `${sentenceCase(npc.location)}, mostly. I don't get much further than that.`,
-          npc.busy
-            ? `Not as much as I'd like. ${sentenceCase(npc.currentGoal)} takes the day.`
+          doing.busy
+            ? `Not as much as I'd like. ${sentenceCase(doing.activity)} takes the day.`
             : `Not as much as I'd like. There's always something that needs doing.`,
         ],
         seed,
@@ -285,8 +285,8 @@ function localReplies(c: DialogueContext, seed: string): DialogueReply[] {
     add(`Stay near camp. I'll go and look.`, 'firm');
     add(`Have you actually seen it, or just felt it?`, 'skeptical');
   }
-  if (c.npc.needs.includes('hungry')) add(`Go and eat. Whatever it is will keep.`, 'concerned');
-  if (c.npc.needs.includes('tired')) add(`You look wrecked. Sit down for an hour.`, 'concerned');
+  if (c.doing.needs.includes('hungry')) add(`Go and eat. Whatever it is will keep.`, 'concerned');
+  if (c.doing.needs.includes('tired')) add(`You look wrecked. Sit down for an hour.`, 'concerned');
   if (c.memories.length > 0) add(`Tell me about ${lastPlace(c)}.`, 'curious');
 
   add(pick([`How's the work going?`, `What are you on with?`], seed, 10), 'curious');

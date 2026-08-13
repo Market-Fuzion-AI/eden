@@ -110,6 +110,15 @@ export const SETTLER_ROSTER: SettlerSeed[] = [
   // Landing during working hours (see `roleAnchor`) but is otherwise an
   // ordinary autonomous settler with her own needs and relationships.
   { name: 'Petra', sex: 'female', species: 'human', role: 'fabricator' },
+  // Completing the twelve who founded Human Landing. The expedition needed
+  // comms, materials and life support as much as it needed a medic, and a
+  // colony of twelve is fragile precisely because each of these is one person.
+  // See `identities.ts` for who they are; there is deliberately no agricultural
+  // specialist among the twelve — that is Maya, and she is still in Pod Seven.
+  { name: 'Ines', sex: 'female', species: 'human' },
+  { name: 'Tomas', sex: 'male', species: 'human' },
+  { name: 'Nadia', sex: 'female', species: 'human' },
+  { name: 'Hollis', sex: 'male', species: 'human' },
   { name: 'Thalyss', sex: 'female', species: 'veyra' },
   { name: 'Ithra', sex: 'female', species: 'veyra' },
   { name: 'Zsava', sex: 'female', species: 'veyra' },
