@@ -2,18 +2,28 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { getEntity, getWorld } from '../sim';
+import { settlerRole } from '../sim/npcContext';
 import { CREATURE_SPECIES_BY_ID } from '../sim/species';
-import { WORLD } from '../sim/config';
+import { PLAYER, WORLD } from '../sim/config';
 import { groundY } from '../sim/terrain';
 import type { Entity, IntelligentSpeciesId } from '../sim/types';
 import { useUI } from '../state/store';
 import { ambientChatter } from '../sim/dialogue';
 import { threatPhase } from '../sim/threats';
 import { buildCreatureRig, buildLumiRig, buildSettlerRig, type Rig } from './factories';
-import { speechBubbleMaterial, statusSpriteMaterial } from './toon';
+import { nameplateTexture, speechBubbleMaterial, statusSpriteMaterial } from './toon';
 
 /** Ambient conversation bubbles only appear within earshot of Kai. */
 const BUBBLE_RANGE = 26;
+/**
+ * How far a name is readable.
+ *
+ * Full strength close in, fading to nothing by `NAME_FAR`, so a crowd at Human
+ * Landing is immediately legible and the far treeline does not become a wall of
+ * floating text.
+ */
+const NAME_NEAR = 19;
+const NAME_FAR = 36;
 const WHITE = new THREE.Color('#ffffff');
 
 /**
@@ -45,6 +55,7 @@ function AgentView({ id }: { id: string }) {
 
   const spriteRef = useRef<THREE.Sprite>(null);
   const bubbleRef = useRef<THREE.Sprite>(null);
+  const nameRef = useRef<THREE.Sprite>(null);
   /** Ground telegraph ring — the tell that survives distance. */
   const ringRef = useRef<THREE.Mesh>(null);
   /** Impact flare, synthetics only. */
@@ -249,11 +260,41 @@ function AgentView({ id }: { id: string }) {
             const aspect = (mat.userData.aspect as number) ?? 3;
             bubble.scale.set(0.62 * aspect, 0.62, 1);
           }
-          bubble.position.set(0, rig.height + 1.05, 0);
+          // Above the name plate, which sits directly over the head.
+          bubble.position.set(0, rig.height + 1.62, 0);
           show = true;
         }
       }
       bubble.visible = show;
+    }
+
+    // Who this is. Only people get one — the valley's wildlife is identified by
+    // looking at it, not by a label.
+    const plate = nameRef.current;
+    if (plate) {
+      let show = false;
+      if (e.kind === 'settler') {
+        const dx = e.pos.x - world.player.pos.x;
+        const dz = e.pos.z - world.player.pos.z;
+        const d = Math.hypot(dx, dz);
+        if (d < NAME_FAR) {
+          const entry = nameplateTexture(e.name, settlerRole(e));
+          const mat = plate.material as THREE.SpriteMaterial;
+          if (mat.map !== entry.tex) {
+            mat.map = entry.tex;
+            mat.needsUpdate = true;
+            plate.scale.set(0.4 * entry.aspect, 0.4, 1);
+          }
+          // Fades out with distance, and the person Kai could actually talk to
+          // right now reads brightest, so the crowd resolves into one answer.
+          const fade = 1 - Math.max(0, (d - NAME_NEAR) / (NAME_FAR - NAME_NEAR));
+          const focused = world.conversation?.settlerId === e.id || d < PLAYER.talkRange;
+          mat.opacity = Math.min(1, fade * (focused ? 1 : 0.82));
+          plate.position.set(0, rig.height + 0.72, 0);
+          show = mat.opacity > 0.02;
+        }
+      }
+      plate.visible = show;
     }
   });
 
@@ -262,6 +303,9 @@ function AgentView({ id }: { id: string }) {
     <primitive object={rig.group}>
       <sprite ref={spriteRef} scale={[0.55, 0.55, 1]} visible={false} />
       <sprite ref={bubbleRef} visible={false} renderOrder={10} />
+      <sprite ref={nameRef} visible={false} renderOrder={9}>
+        <spriteMaterial transparent depthWrite={false} depthTest={false} />
+      </sprite>
       <mesh ref={ringRef} visible={false} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.82, 1, 32]} />
         <meshBasicMaterial color="#ffb03f" transparent opacity={0.5} side={THREE.DoubleSide} depthWrite={false} />

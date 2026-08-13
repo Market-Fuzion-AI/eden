@@ -2353,3 +2353,468 @@
   padding-right: 10px;
 }
 .dev-key-what { color: var(--text-dim); }
+
+/* ===========================================================================
+   PLAYER HUD — EDEN's exploration interface
+
+   The HUD had grown into a telemetry readout: eleven stacked rows of
+   abbreviations in one corner, a black rectangle behind them, and numbers
+   nobody outside the project could decode. This is the design language that
+   replaces it.
+
+   Four rules it follows:
+
+     · The world is the picture. Panels sit in the corners, stay translucent,
+       and never grow to fill the space they are given.
+     · Shape carries meaning. A clipped corner is EDEN's, the accent cyan marks
+       what is live, amber marks the objective, red marks danger.
+     · Important things are physically larger and brighter than secondary ones.
+       Health outranks stamina; the equipped weapon outranks the other one.
+     · Nothing is shown that a player cannot act on. Raw resources, entity ids
+       and simulation vocabulary belong to Developer and Creator Mode.
+
+   Everything below is CSS and inline SVG. No image assets, no icon font, no
+   new dependency — a HUD that needs a download to look designed is a HUD that
+   will not survive its first refactor.
+   ========================================================================= */
+
+:root {
+  /* Panel language, shared by every HUD surface. */
+  --hud-bg: linear-gradient(150deg, rgba(9, 20, 30, 0.82), rgba(6, 13, 20, 0.74));
+  --hud-edge: rgba(127, 231, 255, 0.22);
+  --hud-edge-lit: rgba(127, 231, 255, 0.5);
+  --hud-shadow: 0 6px 22px rgba(0, 6, 12, 0.45);
+  --hud-notch: 11px;
+  /* One scale knob for the whole HUD, so landscape screens shrink coherently
+     instead of each panel inventing its own breakpoint. */
+  --hud-scale: 1;
+}
+
+/* The EDEN panel: clipped top-right and bottom-left, lit along the top edge. */
+.hud-surface {
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-edge);
+  box-shadow: var(--hud-shadow);
+  backdrop-filter: blur(7px);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--hud-notch)) 0,
+    100% var(--hud-notch),
+    100% 100%,
+    var(--hud-notch) 100%,
+    0 calc(100% - var(--hud-notch))
+  );
+}
+
+/* --- Player status, top left --------------------------------------------- */
+
+.status-card {
+  composes: hud-surface;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-edge);
+  box-shadow: var(--hud-shadow);
+  backdrop-filter: blur(7px);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--hud-notch)) 0,
+    100% var(--hud-notch),
+    100% 100%,
+    var(--hud-notch) 100%,
+    0 calc(100% - var(--hud-notch))
+  );
+  width: calc(224px * var(--hud-scale));
+  padding: 10px 12px 11px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.status-card.engaged {
+  border-color: rgba(255, 176, 63, 0.42);
+}
+.status-card.critical {
+  border-color: rgba(255, 95, 106, 0.6);
+  box-shadow: var(--hud-shadow), 0 0 22px rgba(255, 95, 106, 0.22);
+}
+
+.status-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 9px;
+}
+/* A crest rather than a portrait: one glyph, unmistakably Kai's, and it costs
+   no art budget and no download. */
+.status-crest {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #06131b;
+  background: linear-gradient(150deg, #8fe9ff, #3fb6cf);
+  clip-path: polygon(50% 0, 100% 26%, 100% 74%, 50% 100%, 0 74%, 0 26%);
+}
+.status-id {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.status-name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: #eaf6fa;
+}
+.status-role {
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* Gauges. The label sits *inside* the bar, so a row costs one line instead of
+   two and the meaning travels with the measurement. */
+.gauge {
+  position: relative;
+  margin-top: 6px;
+}
+.gauge-track {
+  position: relative;
+  height: 13px;
+  overflow: hidden;
+  background: rgba(3, 10, 16, 0.72);
+  border: 1px solid rgba(127, 231, 255, 0.16);
+  border-radius: 2px;
+}
+.gauge-fill {
+  height: 100%;
+  border-radius: 1px;
+  transition: width 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.gauge-label {
+  position: absolute;
+  top: 0;
+  left: 8px;
+  height: 13px;
+  display: flex;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(232, 244, 250, 0.92);
+  text-shadow: 0 1px 3px rgba(0, 8, 14, 0.95);
+  pointer-events: none;
+}
+.gauge-num {
+  position: absolute;
+  top: 0;
+  right: 7px;
+  height: 13px;
+  display: flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 8, 14, 0.95);
+}
+
+/* Health is the tallest bar in the game, because it is the only one that ends
+   the run. */
+.gauge-health .gauge-track {
+  height: 17px;
+}
+.gauge-health .gauge-label,
+.gauge-health .gauge-num {
+  height: 17px;
+  font-size: 10px;
+}
+.gauge-health .gauge-fill {
+  background: linear-gradient(90deg, #4fd08a, #8bf0b4);
+}
+.status-card.critical .gauge-health .gauge-fill {
+  background: linear-gradient(90deg, #ff5f6a, #ff9aa2);
+  animation: pulse-critical 1.15s ease-in-out infinite;
+}
+@keyframes pulse-critical {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.4); }
+}
+.gauge-stamina .gauge-fill {
+  background: linear-gradient(90deg, #3fa8d6, #7fe7ff);
+}
+.gauge-jet .gauge-fill {
+  background: linear-gradient(90deg, #4a9de0, #8fd6ff);
+}
+.gauge-jet.burning .gauge-fill {
+  background: linear-gradient(90deg, #ffa03f, #ffe08a);
+}
+.gauge-charge .gauge-fill {
+  background: linear-gradient(90deg, #3fc9ff, #9ff2ff);
+}
+
+/* Developer telemetry, inside the same card so it is obviously not the game. */
+.status-dev {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(255, 176, 63, 0.32);
+}
+.dev-mat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 5px;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 200, 130, 0.92);
+  background: rgba(255, 176, 63, 0.09);
+  border: 1px solid rgba(255, 176, 63, 0.2);
+  border-radius: 2px;
+}
+.dev-swatch {
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+}
+
+/* --- Weapon slots, bottom centre ----------------------------------------- */
+
+.weapon-slots {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  pointer-events: none;
+}
+.slot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px 6px 9px;
+  background: linear-gradient(150deg, rgba(9, 20, 30, 0.7), rgba(6, 13, 20, 0.62));
+  border: 1px solid rgba(127, 231, 255, 0.14);
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
+  color: var(--text-dim);
+  opacity: 0.62;
+  transition: opacity 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+/* The equipped weapon is brighter, larger and lit. Nothing has to be read. */
+.slot.active {
+  opacity: 1;
+  color: var(--accent);
+  border-color: var(--hud-edge-lit);
+  box-shadow: 0 0 16px rgba(89, 214, 230, 0.16), inset 0 0 12px rgba(89, 214, 230, 0.07);
+  transform: translateY(-2px);
+}
+.slot-key {
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-dim);
+  border: 1px solid rgba(127, 231, 255, 0.24);
+  border-radius: 2px;
+}
+.slot.active .slot-key {
+  color: #06131b;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.slot-glyph {
+  width: 17px;
+  height: 17px;
+}
+.slot-name {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.slot.active .slot-name {
+  color: #eaf6fa;
+}
+
+/* --- Minimap, bottom right ------------------------------------------------ */
+
+.minimap {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: calc(150px * var(--hud-scale));
+  padding: 7px 7px 5px;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-edge);
+  box-shadow: var(--hud-shadow);
+  backdrop-filter: blur(7px);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--hud-notch)) 0,
+    100% var(--hud-notch),
+    100% 100%,
+    var(--hud-notch) 100%,
+    0 calc(100% - var(--hud-notch))
+  );
+  pointer-events: none;
+}
+.minimap-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 50%;
+  /* Circular, so the map reads as a sweep rather than as a screenshot, and the
+     valley's round rim is the frame. */
+  box-shadow: inset 0 0 18px rgba(0, 8, 14, 0.75), 0 0 0 1px rgba(127, 231, 255, 0.2);
+  image-rendering: auto;
+}
+.minimap-rose {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: rgba(127, 231, 255, 0.8);
+  text-shadow: 0 1px 3px rgba(0, 8, 14, 0.95);
+}
+.minimap-where {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 5px;
+  line-height: 1.25;
+}
+.minimap-place {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #eaf6fa;
+}
+.minimap-region {
+  font-size: 8.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* --- Objective, top centre ------------------------------------------------ */
+
+.objective-signal {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 5px;
+}
+.objective-signal-label {
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.signal-bar {
+  position: relative;
+  flex: 1;
+  height: 5px;
+  min-width: 68px;
+  overflow: hidden;
+  background: rgba(3, 10, 16, 0.7);
+  border-radius: 3px;
+}
+.signal-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, rgba(255, 176, 63, 0.55), #ffd08a);
+  box-shadow: 0 0 10px rgba(255, 176, 63, 0.45);
+  transition: width 0.3s ease;
+}
+.objective-signal-word {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--warn);
+  white-space: nowrap;
+}
+
+/* --- ARI, bottom left ----------------------------------------------------- */
+
+/* She is a companion on the channel, not a log line. The lit left edge and the
+   tag make it obvious the words have a speaker. */
+.ari {
+  position: relative;
+  max-width: calc(400px * var(--hud-scale));
+  padding: 9px 13px 9px 15px;
+  background: linear-gradient(100deg, rgba(10, 24, 34, 0.86), rgba(6, 14, 21, 0.7));
+  border: 1px solid rgba(127, 231, 255, 0.2);
+  border-left: 2px solid var(--accent);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  animation: ari-in 0.3s ease-out;
+}
+@keyframes ari-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: none; }
+}
+.ari-tag {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: var(--accent);
+}
+.ari-text {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #dceaf0;
+}
+
+/* --- Chips, top right ----------------------------------------------------- */
+
+.chip-key {
+  display: inline-grid;
+  place-items: center;
+  min-width: 15px;
+  height: 15px;
+  margin-right: 5px;
+  padding: 0 3px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #06131b;
+  background: var(--accent);
+  border-radius: 2px;
+}
+.scan-chip {
+  display: flex;
+  align-items: center;
+}
+.scan-chip.cooling .chip-key,
+.scan-chip.cell .chip-key {
+  background: var(--warn);
+}
+
+/* --- Landscape scaling ---------------------------------------------------- */
+
+/* One knob. The HUD is designed for a laptop first and shrinks coherently
+   toward small landscape screens rather than relying on desktop room. */
+@media (max-width: 1180px) {
+  :root { --hud-scale: 0.92; }
+  .ari-text { font-size: 12px; }
+}
+@media (max-width: 940px) {
+  :root { --hud-scale: 0.84; }
+  .hud-topleft, .hud-topright { top: 10px; }
+  .hud-topleft { left: 10px; }
+  .hud-topright { right: 10px; }
+  .minimap { right: 10px; bottom: 10px; }
+  .hud-bottomleft { left: 10px; bottom: 10px; }
+  .slot-name { font-size: 10px; }
+}
+@media (max-height: 560px) {
+  /* Short landscape: the map is the first thing that can afford to shrink. */
+  .minimap { width: 118px; }
+  .status-card { padding: 8px 10px 9px; }
+}

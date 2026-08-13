@@ -1,4 +1,4 @@
-import { MISSION } from './config';
+import { MISSION, WORLD } from './config';
 import { chronicle } from './chronicle';
 import { isWalkable, isWater, groundY, slopeAt } from './terrain';
 import type { MissionState, World } from './types';
@@ -51,6 +51,11 @@ export function chooseCrashSite(world: World): MissionSite {
 
   let best: MissionSite | null = null;
   let bestScore = -Infinity;
+  // Everything must sit this far inside the mountain rim. Without it the
+  // scoring below — which used to reward raw distance from a camp that is
+  // already well off-centre — reliably chose the outermost ring on the far
+  // side of the valley, putting the wreck against the impassable ice wall.
+  const safeRadius = WORLD.rimStart - MISSION.edgeClearance;
   // A deterministic sweep of bearings and distances. No RNG is drawn, so the
   // mission is in the same place every time a given seed is played — which is
   // what makes a bug in it reproducible.
@@ -60,6 +65,8 @@ export function chooseCrashSite(world: World): MissionSite {
       const p = v2(home.x + Math.sin(a) * ring, home.z + Math.cos(a) * ring);
       if (isWater(p.x, p.z) || !isWalkable(p.x, p.z)) continue;
       if (slopeAt(p.x, p.z) > 0.3) continue;
+      // Open valley behind the site, not a mountain.
+      if (Math.hypot(p.x, p.z) > safeRadius) continue;
       // Clear ground around it, so the site reads as a site rather than as
       // wreckage jammed into a hillside.
       let clear = true;
@@ -73,13 +80,33 @@ export function chooseCrashSite(world: World): MissionSite {
       // Player Mode with nothing but Gate 1 movement.
       if (!walkableRoute(home, p)) continue;
 
-      // Prefer sites that are a real walk, and away from the 3Cs course so the
-      // greybox test geometry is not part of the first authored experience.
-      const d = dist(home, p);
+      // The walk must also stay inside the valley the whole way, or the compass
+      // points along a line that clips the rim even when both ends are fine.
+      let routeInside = true;
+      const legs = Math.ceil(dist(home, p) / 6);
+      for (let k = 1; k < legs && routeInside; k++) {
+        const t = k / legs;
+        const rx = home.x + (p.x - home.x) * t;
+        const rz = home.z + (p.z - home.z) * t;
+        if (Math.hypot(rx, rz) > safeRadius) routeInside = false;
+      }
+      if (!routeInside) continue;
+
+      // The greybox test course is not part of the first authored experience.
       const courseDist = world.course.length
         ? Math.min(...world.course.map((c) => dist(c.pos, p)))
         : 999;
-      const score = d * 0.4 + Math.min(courseDist, 60) * 0.6;
+      if (courseDist < MISSION.courseClearance) continue;
+
+      // Prefer sites that are a real walk with room to spare behind them.
+      // Distance is capped rather than maximised: past a good walk, further away
+      // buys nothing and costs clearance.
+      const d = dist(home, p);
+      const edgeRoom = safeRadius - Math.hypot(p.x, p.z);
+      const score =
+        Math.min(d, MISSION.preferredRange) * 0.5 +
+        Math.min(courseDist, 70) * 0.25 +
+        Math.min(edgeRoom, 45) * 0.7;
       if (score > bestScore) {
         bestScore = score;
         best = { pod: p, heading: a + Math.PI };

@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
+import { getWorld } from '../sim';
 import { providerMode, setProviderMode } from '../sim/conversation';
+import { MATERIALS } from '../sim/fabrication';
+import type { MaterialId } from '../sim/types';
 import { devMode } from '../sim/dev';
 import { dialogueProviderStatus } from '../game/openaiDialogue';
 import { useUI } from '../state/store';
@@ -43,6 +46,8 @@ export function DevControls() {
   if (!devMode()) return null;
 
   const mode = providerMode();
+  const p = getWorld().player;
+  const carrying = (Object.keys(MATERIALS) as MaterialId[]).filter((id) => p.materials[id] > 0);
 
   const switchProvider = (next: 'local' | 'openai') => {
     setProviderMode(next);
@@ -104,6 +109,28 @@ export function DevControls() {
       <div className="dev-note">
         Switching to OPENAI affects new conversations. The game always falls back to LOCAL if the
         endpoint cannot answer.
+      </div>
+
+      <div className="dev-sep" />
+
+      {/* Everything the normal HUD stopped showing. It left the player's status
+          card so exploration reads as a game rather than a stock take; a tester
+          who needs the numbers is one click away from them. */}
+      <div className="dev-label">Carried</div>
+      <div className="status-dev">
+        {carrying.length === 0 && <span className="dev-mat">nothing</span>}
+        {carrying.map((id) => (
+          <span key={id} className="dev-mat">
+            <span className="dev-swatch" style={{ background: MATERIALS[id].color }} />
+            {MATERIALS[id].name} {p.materials[id]}
+          </span>
+        ))}
+        {p.berries > 0 && <span className="dev-mat">Berries {p.berries}</span>}
+        {p.wood > 0 && <span className="dev-mat">Wood {Math.round(p.wood)}</span>}
+        {p.stone > 0 && <span className="dev-mat">Stone {Math.round(p.stone)}</span>}
+        {p.salvage.coreFragment > 0 && <span className="dev-mat">Core {p.salvage.coreFragment}</span>}
+        {p.items.medkit > 0 && <span className="dev-mat">Medkit {p.items.medkit}</span>}
+        {p.items.energyCell > 0 && <span className="dev-mat">Energy Cell {p.items.energyCell}</span>}
       </div>
 
       <div className="dev-sep" />

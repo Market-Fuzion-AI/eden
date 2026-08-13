@@ -174,3 +174,64 @@ export function statusSpriteMaterial(kind: 'social' | 'sleep' | 'alert' | 'argue
   spriteCache.set(kind, mat);
   return mat;
 }
+
+/**
+ * Name plates above intelligent NPCs.
+ *
+ * Standing in Human Landing with four settlers in arm's reach, the old
+ * right-hand identification card told you someone was called Kael without
+ * telling you which of the four he was. A label over the head answers that
+ * instantly, and nothing else does.
+ *
+ * Drawn to a canvas and cached by texture rather than by material: every agent
+ * needs its own material so it can fade with distance independently, but the
+ * pixels behind "SELENE / Survey Researcher" only need rasterising once.
+ */
+const plateTextures = new Map<string, { tex: THREE.CanvasTexture; aspect: number }>();
+
+export function nameplateTexture(name: string, role: string): { tex: THREE.CanvasTexture; aspect: number } {
+  const key = `${name}|${role}`;
+  const cached = plateTextures.get(key);
+  if (cached) return cached;
+
+  const nameFont = '600 30px "Segoe UI", system-ui, sans-serif';
+  const roleFont = '500 22px "Segoe UI", system-ui, sans-serif';
+  const measure = document.createElement('canvas').getContext('2d')!;
+  measure.font = nameFont;
+  const nameW = measure.measureText(name.toUpperCase()).width;
+  measure.font = roleFont;
+  const roleW = role ? measure.measureText(role).width : 0;
+
+  const pad = 22;
+  const w = Math.ceil(Math.max(nameW, roleW)) + pad * 2;
+  const h = role ? 78 : 50;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d')!;
+
+  // No panel behind it. A filled box over every head turns a valley of people
+  // into a spreadsheet; a soft shadow keeps the text legible against both the
+  // bright meadow and the night treeline without occluding anything.
+  ctx.shadowColor = 'rgba(0, 8, 14, 0.95)';
+  ctx.shadowBlur = 9;
+  ctx.shadowOffsetY = 1;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  ctx.font = nameFont;
+  ctx.fillStyle = '#eaf6fa';
+  ctx.fillText(name.toUpperCase(), w / 2, role ? 27 : h / 2);
+
+  if (role) {
+    ctx.font = roleFont;
+    ctx.fillStyle = 'rgba(127, 231, 255, 0.92)';
+    ctx.fillText(role, w / 2, 57);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const entry = { tex, aspect: w / h };
+  plateTextures.set(key, entry);
+  return entry;
+}

@@ -1,22 +1,32 @@
 import { getWorld } from '../sim';
 import { formatClock } from '../sim/chronicle';
-import { inCombat, lockedTarget } from '../sim/combat';
-import { placeName } from '../sim/landmarks';
+import { lockedTarget } from '../sim/combat';
 import { CREATURE_SPECIES_BY_ID } from '../sim/species';
-import { regionAt, regionShortName } from '../sim/regions';
-import { identifyFocus } from '../sim/identify';
 import { getInteractions, harvestProgress } from '../sim/player';
 import { MATERIALS } from '../sim/fabrication';
-import { availableWeapons, blasterChargeFrac } from '../sim/blaster';
-import { jetpackFuelFrac } from '../sim/jetpack';
 import { missionObjective, missionTracking, signalBearing, signalStrengthAt } from '../sim/mission';
 import { scanCooldownRemaining, scanWouldSpendCell } from '../sim/scanner';
-import type { MaterialId } from '../sim/types';
 import { useUI } from '../state/store';
 import { inputState } from '../game/input';
 import { DialoguePanel } from './DialoguePanel';
 import { SummaryPanel } from './SummaryPanel';
 import { DevControls } from './DevControls';
+import { PlayerStatus } from './PlayerStatus';
+import { WeaponSlots } from './WeaponSlots';
+import { Minimap } from './Minimap';
+
+/**
+ * How strong the distress carrier is, in words.
+ *
+ * The bar answers "is it changing"; this answers "am I anywhere near it yet",
+ * which is the question a player actually has while walking.
+ */
+function signalWord(strength: number): string {
+  if (strength >= 0.62) return 'Very close';
+  if (strength >= 0.34) return 'Closing';
+  if (strength >= 0.12) return 'Faint';
+  return 'Barely audible';
+}
 
 /** Compass marks, laid out around the eight cardinal directions. */
 const CARDINALS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -42,14 +52,10 @@ export function LiveHUD() {
   const helpOpen = useUI((s) => s.helpOpen);
   const dialogue = useUI((s) => s.dialogue);
   const summary = useUI((s) => s.summary);
-  const devPanelOpen = useUI((s) => s.devPanelOpen);
 
   const world = getWorld();
   const p = world.player;
   const prompts = getInteractions(world);
-
-  // ARI identifies whatever Kai is actually looking at.
-  const ident = identifyFocus(world, Math.sin(inputState.camYaw), Math.cos(inputState.camYaw));
 
   // A conversation takes the screen. The portraits sit where the ARI transcript
   // and the identification card live, and two panels of text overlapping each
@@ -57,23 +63,14 @@ export function LiveHUD() {
   // talking to someone, the ambient readouts stand down. Nothing is disabled;
   // they come straight back when he steps away.
   const talking = Boolean(world.conversation);
-  // The identification card shares the top-right corner with Developer
-  // Controls, so it stands down for that too — a panel of key bindings with an
-  // identification card printed across it is exactly the unreadable overlap
-  // this rule exists to prevent. ARI, being bottom-left, is unaffected.
-  const hideIdent = talking || devPanelOpen;
 
   // Where Kai is, and which way he is looking — the two things a
   // third-person explorer actually needs on screen at all times.
   // Recent pickups, shown briefly then dropped — no permanent inventory panel.
   const recentPickups = world.pickups.filter((x) => world.timeSec - x.at < 4);
-  const carrying = (Object.keys(MATERIALS) as MaterialId[]).filter((id) => p.materials[id] > 0);
   const harvesting = harvestProgress(world);
   const scanCooldown = scanCooldownRemaining(world);
   const scanCell = scanWouldSpendCell(world);
-  const jetFuel = jetpackFuelFrac(world);
-  const blasterCharge = blasterChargeFrac(world);
-  const weapons = availableWeapons(world);
   // THE SIGNAL. The objective line is a purpose, not an instruction, and the
   // carrier meter is the whole navigation system — no minimap, no waypoint
   // pinned through the terrain.
@@ -84,7 +81,6 @@ export function LiveHUD() {
 
   // Combat state, read straight off the simulation. Nothing here is owned by
   // React — the HUD is a view of the fight, not a participant in it.
-  const fighting = inCombat(world);
   const hurtFlash = Math.max(0, 1 - (world.timeSec - p.lastHurtAt) / 0.9);
   const lowHealth = p.health <= 30 && !p.dead;
   const locked = lockedTarget(world);
@@ -95,8 +91,6 @@ export function LiveHUD() {
   const recentLoss =
     !p.extraction && p.lastHurtAt > 0 && world.timeSec - p.lastHurtAt < 14 ? p.extractionLoss : [];
 
-  const region = regionShortName(regionAt(p.pos.x, p.pos.z));
-  const place = placeName(p.pos);
   const heading = ((-inputState.camYaw * 180) / Math.PI + 360 * 4) % 360;
   const cardinal = CARDINALS[Math.round(heading / 45) % 8];
 
@@ -104,11 +98,10 @@ export function LiveHUD() {
     <div className="hud">
       {/* Live Mode is a game, not a simulation dashboard: location, compass and
           time only. Sim speed, weather state and pause live in Creator Mode. */}
+      {/* Kai's condition. Where he *is* moved to the minimap, where a place
+          name belongs beside a map of the place. */}
       <div className="hud-topleft">
-        <div className="place-card">
-          <div className="place-region">{region}</div>
-          <div className="place-name">{place}</div>
-        </div>
+        <PlayerStatus />
       </div>
 
       <div className="hud-topcenter">
@@ -150,12 +143,19 @@ export function LiveHUD() {
           <div className="objective">
             <div className="objective-title">{objective.title}</div>
             <div className="objective-detail">{objective.detail}</div>
+            {/* This bar is proximity: it is (1 - distance/range) squared, so it
+                rises fastest over the last stretch. "CARRIER" was the radio
+                term for the transmission being tracked, which told the player
+                nothing about whether they were getting anywhere. It now says
+                what it measures, and puts the reading in words as well as in a
+                bar — a bar alone cannot distinguish "faint" from "broken". */}
             {tracking && (
               <div className="objective-signal">
-                <span className="objective-signal-label">CARRIER</span>
-                <div className="bar">
-                  <div className="bar-fill signal" style={{ width: `${Math.round(signal * 100)}%` }} />
+                <span className="objective-signal-label">Signal strength</span>
+                <div className="signal-bar">
+                  <div className="signal-fill" style={{ width: `${Math.round(signal * 100)}%` }} />
                 </div>
+                <span className="objective-signal-word">{signalWord(signal)}</span>
               </div>
             )}
           </div>
@@ -164,13 +164,22 @@ export function LiveHUD() {
 
       <div className="hud-topright">
         <div className="clock-chip">{formatClock(world.timeSec)}</div>
+        {/* The scanner. "SPEND CELL (18s)" told the player the implementation:
+            a cooldown, and an item they could burn to skip it. It now says what
+            pressing Q would actually do. */}
         {p.unlocks.scanner && (
           <div className={`scan-chip ${scanCooldown <= 0 ? 'ready' : scanCell ? 'cell' : 'cooling'}`}>
-            {scanCooldown <= 0
-              ? 'Q · SCAN READY'
-              : scanCell
-                ? `Q · SPEND CELL (${Math.ceil(scanCooldown)}s)`
-                : `SCAN ${Math.ceil(scanCooldown)}s`}
+            {scanCooldown <= 0 ? (
+              <>
+                <span className="chip-key">Q</span> Scan surroundings
+              </>
+            ) : scanCell ? (
+              <>
+                <span className="chip-key">Q</span> Long-range scan · uses 1 Energy Cell
+              </>
+            ) : (
+              <>Scanner recharging · {Math.ceil(scanCooldown)}s</>
+            )}
           </div>
         )}
         {paused && <div className="hint-chip warn">PAUSED</div>}
@@ -183,34 +192,14 @@ export function LiveHUD() {
         <DevControls />
       </div>
 
-      {ident && !hideIdent && (
-        <div className={`ident-card ${ident.notable ? 'notable' : ''} ${ident.dangerous ? 'danger' : ''}`}>
-          <div className="ident-name">{ident.name}</div>
-          <div className="ident-line">{ident.line}</div>
-          {/* A creature that can actually fight shows its condition, so the
-              player can tell "nearly down" from "barely scratched". */}
-          {ident.healthFrac !== undefined && (
-            <div className="ident-hp">
-              <div className="ident-hp-fill" style={{ width: `${Math.round(ident.healthFrac * 100)}%` }} />
-            </div>
-          )}
-          <div className="ident-disp">
-            <span className="ident-disp-label">Disposition</span> {ident.disposition}
-          </div>
-          {/* The scanner read-out. Without the Pathfinder installed Kai
-              gets the shape and the posture and has to make his own call. */}
-          {ident.scan && (
-            <>
-              <div className="ident-scan">
-                <span className={`ident-cat ${ident.scan.category.toLowerCase()}`}>{ident.scan.category}</span>
-                <span className={`ident-threat t-${ident.scan.threat.toLowerCase()}`}>{ident.scan.threat}</span>
-              </div>
-              {/* How it behaves, never what it is worth in numbers. */}
-              {ident.dangerous && <div className="ident-behaviour">{ident.scan.behaviour}</div>}
-            </>
-          )}
-        </div>
-      )}
+      {/* The identification card used to live here: a name, a species line and
+          a "Disposition" read-out. Two problems. With four settlers around Kai
+          it never said *which* of them it meant, and "Disposition: placid" is
+          simulation vocabulary — the player should read a mood from how someone
+          behaves and speaks, not from a labelled enum. Names and roles now float
+          over the people they belong to (see `Agents.tsx`), and disposition is
+          Creator Mode's business. `identifyFocus` is untouched and still drives
+          Creator inspection. */}
 
       {/* Damage vignette — pure feedback, driven by the sim's last-hurt stamp. */}
       {hurtFlash > 0 && <div className="hurt-vignette" style={{ opacity: hurtFlash }} />}
@@ -223,78 +212,6 @@ export function LiveHUD() {
             <span className="ari-text">{ariLine}</span>
           </div>
         )}
-        <div className={`vitals panel ${fighting ? 'engaged' : ''} ${lowHealth ? 'critical' : ''}`}>
-          {/* Health gets bigger and louder the moment it matters. Out of a
-              fight it stays a thin line; in one it is the loudest thing here. */}
-          <div className={`vital-row vital-hp ${fighting || lowHealth ? 'prominent' : ''}`}>
-            <span className="vital-label">VIT</span>
-            <div className="bar">
-              <div className="bar-fill hp" style={{ width: `${p.health}%` }} />
-            </div>
-            {(fighting || lowHealth) && <span className="vital-num">{Math.round(p.health)}</span>}
-          </div>
-          <div className="vital-row">
-            <span className="vital-label">STA</span>
-            <div className="bar">
-              <div className="bar-fill sta" style={{ width: `${p.stamina}%` }} />
-            </div>
-          </div>
-          {/* Fuel appears only once the pack exists, and goes quiet again when
-              it is full and unused — a meter that is always at 100% is noise. */}
-          {p.unlocks.jetpack && (jetFuel < 0.999 || p.jetpackOn) && (
-            <div className={`vital-row ${p.jetpackOn ? 'prominent' : ''}`}>
-              <span className="vital-label">JET</span>
-              <div className="bar">
-                <div className={`bar-fill jet ${p.jetpackOn ? 'burning' : ''}`} style={{ width: `${jetFuel * 100}%` }} />
-              </div>
-            </div>
-          )}
-          {p.equipped === 'pulseBlaster' && (
-            <div className="vital-row">
-              <span className="vital-label">CEL</span>
-              <div className="bar">
-                <div className="bar-fill cell" style={{ width: `${blasterCharge * 100}%` }} />
-              </div>
-            </div>
-          )}
-          {weapons.length > 1 && (
-            <div className="weapon-row">
-              {weapons.map((w, i) => (
-                <span key={w} className={`weapon-chip ${p.equipped === w ? 'active' : ''}`}>
-                  {i + 1} · {w === 'arcBlade' ? 'Arc Blade' : 'Pulse Blaster'}
-                </span>
-              ))}
-            </div>
-          )}
-          {p.salvage.coreFragment > 0 && (
-            <div className="mat-row">
-              <span className="mat-chip synth">◈ Core Fragment × {p.salvage.coreFragment}</span>
-            </div>
-          )}
-          {p.berries > 0 && <div className="berries">◉ Glowberries × {p.berries}</div>}
-          {carrying.length > 0 && (
-            <div className="mat-row">
-              {carrying.map((id) => (
-                <span key={id} className="mat-chip">
-                  <span className="fab-swatch" style={{ background: MATERIALS[id].color }} />
-                  {p.materials[id]}
-                </span>
-              ))}
-            </div>
-          )}
-          {(p.items.medkit > 0 || p.items.energyCell > 0) && (
-            <div className="mat-row">
-              {p.items.medkit > 0 && <span className="mat-chip item">✚ {p.items.medkit} · H</span>}
-              {p.items.energyCell > 0 && <span className="mat-chip item">⬢ {p.items.energyCell}</span>}
-            </div>
-          )}
-          {(p.wood > 0 || p.stone > 0) && (
-            <div className="materials">
-              {p.wood > 0 && <span>▣ Wood × {Math.round(p.wood)}</span>}
-              {p.stone > 0 && <span>◆ Stone × {Math.round(p.stone)}</span>}
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Material acquisition feedback — brief, then gone. */}
@@ -330,6 +247,7 @@ export function LiveHUD() {
       )}
 
       <div className="hud-bottomcenter">
+        <WeaponSlots />
         {harvesting > 0 && (
           <div className="harvest-bar">
             <div className="harvest-fill" style={{ width: `${Math.round(harvesting * 100)}%` }} />
@@ -348,6 +266,9 @@ export function LiveHUD() {
           <div className="prompt look-hint">← → turn the camera · C recenters · trackpad swipe also looks</div>
         )}
       </div>
+
+      {/* Bottom right. Hidden while a conversation owns the screen. */}
+      {!talking && <Minimap />}
 
       {dialogue && <DialoguePanel exchange={dialogue} />}
       {summary && <SummaryPanel summary={summary} />}

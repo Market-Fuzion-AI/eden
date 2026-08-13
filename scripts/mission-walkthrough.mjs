@@ -97,6 +97,23 @@ const until = async (probe, capMs = 60000) => {
 const state = () => page.evaluate(() => window.__EDEN__.getWorld().mission.state);
 
 /**
+ * Wait for ARI to have said something matching.
+ *
+ * The recorder samples on an interval, so reading the transcript the instant a
+ * mission state flips is a race: the line is queued but may not have been
+ * sampled yet. Polling for it is what "did ARI say this" actually means.
+ */
+const untilAri = async (re, capMs = 20000) => {
+  const deadline = Date.now() + capMs;
+  for (;;) {
+    const t = await ariTranscript();
+    if (re.test(t)) return t;
+    if (Date.now() > deadline) return t;
+    await page.waitForTimeout(250);
+  }
+};
+
+/**
  * Walk Kai to a point using the real movement code.
  *
  * Steps the player integrator directly with a heading toward the target rather
@@ -176,7 +193,7 @@ const afterDetect = await page.evaluate(() => {
   const { getWorld, mission } = window.__EDEN__;
   return { objective: mission.missionObjective(getWorld()) };
 });
-afterDetect.ari = await ariTranscript();
+afterDetect.ari = await untilAri(/distress carrier/i);
 check('an objective appears', afterDetect.objective?.title === 'DISTRESS SIGNAL', JSON.stringify(afterDetect.objective));
 check('ARI says what she heard', /distress carrier/i.test(afterDetect.ari), afterDetect.ari.slice(0, 140));
 await page.waitForTimeout(1500);
@@ -346,7 +363,7 @@ const done = await page.evaluate(() => {
   };
 });
 check('the Agriculture Program unlocks', done.agriculture && done.flag, JSON.stringify(done));
-const finalAri = await ariTranscript();
+const finalAri = await untilAri(/AGRICULTURE PROGRAM/i);
 check('ARI announces it', /AGRICULTURE PROGRAM/i.test(finalAri), finalAri.slice(-200));
 check('Maya is at Human Landing', done.survivorHere !== null, JSON.stringify(done.survivorHere));
 check('the objective is cleared', done.objective === null, JSON.stringify(done.objective));

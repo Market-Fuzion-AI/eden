@@ -593,6 +593,30 @@ export const MISSION = {
   /** How far from Human Landing the pod may have come down. */
   minRange: 105,
   maxRange: 165,
+  /**
+   * How far inside the mountain rim the wreck must sit.
+   *
+   * The valley is ringed by impassable mountains that begin rising at
+   * `WORLD.rimStart`. Site selection used to reward distance from camp, and
+   * since the camp is already 98 metres off-centre the winner was always the
+   * furthest ring on the far side — putting the pod at r≈155, past the start of
+   * the rim and eleven metres from the hard walk limit. The route was
+   * technically walkable and the experience was walking at an ice wall. The
+   * wreck now has to sit this far inside the rim, with open valley behind it.
+   */
+  edgeClearance: 24,
+  /** A good walk. Beyond this, extra distance earns nothing in site scoring. */
+  preferredRange: 140,
+  /**
+   * Clearance from the 3Cs greybox course, as a hard requirement.
+   *
+   * It was a scoring preference, which meant it could be outvoted — and once
+   * siting started rewarding clearance from the rim instead of raw distance, it
+   * was, putting the wreck four metres inside the test course. The first
+   * authored mission must not end in the middle of grey test geometry, so this
+   * is now a constraint rather than an opinion.
+   */
+  courseClearance: 40,
   /** Beyond this the carrier is inaudible and the strength meter reads zero. */
   signalRange: 210,
   /**

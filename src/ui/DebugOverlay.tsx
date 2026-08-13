@@ -136,12 +136,28 @@ const ROWS: Row[] = [
  * second and the answer changes at most when a developer restarts a server.
  */
 let lastStatus: { available: boolean; model: string | null } | null = null;
-let statusAsked = false;
-/** Probe the first time the overlay is opened, not at boot. */
+let statusPending = false;
+let statusCheckedAt = 0;
+/**
+ * Probe the first time the overlay is opened, not at boot.
+ *
+ * A single probe used to be the whole story, which made one transient failure
+ * permanent: a blip while the page was still settling left the row reading
+ * "API UNAVAILABLE" for the rest of the session, and a tester would have to
+ * reload to find out otherwise. A known-good answer is kept forever; a negative
+ * one is retried, slowly enough that a genuinely absent endpoint is not being
+ * polled at.
+ */
 function refreshStatus(): void {
-  if (statusAsked) return;
-  statusAsked = true;
-  void dialogueProviderStatus().then((s) => (lastStatus = s));
+  if (statusPending) return;
+  if (lastStatus?.available) return;
+  const now = Date.now();
+  if (lastStatus && now - statusCheckedAt < 4000) return;
+  statusPending = true;
+  statusCheckedAt = now;
+  void dialogueProviderStatus(true)
+    .then((s) => (lastStatus = s))
+    .finally(() => (statusPending = false));
 }
 
 const DEV_ROWS: Row[] = [

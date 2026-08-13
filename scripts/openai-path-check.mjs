@@ -131,10 +131,17 @@ try {
 
   const overlayOpen = await page.locator('.debug').isVisible().catch(() => false);
   if (!overlayOpen) await page.keyboard.press('F3');
-  await page.waitForTimeout(600);
-  const overlay = await page.locator('.debug').innerText().catch(() => '');
+  // The overlay's rows are read from a requestAnimationFrame loop, and headless
+  // software rendering runs at one or two frames a second — so the status probe
+  // may not even have *started* within a fixed wait. Poll for the answer.
+  let overlay = '';
+  for (let i = 0; i < 30; i++) {
+    await page.waitForTimeout(300);
+    overlay = await page.locator('.debug').innerText().catch(() => '');
+    if (/test-model|UNAVAILABLE/.test(overlay)) break;
+  }
   check('the developer overlay reports the model in use', /OPENAI/i.test(overlay) && /test-model/.test(overlay),
-    (overlay.match(/dialogue[^\n]*/i) ?? [''])[0]);
+    JSON.stringify(overlay.split('\n').filter((l) => /OPENAI|LOCAL|checking|UNAVAIL/i.test(l))));
   check('the overlay names the model but never a key', !/sk-/.test(overlay), 'clean');
   if (!overlayOpen) await page.keyboard.press('F3');
   await page.waitForTimeout(400);
