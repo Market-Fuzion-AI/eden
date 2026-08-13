@@ -5,7 +5,7 @@
  * arm, find a predator, read its warning, retreat, fight it with the actual
  * chain, take the Sunken Ring, kill a Warden, carry the fragment home, build
  * the Capacitor, and prove the upgrade changed the fight. Debug hooks are used
- * only to *place* Emerson between beats — every combat action here goes through
+ * only to *place* Kai between beats — every combat action here goes through
  * the same keyboard path a player uses.
  *
  * Usage:
@@ -124,7 +124,7 @@ await settle(400);
 console.log('\n2. THE RAKHOR — OBSERVE, WARN, RETREAT');
 
 const spot = await clearGround();
-// Watch a predator that has no idea Emerson exists.
+// Watch a predator that has no idea Kai exists.
 const ecology = await page.evaluate((spot) => {
   const { getWorld } = window.__EDEN__;
   const w = getWorld();
@@ -135,7 +135,7 @@ const ecology = await page.evaluate((spot) => {
   c.combat.state = 'calm';
   c.combat.purposeTarget = null;
   c.combat.purposeUntil = 0;
-  // Emerson well outside its notice range.
+  // Kai well outside its notice range.
   w.player.pos.x = spot.x - 40;
   w.player.pos.z = spot.z - 40;
   const seen = new Set();
@@ -145,7 +145,7 @@ const ecology = await page.evaluate((spot) => {
   }
   return { labels: [...seen], purpose: c.combat.purpose, state: c.combat.state, id: c.id };
 }, spot);
-check('a Rakhor has business of its own before Emerson arrives',
+check('a Rakhor has business of its own before Kai arrives',
   ecology.state === 'calm' && ecology.labels.some((l) => /stalk|patrol|territory|range/i.test(l)),
   JSON.stringify(ecology.labels));
 
@@ -200,7 +200,7 @@ const retreat = await page.evaluate(async ({ id }) => {
   return { state: c.combat.state, health: w.player.health };
 }, { id: ecology.id });
 check('backing away ends the encounter without a fight', retreat.state === 'calm', retreat.state);
-check('and Emerson is untouched', retreat.health === 100, `${retreat.health}`);
+check('and Kai is untouched', retreat.health === 100, `${retreat.health}`);
 
 console.log('\n3. THE RAKHOR — FIGHT');
 
@@ -344,7 +344,7 @@ const wardenRun = await page.evaluate(() => {
   }
   return { id: warden.id, idleLabels: [...idleLabels], state: warden.combat.state };
 });
-check('the Warden guards the ring before it ever notices Emerson',
+check('the Warden guards the ring before it ever notices Kai',
   wardenRun.state === 'calm' && wardenRun.idleLabels.some((l) => /pylon|patrol/i.test(l)),
   JSON.stringify(wardenRun.idleLabels));
 await page.screenshot({ path: `${SHOT_DIR}/v09-06-warden-idle.png` });
@@ -542,7 +542,7 @@ const revived = await page.evaluate(({ before }) => {
     timeMoved: w.timeSec > before.time,
   };
 }, { before: death.before });
-check('Emerson is recovered at Human Landing, alive', revived.home && revived.health > 0, JSON.stringify(revived));
+check('Kai is recovered at Human Landing, alive', revived.home && revived.health > 0, JSON.stringify(revived));
 check('the upgrade survives death', revived.cap && revived.blade);
 check('the material loss is recorded so it can be shown', revived.loss.length > 0, JSON.stringify(revived.loss));
 check('the valley never restarted', revived.settlers && revived.structures && revived.rel && revived.timeMoved);

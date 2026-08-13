@@ -86,7 +86,7 @@ export interface CombatDebug {
   state: string;
   /** How long it has been in that state. */
   forSeconds: number;
-  /** Metres to Emerson. */
+  /** Metres to Kai. */
   distance: number;
   lines: string[];
 }
@@ -428,7 +428,7 @@ export function inspectStructure(id: string): StructureDetail | null {
 }
 
 function nameOf(id: string): string {
-  return id === 'emerson' ? 'Emerson' : (getEntity(id)?.name ?? 'someone');
+  return id === 'emerson' ? 'Kai' : (getEntity(id)?.name ?? 'someone');
 }
 
 function summarizeRelationship(otherId: string, rel: Relationship): RelationshipSummary {
@@ -509,7 +509,7 @@ export function inspect(id: string): InspectorData | null {
     const p = world.player;
     return {
       id,
-      name: 'Emerson',
+      name: 'Kai',
       subtitle: 'Human · Player · Male',
       kindLabel: 'PLAYER CHARACTER',
       place: placeName(p.pos),
@@ -517,7 +517,7 @@ export function inspect(id: string): InspectorData | null {
         { label: 'Health', value: p.health, tone: tone(p.health) },
         { label: 'Stamina', value: p.stamina, tone: tone(p.stamina) },
       ],
-      goal: { label: 'Player-directed', reason: ['Emerson acts under your control in Live Mode.'] },
+      goal: { label: 'Player-directed', reason: ['Kai acts under your control in Live Mode.'] },
       scores: [],
       personality: [],
       needs: [],
@@ -624,10 +624,10 @@ export function inspect(id: string): InspectorData | null {
     known: [],
   };
   if (e.lumi) {
-    data.trust = { label: 'Trust · Emerson', value: e.lumi.trust };
-    if (e.lumi.following) data.known.push('Currently following Emerson');
-    data.known.push(`Fed by Emerson ${e.lumi.fedCount}×`);
-    data.known.push(`${Math.round(dist(e.pos, world.player.pos))}m from Emerson`);
+    data.trust = { label: 'Trust · Kai', value: e.lumi.trust };
+    if (e.lumi.following) data.known.push('Currently following Kai');
+    data.known.push(`Fed by Kai ${e.lumi.fedCount}×`);
+    data.known.push(`${Math.round(dist(e.pos, world.player.pos))}m from Kai`);
   }
   if (e.combat && def.dangerous) {
     data.kindLabel = def.synthetic ? 'SYNTHETIC ORGANISM · ORIGIN UNKNOWN' : 'NATIVE LIFEFORM · DANGEROUS';
@@ -666,7 +666,7 @@ export function inspect(id: string): InspectorData | null {
   return data;
 }
 
-/** What Emerson's own combat state looks like from Creator Mode. */
+/** What Kai's own combat state looks like from Creator Mode. */
 function playerCombatDebug(world: World): CombatDebug {
   const p = world.player;
   const threats = activeThreats(world);

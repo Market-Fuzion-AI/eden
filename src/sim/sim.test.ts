@@ -156,12 +156,12 @@ describe('social chronicle events', () => {
   });
 });
 
-describe('talking to Emerson', () => {
+describe('talking to Kai', () => {
   it('stops the settler, moves the relationship, and creates a memory', () => {
     const world = createWorld(5150);
     run(world, 120);
     const target = world.settlers[0];
-    // Stand Emerson next to them.
+    // Stand Kai next to them.
     world.player.pos.x = target.pos.x + 1.2;
     world.player.pos.z = target.pos.z;
 
@@ -175,7 +175,7 @@ describe('talking to Emerson', () => {
     expect(target.goal.type).toBe('talk-emerson');
     expect(target.relationships.emerson.affinity).toBeGreaterThan(before);
     expect(target.memories.some((m) => m.type === 'talked_to_emerson')).toBe(true);
-    expect(world.chronicle.some((e) => e.text.includes(`Emerson spoke with ${target.name}`))).toBe(true);
+    expect(world.chronicle.some((e) => e.text.includes(`Kai spoke with ${target.name}`))).toBe(true);
 
     // They hold still for the conversation, then resume their own life.
     run(world, 2);

@@ -79,7 +79,7 @@ export function specFor(kind: 'light' | 'heavy', chain: number): StrikeSpec {
   return COMBAT.chain[Math.max(0, Math.min(COMBAT.chain.length - 1, chain - 1))];
 }
 
-/** Can Emerson swing right now? */
+/** Can Kai swing right now? */
 export function canStrike(world: World): StrikeAttempt {
   const p = world.player;
   if (p.dead || p.extraction) return { ok: false, reason: 'dead' };
@@ -96,7 +96,7 @@ export function canStrike(world: World): StrikeAttempt {
  *
  * Steering with WASD while looking with a trackpad leaves a few degrees of
  * aiming error, and whiffing a strike you clearly aimed at something a metre
- * away is the least satisfying outcome in the game. This nudges Emerson's
+ * away is the least satisfying outcome in the game. This nudges Kai's
  * facing toward a hostile *already inside his forward arc*, by a bounded
  * amount. It cannot acquire a target behind him and it cannot spin him around;
  * at `assistMaxTurn` the correction is under 25 degrees.
@@ -269,7 +269,7 @@ function resolveActiveWindow(world: World, s: StrikeState, spec: StrikeSpec): St
     const dz = c.pos.z - p.pos.z;
     const d = Math.hypot(dx, dz);
     if (d > spec.range || d < 0.01) continue;
-    // In front of Emerson, not behind him.
+    // In front of Kai, not behind him.
     if ((dx * fx + dz * fz) / d < spec.arcCos) continue;
     // And not through a boulder.
     if (blocked(world, p.pos.x, p.pos.z, c.pos.x, c.pos.z)) continue;
@@ -349,7 +349,7 @@ export function isInvulnerable(world: World): boolean {
 // Lock-on
 // ---------------------------------------------------------------------------
 
-/** Creatures worth locking onto: those that can actually threaten Emerson. */
+/** Creatures worth locking onto: those that can actually threaten Kai. */
 export function lockCandidates(world: World): Creature[] {
   const p = world.player;
   return world.creatures
@@ -482,20 +482,20 @@ export function defeatCreature(world: World, c: Creature): void {
     if (world.pickupsSalvage.length > 4) world.pickupsSalvage.shift();
     world.ariQueue.push(
       world.player.salvage.coreFragment === 1
-        ? 'Core fragment recovered. This architecture matches nothing in the colony archive, Emerson. Nothing at all.'
+        ? 'Core fragment recovered. This architecture matches nothing in the colony archive, Kai. Nothing at all.'
         : 'Another core fragment. Petra will want to see this.',
     );
-    chronicle(world, 'wildlife', `Emerson disabled a ${def.name} near ${placeOf(world, c)}.`, {
+    chronicle(world, 'wildlife', `Kai disabled a ${def.name} near ${placeOf(world, c)}.`, {
       actorIds: ['emerson'],
-      actorNames: ['Emerson'],
+      actorNames: ['Kai'],
       pos: { ...c.pos },
       cause: ['The sentinel treated him as an intruder'],
       effects: ['A synthetic core fragment was recovered', 'Its purpose remains unknown'],
     });
   } else {
-    chronicle(world, 'wildlife', `Emerson brought down a ${def.name} near ${placeOf(world, c)}.`, {
+    chronicle(world, 'wildlife', `Kai brought down a ${def.name} near ${placeOf(world, c)}.`, {
       actorIds: ['emerson'],
-      actorNames: ['Emerson'],
+      actorNames: ['Kai'],
       pos: { ...c.pos },
       cause: ['The animal pressed its attack'],
       effects: ['The valley has one fewer predator'],
@@ -509,11 +509,11 @@ function placeOf(world: World, c: Creature): string {
 }
 
 // ---------------------------------------------------------------------------
-// Damage to Emerson
+// Damage to Kai
 // ---------------------------------------------------------------------------
 
 /**
- * Apply damage to Emerson. Returns true when it actually landed.
+ * Apply damage to Kai. Returns true when it actually landed.
  *
  * A hit briefly interrupts him — enough to be felt, never enough to chain.
  * `hitStunImmunity` guarantees that two enemies cannot alternate flinches into
@@ -539,7 +539,7 @@ export function damagePlayer(world: World, amount: number, sourceName: string, f
   return true;
 }
 
-/** Is Emerson mid-flinch? Movement and attacks are suppressed, dodging is not. */
+/** Is Kai mid-flinch? Movement and attacks are suppressed, dodging is not. */
 export function isHitStunned(world: World): boolean {
   return world.timeSec < world.player.hitStunUntil;
 }
@@ -552,7 +552,7 @@ export function isHitStunned(world: World): boolean {
 const EXTRACTION_MATERIAL_LOSS = 0.25;
 
 /**
- * Emerson going down must never reset the world.
+ * Kai going down must never reset the world.
  *
  * ARI fires the beacon, he is recovered to Human Landing, and the valley keeps
  * running the whole time: settlers keep their relationships, structures stand,
@@ -572,9 +572,9 @@ export function beginExtraction(world: World, cause: string): void {
   // player should be back on their feet before the setback stops stinging.
   p.extraction = { startedAt: world.timeSec, endsAt: world.timeSec + 3 };
   p.extractions += 1;
-  chronicle(world, 'emerson', `Emerson went down near ${world.landmarkNameAt?.(p.pos) ?? 'the valley'}. ARI triggered an emergency extraction.`, {
+  chronicle(world, 'emerson', `Kai went down near ${world.landmarkNameAt?.(p.pos) ?? 'the valley'}. ARI triggered an emergency extraction.`, {
     actorIds: ['emerson'],
-    actorNames: ['Emerson'],
+    actorNames: ['Kai'],
     pos: { ...p.pos },
     cause: [`Brought down by ${cause}`],
     effects: ['Recovered to Human Landing', 'The valley carried on without him'],
@@ -631,7 +631,7 @@ export function setThreatState(world: World, c: Creature, state: ThreatState): v
   c.combat.since = world.timeSec;
 }
 
-/** Is this creature currently a danger to Emerson? */
+/** Is this creature currently a danger to Kai? */
 export function isHostile(c: Creature): boolean {
   const s = c.combat?.state;
   return (
@@ -647,7 +647,7 @@ export function isHostile(c: Creature): boolean {
   );
 }
 
-/** Is this creature currently unable to act because Emerson rocked it? */
+/** Is this creature currently unable to act because Kai rocked it? */
 export function isStaggered(world: World, c: Creature): boolean {
   return c.combat?.state === 'staggered' && world.timeSec - c.combat.since < COMBAT.staggerDuration;
 }
@@ -659,12 +659,12 @@ export function insideSafeZone(world: World, x: number, z: number): boolean {
   return dist({ x, z }, camp.pos) < THREAT.safeRadius;
 }
 
-/** Every creature currently engaged with Emerson. */
+/** Every creature currently engaged with Kai. */
 export function activeThreats(world: World): Creature[] {
   return world.creatures.filter((c) => c.combat && isHostile(c));
 }
 
-/** True while Emerson is in a fight — used for HUD state and regen gating. */
+/** True while Kai is in a fight — used for HUD state and regen gating. */
 export function inCombat(world: World): boolean {
   const p = world.player;
   if (world.timeSec - p.lastHurtAt < COMBAT.regenDelay) return true;

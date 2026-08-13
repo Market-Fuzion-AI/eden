@@ -13,7 +13,7 @@ import { angleTo, clamp100, dist, lerpAngle, v2, type V2 } from './vec';
 /**
  * Native creature cognition. Simpler than settlers, but still autonomous:
  * graze, rest, wander, investigate, flee — plus bounded budding replication,
- * and Lumi's trust-driven relationship with Emerson.
+ * and Lumi's trust-driven relationship with Kai.
  */
 
 function mkGoal(type: GoalType, label: string, t: number, opts: Partial<Goal> = {}): Goal {
@@ -109,9 +109,9 @@ function maybeReplicate(world: World, c: Creature): void {
 function lumiTrustMilestones(world: World, c: Creature): void {
   const l = c.lumi!;
   const milestones: [number, string][] = [
-    [25, 'Lumi is beginning to trust Emerson.'],
-    [50, 'Lumi now trusts Emerson enough to stay close.'],
-    [75, 'Lumi and Emerson have formed a real bond.'],
+    [25, 'Lumi is beginning to trust Kai.'],
+    [50, 'Lumi now trusts Kai enough to stay close.'],
+    [75, 'Lumi and Kai have formed a real bond.'],
   ];
   for (const [threshold, text] of milestones) {
     if (l.trust >= threshold && l.lastTrustMilestone < threshold) {
@@ -132,12 +132,12 @@ function lumiThink(world: World, c: Creature): void {
   // First contact.
   if (dp < 14 && !world.flags.lumiMet) {
     world.flags.lumiMet = true;
-    chronicle(world, 'lumi', 'Emerson discovered a small glowing creature watching him from the glade.', {
+    chronicle(world, 'lumi', 'Kai discovered a small glowing creature watching him from the glade.', {
       actorIds: ['lumi', 'emerson'],
-      actorNames: ['Lumi', 'Emerson'],
+      actorNames: ['Lumi', 'Kai'],
       pos: { ...c.pos },
       place: placeName(c.pos),
-      cause: ['Emerson came within 14m', `Her curiosity ${Math.round(c.curiosity)} outweighed her caution`],
+      cause: ['Kai came within 14m', `Her curiosity ${Math.round(c.curiosity)} outweighed her caution`],
       effects: ['First contact recorded', `Trust begins at ${Math.round(l.trust)} / 100`],
     });
     world.ariQueue.push('Unknown native organism detected. It does not match any catalogued species.');
@@ -148,14 +148,14 @@ function lumiThink(world: World, c: Creature): void {
     l.trust = Math.max(0, l.trust - LUMI.startleTrustLoss);
     l.following = false;
     alarmCreature(world, c, p.pos);
-    c.goalReason = { summary: ['Startled — Emerson moved too fast', `Trust ${Math.round(l.trust)}`], scores: [] };
+    c.goalReason = { summary: ['Startled — Kai moved too fast', `Trust ${Math.round(l.trust)}`], scores: [] };
     return;
   }
 
   // Offered food is the strongest lure — but she keeps her distance rules.
   const offer = world.offeredFood[0];
   if (offer && dist(c.pos, offer.pos) < 34) {
-    const comfortDist = 6 - (l.trust / 100) * 5; // needs Emerson to back off unless trust is high
+    const comfortDist = 6 - (l.trust / 100) * 5; // needs Kai to back off unless trust is high
     const playerFarEnough = dist(p.pos, offer.pos) > comfortDist;
     if ((l.trust > 12 || c.hunger > 60) && playerFarEnough) {
       if (c.goal.type !== 'approach-food') {
@@ -169,12 +169,12 @@ function lumiThink(world: World, c: Creature): void {
       c.goalReason = { summary: reason, scores: [] };
       return;
     } else if (!playerFarEnough) {
-      // She wants it, but Emerson is standing too close.
-      c.goal = mkGoal('watch-emerson', 'Watch Emerson warily', t, { deadline: t + 10 });
+      // She wants it, but Kai is standing too close.
+      c.goal = mkGoal('watch-emerson', 'Watch Kai warily', t, { deadline: t + 10 });
       c.goal.phase = 'act';
       c.goal.timer = 4;
       c.goalReason = {
-        summary: ['Wants the offered food', `But Emerson is too close (needs ${comfortDist.toFixed(1)}m)`, `Trust ${Math.round(l.trust)}`],
+        summary: ['Wants the offered food', `But Kai is too close (needs ${comfortDist.toFixed(1)}m)`, `Trust ${Math.round(l.trust)}`],
         scores: [],
       };
       return;
@@ -191,7 +191,7 @@ function lumiThink(world: World, c: Creature): void {
       });
       c.goalReason = { summary: ['Lost interest in following', 'Something else caught her eye'], scores: [] };
     } else {
-      c.goal = mkGoal('follow-emerson', 'Follow Emerson', t, { deadline: t + 10 });
+      c.goal = mkGoal('follow-emerson', 'Follow Kai', t, { deadline: t + 10 });
       c.goalReason = {
         summary: [`Trust ${Math.round(l.trust)} — enjoys his company`, 'Curious where he is going'],
         scores: [],
@@ -204,7 +204,7 @@ function lumiThink(world: World, c: Creature): void {
     l.followUntil = t + rng.range(LUMI.followDurationMin, LUMI.followDurationMax);
     if (!world.flags.lumiFollowedOnce) {
       world.flags.lumiFollowedOnce = true;
-      chronicle(world, 'lumi', 'Lumi began following Emerson of her own accord.');
+      chronicle(world, 'lumi', 'Lumi began following Kai of her own accord.');
     }
     world.flags.lumiFollowSignal = t;
     return;
@@ -223,9 +223,9 @@ function lumiThink(world: World, c: Creature): void {
     return;
   }
 
-  // Curious observation of Emerson — approach distance shrinks as trust grows.
+  // Curious observation of Kai — approach distance shrinks as trust grows.
   if (!p.dead && dp < 20 && p.speed < 4 && rng.chance(0.3 + l.trust / 250)) {
-    c.goal = mkGoal('watch-emerson', 'Observe Emerson', t, { deadline: t + 25 });
+    c.goal = mkGoal('watch-emerson', 'Observe Kai', t, { deadline: t + 25 });
     c.goalReason = {
       summary: ['Curiosity high', `Trust ${Math.round(l.trust)} — keeps ${(8 - (l.trust / 100) * 6).toFixed(0)}m distance`, 'No threats nearby'],
       scores: [],
@@ -296,7 +296,7 @@ export function creatureThink(world: World, c: Creature): void {
     c.goal = mkGoal('rest', 'Rest', t, { targetPos: wanderTarget(world, c, 6) });
     c.goalReason = { summary: [`Energy ${Math.round(c.energy)}`, def.nocturnal ? 'Daylight — hiding' : 'Tired'], scores: [] };
   } else if (rng.chance(def.traits.curiosity * 0.35)) {
-    // Investigate something interesting: a glowplant, another creature, or Emerson.
+    // Investigate something interesting: a glowplant, another creature, or Kai.
     const p = world.player;
     const dp = dist(c.pos, p.pos);
     let target: V2 | null = null;
@@ -398,25 +398,25 @@ export function creatureExecute(world: World, c: Creature, dt: number): void {
             remember(c, { type: 'fed_by_emerson', t, emotionalWeight: 0.8 });
             const detail = {
               actorIds: ['lumi', 'emerson'],
-              actorNames: ['Lumi', 'Emerson'],
+              actorNames: ['Lumi', 'Kai'],
               pos: { ...c.pos },
               place: placeName(c.pos),
               cause: [
                 `Hunger ${Math.round(c.hunger + 40)} before eating`,
-                'Emerson kept a respectful distance',
+                'Kai kept a respectful distance',
                 `Trust was ${Math.round(l.trust - LUMI.feedTrustGain - (l.fedCount === 1 ? LUMI.firstFeedBonus : 0))}`,
               ],
               effects: [
                 `Trust → ${Math.round(l.trust)} / 100`,
                 'Hunger −40',
-                'Memory created: Emerson gave me food',
+                'Memory created: Kai gave me food',
               ],
             };
             if (l.fedCount === 1) {
-              chronicle(world, 'lumi', 'Lumi accepted food from Emerson for the first time.', detail);
+              chronicle(world, 'lumi', 'Lumi accepted food from Kai for the first time.', detail);
               world.ariQueue.push('Interesting. Trust behaviors forming. I suggest not ruining this.');
             } else {
-              chronicle(world, 'lumi', 'Lumi accepted food from Emerson.', detail);
+              chronicle(world, 'lumi', 'Lumi accepted food from Kai.', detail);
             }
             lumiTrustMilestones(world, c);
           }
@@ -482,7 +482,7 @@ export function creatureExecute(world: World, c: Creature, dt: number): void {
   }
 }
 
-/** The creature's own words for what it is doing about Emerson. */
+/** The creature's own words for what it is doing about Kai. */
 function threatLabel(c: Creature): string {
   switch (c.combat?.state) {
     case 'alert':
@@ -512,7 +512,7 @@ function threatLabel(c: Creature): string {
     case 'disengage':
       return 'Returning to its ground';
     default:
-      // Nothing to do with Emerson at all — which is rather the point.
+      // Nothing to do with Kai at all — which is rather the point.
       return purposeLabel(c);
   }
 }
@@ -524,12 +524,12 @@ function threatReason(world: World, c: Creature): string[] {
     return [
       purposeLabel(c),
       def.synthetic ? 'It has been doing this a very long time' : 'Working its own range',
-      `Emerson is ${d}m away and has not been noticed`,
+      `Kai is ${d}m away and has not been noticed`,
     ];
   }
   return [
     def.synthetic ? 'Guarding the Sunken Ring' : 'Defending its territory',
-    `Emerson is ${d}m away`,
+    `Kai is ${d}m away`,
     `Disposition: ${dispositionOf(c)}`,
   ];
 }
@@ -579,21 +579,21 @@ export function creatureNeedsTick(world: World, c: Creature, dt: number): void {
 export function damageCreature(world: World, c: Creature, amount: number): void {
   c.health = Math.max(0, c.health - amount);
   const def = CREATURE_SPECIES_BY_ID[c.speciesId];
-  remember(c, { type: 'threatened', subjectName: 'Emerson', t: world.timeSec, emotionalWeight: -0.8 });
+  remember(c, { type: 'threatened', subjectName: 'Kai', t: world.timeSec, emotionalWeight: -0.8 });
   if (c.lumi) {
     c.lumi.trust = Math.max(0, c.lumi.trust - LUMI.attackTrustLoss);
     c.lumi.following = false;
-    chronicle(world, 'lumi', 'Emerson struck Lumi. She fled — her trust is badly damaged.');
+    chronicle(world, 'lumi', 'Kai struck Lumi. She fled — her trust is badly damaged.');
   }
   if (c.health <= 0) {
     world.creatures = world.creatures.filter((o) => o !== c);
     world.dirty.entities = true;
-    chronicle(world, 'wildlife', `A ${def.name} was killed by Emerson.`);
+    chronicle(world, 'wildlife', `A ${def.name} was killed by Kai.`);
     return;
   }
   if (def.traits.aggression > 0.6) {
     c.aggroUntil = world.timeSec + 12;
-    chronicle(world, 'wildlife', `Emerson provoked a ${def.name}. It turned on him.`);
+    chronicle(world, 'wildlife', `Kai provoked a ${def.name}. It turned on him.`);
   } else {
     alarmCreature(world, c, world.player.pos);
   }

@@ -636,27 +636,27 @@ export function transmitBelief(
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// What Emerson has seen
+// What Kai has seen
 //
 // ARI is a companion standing in the valley, not a readout of simulation
-// state. She may only ever speak about events Emerson was physically present
+// state. She may only ever speak about events Kai was physically present
 // for, which is what this bounded list records.
 // ---------------------------------------------------------------------------
 
 const MAX_WITNESSED = 10;
 
-/** Has Emerson personally seen this person act on a claim to this place? */
+/** Has Kai personally seen this person act on a claim to this place? */
 export function emersonKnows(world: World, structureId: EntityId, aboutId: EntityId): WitnessedNorm | null {
   return world.player.witnessed.find((w) => w.structureId === structureId && w.aboutId === aboutId) ?? null;
 }
 
-/** Everything Emerson has seen about a given place, most recent first. */
+/** Everything Kai has seen about a given place, most recent first. */
 export function emersonKnowledgeOf(world: World, structureId: EntityId): WitnessedNorm[] {
   return world.player.witnessed.filter((w) => w.structureId === structureId).slice().reverse();
 }
 
 /**
- * Record something Emerson saw with his own eyes, and have ARI remark on it.
+ * Record something Kai saw with his own eyes, and have ARI remark on it.
  * Silently does nothing when he was not close enough to see it.
  */
 export function witnessNorm(

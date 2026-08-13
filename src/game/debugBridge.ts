@@ -22,6 +22,8 @@ import * as course from '../sim/course';
 import * as dev from '../sim/dev';
 import * as jetpack from '../sim/jetpack';
 import * as blaster from '../sim/blaster';
+import * as mission from '../sim/mission';
+import * as story from '../sim/survivorDialogue';
 import * as bindings from './bindings';
 import { getInteractions, updatePlayer } from '../sim/player';
 import { simTick } from '../sim/simulation';
@@ -91,6 +93,8 @@ export function installDebugBridge(): void {
     dev,
     jetpack,
     blaster,
+    mission,
+    story,
     creator,
     goals,
     rel,
@@ -114,7 +118,7 @@ export function installDebugBridge(): void {
     visibleScanMarkers: () => (scanMarkers?.children ?? []).filter((c) => c.visible).length,
     socialLinksVisible: () =>
       Boolean(socialLinkMesh?.visible) && (socialLinkMesh?.geometry.drawRange.count ?? 0) > 0,
-    /** Advance only Emerson, using current keyboard/camera state. */
+    /** Advance only Kai, using current keyboard/camera state. */
     stepPlayer: (dt: number) =>
       updatePlayer(getWorld(), dt, { ...input.readMoveAxes(), camYaw: input.inputState.camYaw }),
     /** Advance only the world simulation by one fixed step. */

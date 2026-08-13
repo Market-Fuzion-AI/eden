@@ -1462,7 +1462,7 @@
 /* --- fabricator interface ------------------------------------------------ */
 
 /*
- * A machine Emerson is standing at, not a menu he opened: the world stays
+ * A machine Kai is standing at, not a menu he opened: the world stays
  * visible behind it and the panel sits to one side rather than covering the
  * screen.
  */
@@ -1612,7 +1612,7 @@
 /*
  * Health is quiet until it matters. Out of a fight the vitals stay the thin
  * line they have been since v0.2; the moment something is actually trying to
- * kill Emerson the bar grows, gains a number and picks up a border.
+ * kill Kai the bar grows, gains a number and picks up a border.
  */
 .vitals.engaged {
   border-color: rgba(255, 95, 106, 0.45);
@@ -1830,4 +1830,200 @@
 .fab-cost.salvage.short {
   color: var(--trust);
   border-color: rgba(192, 139, 255, 0.45);
+}
+
+/* --- THE SIGNAL: objective, carrier meter, authored dialogue -------------- */
+
+/*
+ * The objective line sits under the compass because that is where the player
+ * already looks to answer "which way". It is deliberately small and quiet: a
+ * reminder of purpose, not a quest tracker. Two lines, no box, no icon, no
+ * progress percentage.
+ */
+.objective {
+  margin-top: 8px;
+  text-align: center;
+  animation: ari-in 0.4s ease;
+}
+.objective-title {
+  font-size: 9.5px;
+  letter-spacing: 0.32em;
+  color: var(--warn);
+}
+.objective-detail {
+  font-size: 11.5px;
+  color: var(--text);
+  opacity: 0.78;
+  margin-top: 2px;
+}
+.objective-signal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 190px;
+  margin: 6px auto 0;
+}
+.objective-signal-label {
+  font-size: 8.5px;
+  letter-spacing: 0.22em;
+  color: var(--text-dim);
+}
+.bar-fill.signal {
+  background: linear-gradient(90deg, #7a5a2a, var(--warn));
+  transition: width 0.4s ease;
+}
+/* The bearing mark on the compass. Warm, so it never reads as a cardinal. */
+.compass-signal {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--warn);
+  font-size: 12px;
+  text-shadow: 0 0 8px rgba(255, 176, 63, 0.7);
+  pointer-events: none;
+}
+
+/*
+ * The authored conversation.
+ *
+ * Laid out around a portrait from the start, even though the portrait is a
+ * placeholder today: a panel designed without room for one is a panel that has
+ * to be redesigned the day the art arrives.
+ */
+.story-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 22;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 42px;
+  pointer-events: none;
+}
+.story {
+  position: relative;
+  width: min(760px, calc(100vw - 64px));
+  pointer-events: auto;
+  border-left: 3px solid var(--accent);
+  padding: 16px 18px 12px;
+}
+.story-body {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.portrait {
+  flex: none;
+  width: 96px;
+  text-align: center;
+}
+.portrait-frame {
+  width: 96px;
+  height: 112px;
+  border: 1px solid var(--panel-border);
+  background: linear-gradient(160deg, rgba(89, 214, 230, 0.14), rgba(7, 14, 22, 0.6));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+.portrait-initial {
+  font-size: 38px;
+  font-weight: 700;
+  color: var(--accent);
+  opacity: 0.55;
+  letter-spacing: 0.04em;
+}
+.portrait-mood {
+  font-size: 8.5px;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  margin-top: 5px;
+  text-transform: uppercase;
+}
+.story-text {
+  flex: 1;
+  min-width: 0;
+}
+.story-speaker {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #fff;
+  margin-bottom: 6px;
+}
+.story-lines {
+  max-height: 168px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.story-line {
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+/* Lines already read fade back, so the eye lands on the newest one. */
+.story-line.past { opacity: 0.42; }
+.story-line.current { animation: dlg-line-in 0.3s ease; }
+.story-line.player {
+  color: var(--accent);
+  font-style: italic;
+}
+.story-line-who {
+  font-size: 9px;
+  letter-spacing: 0.24em;
+  color: var(--accent);
+  margin-right: 8px;
+  font-style: normal;
+}
+.story-choices {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.story-choice-prompt {
+  font-size: 9px;
+  letter-spacing: 0.28em;
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+.story-choice {
+  text-align: left;
+  font-size: 13px;
+  color: var(--text);
+  background: rgba(89, 214, 230, 0.06);
+  border: 1px solid rgba(89, 214, 230, 0.22);
+  padding: 8px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.story-choice:hover {
+  background: rgba(89, 214, 230, 0.16);
+  border-color: var(--accent);
+}
+.story-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+.story-hint {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+}
+.story-next {
+  font-size: 12px;
+  padding: 6px 18px;
+}
+.story-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
 }

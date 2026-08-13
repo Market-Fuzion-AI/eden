@@ -5,7 +5,7 @@ import { dist } from './vec';
 import type { World } from './types';
 
 /**
- * ARI — Emerson's HUD AI. Deterministic contextual lines with once-flags and
+ * ARI — Kai's HUD AI. Deterministic contextual lines with once-flags and
  * cooldowns so she feels present without spamming. No external AI involved.
  */
 
@@ -26,7 +26,7 @@ const AMBIENT_LINES = [
   'I am cataloguing nine distinct native organism archetypes. So far.',
   'Translation matrices for Veyra and Caelari dialects are holding steady.',
   'This valley has remarkable acoustic properties. I can hear everything.',
-  'Reminder: we are the aliens here, Emerson.',
+  'Reminder: we are the aliens here, Kai.',
 ];
 
 export function ariTick(world: World): void {
@@ -50,7 +50,7 @@ export function ariTick(world: World): void {
     }
   }
 
-  // Landmark arrival: ARI names each place the first time Emerson enters it,
+  // Landmark arrival: ARI names each place the first time Kai enters it,
   // giving the valley location identity rather than anonymous terrain.
   if (!world.player.dead) {
     const lm = landmarkAt(world.player.pos);
@@ -63,7 +63,7 @@ export function ariTick(world: World): void {
   // Arrival greeting.
   if (!f.ariIntro && t > (f.startTime as number ?? 0) + 3) {
     f.ariIntro = true;
-    say('Pathfinder systems online. Take a look around, Emerson — the colony is not going to survey itself.');
+    say('Pathfinder systems online. Take a look around, Kai — the colony is not going to survey itself.');
   }
   // First close look at a settler.
   if (!f.ariScan) {
@@ -97,7 +97,7 @@ export function ariTick(world: World): void {
     f.lumiStoppedFollowing = false;
   }
   // NOTE: ARI deliberately does *not* announce who claims a shelter. She can
-  // only speak about norm events Emerson was physically present for, which
+  // only speak about norm events Kai was physically present for, which
   // `witnessNorm` queues at the moment he sees them. Reading a claimant out of
   // simulation state would make her omniscient and undo v0.6's whole point.
 
@@ -105,7 +105,7 @@ export function ariTick(world: World): void {
   if (world.player.health < 35 && !world.player.dead) {
     if (!f.ariHealthWarnAt || t - (f.ariHealthWarnAt as number) > 60) {
       f.ariHealthWarnAt = t;
-      say('Your vitals are declining, Emerson. Consider not doing that again.');
+      say('Your vitals are declining, Kai. Consider not doing that again.');
     }
   }
   // Rare ambient observation.

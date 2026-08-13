@@ -1,4 +1,4 @@
-import { COMBAT, FABRICATOR, GATHER, NORM, PLAYER, RATES, SETTLER, WILDLIFE, WORLD } from './config';
+import { COMBAT, FABRICATOR, GATHER, MISSION, NORM, PLAYER, RATES, SETTLER, WILDLIFE, WORLD } from './config';
 import { chronicle } from './chronicle';
 import {
   beginExtraction,
@@ -15,6 +15,7 @@ import {
 } from './combat';
 import { blasterTick, firePulse, shotsTick, type FireAttempt } from './blaster';
 import { jetpackTick } from './jetpack';
+import { survivorVisiblePos } from './mission';
 import { buildExchange, type DialogueExchange } from './dialogue';
 import { placeName } from './landmarks';
 import { remember } from './memory';
@@ -30,7 +31,7 @@ import type { Creature, ResourceNode, Settler, Structure, World } from './types'
 import { clamp100, dist, v2 } from './vec';
 
 /**
- * Emerson's simulation state and actions. Movement integrates in real time
+ * Kai's simulation state and actions. Movement integrates in real time
  * (the player is not fast-forwarded at high sim speeds), but all world
  * interactions go through normal simulation rules.
  */
@@ -84,7 +85,7 @@ export function dirFromHeading(heading: number): { x: number; z: number } {
  * human tester can see *why* a step felt wrong instead of guessing at it.
  */
 export const moveTelemetry = {
-  /** Obstacles pushing on Emerson this frame. */
+  /** Obstacles pushing on Kai this frame. */
   contacts: 0,
   /** 0 = moved the full intended distance, 1 = went nowhere. */
   blocked: 0,
@@ -99,7 +100,7 @@ let nextOfferId = 0;
 export function updatePlayer(world: World, dt: number, input: PlayerInput): void {
   const p = world.player;
 
-  // Emergency extraction. Emerson is out of the fight and the valley is not:
+  // Emergency extraction. Kai is out of the fight and the valley is not:
   // the simulation keeps running underneath this the entire time.
   if (p.extraction) {
     p.speed = 0;
@@ -115,7 +116,7 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
     return;
   }
 
-  // Timers. `clock` is Emerson's own, and advances in real seconds — see the
+  // Timers. `clock` is Kai's own, and advances in real seconds — see the
   // note on `PlayerState.clock`.
   p.clock += dt;
   p.dodgeCooldown = Math.max(0, p.dodgeCooldown - dt);
@@ -139,7 +140,7 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
 
   // --- movement relative to camera yaw ------------------------------------
   //
-  // Emerson accelerates into a run and coasts to a stop rather than snapping
+  // Kai accelerates into a run and coasts to a stop rather than snapping
   // between full speed and zero, and turns toward his travel direction instead
   // of pivoting instantly. Both are deliberately quick: this is action-RPG
   // responsiveness, not momentum simulation. The heading is kept as its own
@@ -148,11 +149,11 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
   const mag = Math.hypot(input.moveX, input.moveZ);
   const moving = mag > 0.05;
   const sprinting = moving && input.sprint && p.stamina > 5;
-  // Committing to a swing plants Emerson: the wind-up and the active window
+  // Committing to a swing plants Kai: the wind-up and the active window
   // barely move him, and only the recovery lets him walk out of it. Without
   // this a light attack can be spammed while sprinting and nothing has weight.
   const committed = p.strike !== null && p.strike.phase !== 'recover';
-  // A hit knocks Emerson off his stride for a fraction of a second. Short by
+  // A hit knocks Kai off his stride for a fraction of a second. Short by
   // design, and `hitStunImmuneUntil` guarantees it can never chain.
   const flinching = isHitStunned(world);
   let targetSpeed = 0;
@@ -178,7 +179,7 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
   if (p.moveSpeed < 0.02) p.moveSpeed = 0;
 
   // Where a step actually travels. Normally the same as facing; while locked on
-  // it is not, which is what lets Emerson circle something instead of only ever
+  // it is not, which is what lets Kai circle something instead of only ever
   // walking at it.
   const target = lockedTarget(world);
   let travelHeading = p.heading;
@@ -213,7 +214,7 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
     //
     // Radial push-out alone slides correctly along a single boulder but wedges
     // between two: escaping one pushes into the other, and a single pass leaves
-    // Emerson inside the second. Relaxing a few times converges on the corner
+    // Kai inside the second. Relaxing a few times converges on the corner
     // instead — which matters far more now that fights happen next to rocks
     // rather than in open meadow.
     let contacts = 0;
@@ -243,7 +244,22 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
       }
       if (!corrected) break;
     }
-    // Character presence: Emerson cannot walk through the inhabitants.
+    // The survivor is solid too. She is a person standing in the world, and
+    // walking through the one you came all this way to find is the single most
+    // deflating thing the mission could do at the moment of arrival.
+    const survivor = survivorVisiblePos(world);
+    if (survivor) {
+      const ox = nx - survivor.x;
+      const oz = nz - survivor.z;
+      const od = Math.hypot(ox, oz);
+      const min = PLAYER.bodyRadius + SETTLER.bodyRadius;
+      if (od < min && od > 0.001) {
+        nx += (ox / od) * (min - od);
+        nz += (oz / od) * (min - od);
+      }
+    }
+
+    // Character presence: Kai cannot walk through the inhabitants.
     // Settlers are solid; small creatures scatter rather than block.
     for (const s of world.settlers) {
       const ox = nx - s.pos.x;
@@ -252,7 +268,7 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
       const min = PLAYER.bodyRadius + SETTLER.bodyRadius;
       if (od < min && od > 0.001) {
         const push = (min - od) / od;
-        // Emerson takes most of the correction; the settler yields a little.
+        // Kai takes most of the correction; the settler yields a little.
         nx += ox * push * 0.75;
         nz += oz * push * 0.75;
         s.pos.x -= ox * push * 0.25;
@@ -407,7 +423,7 @@ export function playerStrike(world: World, kind: 'light' | 'heavy'): StrikeAttem
   if (!result.ok && result.reason === 'unarmed' && !world.flags.unarmedHinted) {
     world.flags.unarmedHinted = true;
     world.ariQueue.push(
-      'You have nothing to fight with, Emerson. Petra can cut you a blade at the Fabricator if you bring her the material.',
+      'You have nothing to fight with, Kai. Petra can cut you a blade at the Fabricator if you bring her the material.',
     );
   }
   return result;
@@ -426,7 +442,7 @@ export function playerAttack(world: World): StrikeAttempt | FireAttempt {
     const shot = firePulse(world);
     if (!shot.ok && shot.reason === 'no-charge' && !world.flags.blasterEmptyHinted) {
       world.flags.blasterEmptyHinted = true;
-      world.ariQueue.push('Blaster cell is flat, Emerson. Give it a moment — it recovers on its own.');
+      world.ariQueue.push('Blaster cell is flat, Kai. Give it a moment — it recovers on its own.');
     }
     return shot;
   }
@@ -438,7 +454,7 @@ export function playerAttack(world: World): StrikeAttempt | FireAttempt {
  *
  * The direction is the movement input if there is any. Standing still, it goes
  * backwards — away from the locked target if there is one, and away from
- * whatever Emerson is facing otherwise — because a standing dodge whose whole
+ * whatever Kai is facing otherwise — because a standing dodge whose whole
  * job is to answer an incoming attack should always open distance.
  */
 export function playerDodge(world: World, input?: { moveX: number; moveZ: number; camYaw: number }): boolean {
@@ -473,7 +489,7 @@ export interface InteractionPrompt {
 // Fabrication materials
 // ---------------------------------------------------------------------------
 
-/** A material node Emerson is standing at and which still holds something. */
+/** A material node Kai is standing at and which still holds something. */
 export function materialNodeAtHand(world: World): ResourceNode | null {
   const p = world.player;
   if (p.dead) return null;
@@ -491,7 +507,7 @@ export function materialNodeAtHand(world: World): ResourceNode | null {
   return best;
 }
 
-/** True when Emerson is close enough to operate the fabricator. */
+/** True when Kai is close enough to operate the fabricator. */
 export function fabricatorAtHand(world: World): boolean {
   const p = world.player;
   if (p.dead || !world.fabricatorPos) return false;
@@ -550,7 +566,7 @@ function harvestTick(world: World): void {
   }
 }
 
-/** A material node Emerson is standing at. */
+/** A material node Kai is standing at. */
 function materialAtHand(world: World): ResourceNode | null {
   const p = world.player;
   return (
@@ -560,7 +576,7 @@ function materialAtHand(world: World): ResourceNode | null {
   );
 }
 
-/** An unfinished structure Emerson could contribute to. */
+/** An unfinished structure Kai could contribute to. */
 function siteAtHand(world: World): Structure | null {
   const p = world.player;
   return (
@@ -568,7 +584,7 @@ function siteAtHand(world: World): Structure | null {
   );
 }
 
-/** Nearest settler Emerson could speak with right now. */
+/** Nearest settler Kai could speak with right now. */
 export function nearestTalkable(world: World): Settler | null {
   const p = world.player;
   if (p.dead) return null;
@@ -590,6 +606,17 @@ export function getInteractions(world: World): InteractionPrompt[] {
   const p = world.player;
   if (p.dead) return [];
   const out: InteractionPrompt[] = [];
+  // The survivor takes precedence over everything. She is the reason the player
+  // walked out here, and a glowberry bush must never be what E does instead.
+  if (survivorAtHand(world)) {
+    const m = world.mission!;
+    out.push({
+      key: 'E',
+      label: m.state === 'survivorFound' ? `Speak with ${MISSION.survivorName}` : `Talk to ${MISSION.survivorName}`,
+      action: 'talk',
+    });
+    return out;
+  }
   const bush = world.resources.find(
     (r) => r.type === 'glowberry' && r.quantity >= 1 && dist(r.pos, p.pos) < PLAYER.interactRange,
   );
@@ -603,7 +630,7 @@ export function getInteractions(world: World): InteractionPrompt[] {
   } else if (fabricatorAtHand(world)) {
     out.push({ key: 'E', label: 'Use the Fabricator', action: 'fabricate' });
   } else if (site && (p.wood > 0 || p.stone > 0)) {
-    // Emerson can carry materials to a settler's project like anyone else.
+    // Kai can carry materials to a settler's project like anyone else.
     out.push({ key: 'E', label: `Contribute to the ${site.type}`, action: 'contribute' });
   } else if (material && p.wood + p.stone < PLAYER.maxMaterials) {
     out.push({ key: 'E', label: `Gather ${material.type}`, action: 'harvest' });
@@ -621,7 +648,7 @@ export function getInteractions(world: World): InteractionPrompt[] {
     if (lumi) out.push({ key: 'F', label: 'Offer a glowberry', action: 'offer' });
   }
 
-  // Standing at a shelter somebody considers theirs. Emerson is *not* told who
+  // Standing at a shelter somebody considers theirs. Kai is *not* told who
   // that is unless he has seen something to tell him — the prompt names a
   // claimant only when he has personally witnessed them acting like one.
   const shelter = shelterAtHand(world);
@@ -639,7 +666,22 @@ export function getInteractions(world: World): InteractionPrompt[] {
   return out;
 }
 
-/** A completed shelter Emerson is standing in. */
+/**
+ * Is Kai close enough to speak with the survivor?
+ *
+ * Only once the mission has actually found her — before that she is not in the
+ * world to talk to, and afterwards she is a person at Human Landing who still
+ * has something to say.
+ */
+export function survivorAtHand(world: World): boolean {
+  const p = world.player;
+  if (p.dead) return false;
+  const here = survivorVisiblePos(world);
+  if (!here) return false;
+  return dist(here, p.pos) <= MISSION.talkRange;
+}
+
+/** A completed shelter Kai is standing in. */
 export function shelterAtHand(world: World): Structure | null {
   const p = world.player;
   if (p.dead) return null;
@@ -651,7 +693,7 @@ export function shelterAtHand(world: World): Structure | null {
 }
 
 /**
- * Emerson asks a claimant for leave to use their shelter. Resolved by exactly
+ * Kai asks a claimant for leave to use their shelter. Resolved by exactly
  * the same machinery the settlers use on each other — and watched by whoever
  * happens to be standing nearby, who learn from it like any other onlooker.
  */
@@ -664,26 +706,26 @@ export function playerAskPermission(world: World): { name: string; line: string;
   const claimant = blocker.settler;
   if (dist(claimant.pos, p.pos) > NORM.askRange) return null;
 
-  const emerson = { id: 'emerson', name: 'Emerson' };
+  const emerson = { id: 'emerson', name: 'Kai' };
   const urgency = 100 - p.stamina;
   const { outcome, reasons } = decidePermission(world, claimant, emerson, shelter, urgency);
   const att = attitudeFor(claimant, shelter.id);
 
   if (outcome === 'refuse') {
     // Remembered on the world so ignoring a refusal has consequences.
-    world.flags[`refusedEmerson_${shelter.id}_${claimant.id}`] = true;
+    world.flags[`refusedKai_${shelter.id}_${claimant.id}`] = true;
   } else {
     if (!att.allowed.includes('emerson')) att.allowed.push('emerson');
     att.sharedDrift = Math.min(NORM.maxDrift, att.sharedDrift + NORM.sharedDriftPerPermission);
   }
 
-  // Emerson learns what he was just told, and so does anyone who saw it.
+  // Kai learns what he was just told, and so does anyone who saw it.
   witnessNorm(
     world,
     shelter,
     claimant,
     outcome === 'allow' ? 'shared' : 'personal',
-    outcome === 'refuse' ? 'turned Emerson away from' : 'gave Emerson leave to use',
+    outcome === 'refuse' ? 'turned Kai away from' : 'gave Kai leave to use',
     // He was standing in it and asked the question — proximity is not in doubt.
     false,
   );
@@ -693,19 +735,19 @@ export function playerAskPermission(world: World): { name: string; line: string;
     world,
     'norm',
     outcome === 'refuse'
-      ? `${claimant.name} refused Emerson the use of the shelter at ${shelter.place}.`
-      : `${claimant.name} allowed Emerson to use the shelter at ${shelter.place}.`,
+      ? `${claimant.name} refused Kai the use of the shelter at ${shelter.place}.`
+      : `${claimant.name} allowed Kai to use the shelter at ${shelter.place}.`,
     {
       actorIds: ['emerson', claimant.id],
-      actorNames: ['Emerson', claimant.name],
+      actorNames: ['Kai', claimant.name],
       pos: { ...shelter.pos },
       place: shelter.place,
       structureId: shelter.id,
-      cause: ['Emerson asked rather than walking in', ...reasons],
+      cause: ['Kai asked rather than walking in', ...reasons],
       effects: [
         ...(outcome === 'refuse'
-          ? ['Emerson was turned away', 'The refusal is remembered']
-          : ['Emerson may use it freely', "The claimant's grip loosened slightly"]),
+          ? ['Kai was turned away', 'The refusal is remembered']
+          : ['Kai may use it freely', "The claimant's grip loosened slightly"]),
         ...(onlookers.length > 0
           ? [`${onlookers.length} settler${onlookers.length === 1 ? '' : 's'} nearby learned something from it`]
           : []),
@@ -722,23 +764,27 @@ export function playerAskPermission(world: World): { name: string; line: string;
  * a first meeting is recorded in the Chronicle.
  */
 export function playerTalk(world: World): DialogueExchange | null {
+  // The survivor is an authored conversation, not a derived one. Handled by the
+  // caller via `beginSurvivorDialogue`; returning null here keeps E from also
+  // striking up small talk with whoever else is standing nearby.
+  if (survivorAtHand(world)) return null;
   const s = nearestTalkable(world);
   if (!s || world.timeSec < s.talkingUntil) return null;
 
   const exchange = buildExchange(world, s);
 
-  // Hold them in conversation and face Emerson.
+  // Hold them in conversation and face Kai.
   s.talkingUntil = world.timeSec + PLAYER.talkDuration;
   s.goal = {
     type: 'talk-emerson',
-    label: 'Speaking with Emerson',
+    label: 'Speaking with Kai',
     phase: 'act',
     timer: PLAYER.talkDuration,
     startedAt: world.timeSec,
     deadline: s.talkingUntil,
   };
   s.goalReason = {
-    summary: ['Emerson approached and spoke', 'Social goals are paused while they talk'],
+    summary: ['Kai approached and spoke', 'Social goals are paused while they talk'],
     scores: [],
   };
   s.socialTimer = PLAYER.talkDuration;
@@ -750,9 +796,9 @@ export function playerTalk(world: World): DialogueExchange | null {
     world,
     s,
     'emerson',
-    'Emerson',
+    'Kai',
     exchange.firstMeeting ? 'meeting' : 'conversation',
-    exchange.firstMeeting ? 'First conversation with Emerson' : 'Spoke with Emerson',
+    exchange.firstMeeting ? 'First conversation with Kai' : 'Spoke with Kai',
     { affinity: gain, trust: 2, familiarity: exchange.firstMeeting ? 14 : 6 },
   );
   s.needs.social = Math.max(0, s.needs.social - RATES.socialReduces * 0.6);
@@ -760,25 +806,25 @@ export function playerTalk(world: World): DialogueExchange | null {
   remember(s, {
     type: 'talked_to_emerson',
     subjectId: 'emerson',
-    subjectName: 'Emerson',
+    subjectName: 'Kai',
     place: placeName(s.pos),
     t: world.timeSec,
     emotionalWeight: 0.45,
   });
 
   if (exchange.firstMeeting) {
-    chronicle(world, 'emerson', `Emerson spoke with ${s.name} for the first time.`, {
+    chronicle(world, 'emerson', `Kai spoke with ${s.name} for the first time.`, {
       actorIds: [s.id, 'emerson'],
-      actorNames: [s.name, 'Emerson'],
+      actorNames: [s.name, 'Kai'],
       pos: { ...s.pos },
       place: placeName(s.pos),
       cause: [
-        'Emerson approached and initiated contact',
+        'Kai approached and initiated contact',
         `${s.name} sociability: ${Math.round(s.personality.sociability * 100)}`,
         `${s.name} was: ${s.goalReason.summary[0] ?? 'going about their day'}`,
       ],
       effects: [
-        `Affinity toward Emerson ${before >= 0 ? '+' : ''}${Math.round(before)} → +${Math.round(rel.affinity)}`,
+        `Affinity toward Kai ${before >= 0 ? '+' : ''}${Math.round(before)} → +${Math.round(rel.affinity)}`,
         `Now ${relationshipState(rel)}`,
         'Memory created',
       ],
@@ -798,11 +844,11 @@ export function playerGather(world: World): boolean {
   if (p.dead) return false;
   if (p.harvest) return true; // already working a node
 
-  // Fabrication materials first: they are why Emerson is out here.
+  // Fabrication materials first: they are why Kai is out here.
   const fabNode = materialNodeAtHand(world);
   if (fabNode) return startHarvest(world, fabNode);
 
-  // Contributing to someone's build records Emerson in its provenance exactly
+  // Contributing to someone's build records Kai in its provenance exactly
   // like any settler — the player is part of the settlement, not above it.
   const site = siteAtHand(world);
   if (site && (p.wood > 0 || p.stone > 0)) {
@@ -816,7 +862,7 @@ export function playerGather(world: World): boolean {
       site.contributed.stone += stone;
       let c = site.contributions.find((x) => x.id === 'emerson');
       if (!c) {
-        c = { id: 'emerson', name: 'Emerson', wood: 0, stone: 0, work: 0 };
+        c = { id: 'emerson', name: 'Kai', wood: 0, stone: 0, work: 0 };
         site.contributions.push(c);
       }
       c.wood += wood;
@@ -825,13 +871,13 @@ export function playerGather(world: World): boolean {
       world.dirty.structures = true;
       if (!world.flags.emersonContributed) {
         world.flags.emersonContributed = true;
-        chronicle(world, 'settlement', `Emerson carried materials to ${site.initiatorName}'s ${site.type} at ${site.place}.`, {
+        chronicle(world, 'settlement', `Kai carried materials to ${site.initiatorName}'s ${site.type} at ${site.place}.`, {
           actorIds: ['emerson', site.initiatorId],
-          actorNames: ['Emerson', site.initiatorName],
+          actorNames: ['Kai', site.initiatorName],
           pos: { ...site.pos },
           place: site.place,
           structureId: site.id,
-          cause: ['Emerson chose to help'],
+          cause: ['Kai chose to help'],
           effects: [`Delivered ${Math.round(wood)} wood and ${Math.round(stone)} stone`],
         });
       }

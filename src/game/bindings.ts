@@ -82,7 +82,7 @@ export const BINDINGS: Binding[] = [
   { id: 'camRight', codes: ['ArrowRight'], label: 'Turn camera right', group: 'camera' },
   { id: 'camUp', codes: ['ArrowUp'], label: 'Look up', group: 'camera' },
   { id: 'camDown', codes: ['ArrowDown'], label: 'Look down', group: 'camera' },
-  { id: 'camRecenter', codes: ['KeyC'], label: 'Recenter behind Emerson', group: 'camera' },
+  { id: 'camRecenter', codes: ['KeyC'], label: 'Recenter behind Kai', group: 'camera' },
   { id: 'camZoomIn', codes: ['BracketLeft'], label: 'Zoom in', group: 'camera' },
   { id: 'camZoomOut', codes: ['BracketRight'], label: 'Zoom out', group: 'camera' },
 

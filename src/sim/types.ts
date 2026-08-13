@@ -30,7 +30,7 @@ export type GoalType =
   | 'help-build'
   | 'gather-at-fire'
   | 'ask-to-use'
-  /** A dangerous creature engaged with Emerson; driven by `threats.ts`. */
+  /** A dangerous creature engaged with Kai; driven by `threats.ts`. */
   | 'threat';
 
 export type GoalPhase = 'travel' | 'act' | 'done';
@@ -332,7 +332,7 @@ export interface Settler extends AgentCommon {
   /** Conceptual knowledge carried from the homeworld (future tech system). */
   knowledge: string[];
   socialCooldownUntil: number;
-  /** Sim time until which Emerson's conversation holds this settler in place. */
+  /** Sim time until which Kai's conversation holds this settler in place. */
   talkingUntil: number;
   /**
    * A post this settler keeps during working hours.
@@ -368,7 +368,7 @@ export interface BuildPlan {
 }
 
 export interface LumiState {
-  trust: number; // 0..100 toward Emerson
+  trust: number; // 0..100 toward Kai
   following: boolean;
   followUntil: number;
   fedCount: number;
@@ -477,7 +477,7 @@ export interface BufferedInput {
 }
 
 /**
- * How a dangerous creature currently regards Emerson.
+ * How a dangerous creature currently regards Kai.
  *
  * Every transition is explicit and every attack is preceded by a wind-up, so
  * damage is never a surprise. `warn` is the state that makes retreat a real
@@ -500,14 +500,14 @@ export type ThreatState =
   | 'retreat'
   | 'disengage';
 
-/** What a dangerous creature is doing when Emerson is nowhere near it. */
+/** What a dangerous creature is doing when Kai is nowhere near it. */
 export type ThreatPurpose = 'patrol' | 'stalk' | 'drink' | 'survey';
 
 export interface CombatMemory {
   state: ThreatState;
   /** Sim time the current state began. */
   since: number;
-  /** Who it is engaged with. Only ever Emerson so far. */
+  /** Who it is engaged with. Only ever Kai so far. */
   targetId: EntityId | null;
   /** Last moment the target was actually perceived. */
   lastSeenAt: number;
@@ -578,7 +578,7 @@ export interface HarvestAction {
   nodeId: EntityId;
   startedAt: number;
   endsAt: number;
-  /** Where Emerson stood when he started — walking away cancels it. */
+  /** Where Kai stood when he started — walking away cancels it. */
   from: V2;
 }
 
@@ -742,7 +742,7 @@ export interface ChronicleDetail {
 }
 
 /**
- * A norm event Emerson personally saw happen. ARI may only speak about what is
+ * A norm event Kai personally saw happen. ARI may only speak about what is
  * in this list — he is a participant in the valley, not an observer of its
  * internals.
  */
@@ -769,7 +769,7 @@ export interface BuiltLandmark {
 /**
  * One piece of the 3Cs test course.
  *
- * Greybox geometry, deliberately: Gate 1 is about how Emerson moves, and the
+ * Greybox geometry, deliberately: Gate 1 is about how Kai moves, and the
  * course exists to pose movement problems rather than to look like anything.
  * `solid` props are also registered as obstacles so they cannot be walked
  * through; everything standable is queried through `course.ts`.
@@ -803,7 +803,7 @@ export interface SitePropItem {
 
 export interface PlayerState {
   id: 'emerson';
-  name: 'Emerson';
+  name: 'Kai';
   pos: V2;
   y: number;
   vy: number;
@@ -811,7 +811,7 @@ export interface PlayerState {
   speed: number;
   onGround: boolean;
   /**
-   * Emerson's own clock, in real seconds.
+   * Kai's own clock, in real seconds.
    *
    * Separate from `world.timeSec` on purpose: the world advances at the sim
    * speed multiplier and he does not. His jump timings were measured against
@@ -853,7 +853,7 @@ export interface PlayerState {
   health: number;
   stamina: number;
   berries: number;
-  /** Construction materials Emerson is carrying. */
+  /** Construction materials Kai is carrying. */
   wood: number;
   stone: number;
   dodgeTimer: number;
@@ -874,7 +874,7 @@ export interface PlayerState {
   moveSpeed: number;
   /** Sim time of the last fast approach — used by wildlife startle checks. */
   lastSprintAt: number;
-  /** Norm events Emerson was actually present for. Bounded. */
+  /** Norm events Kai was actually present for. Bounded. */
   witnessed: WitnessedNorm[];
   /** Player fabrication materials. Distinct from the settlers' wood/stone. */
   materials: Record<MaterialId, number>;
@@ -894,7 +894,7 @@ export interface PlayerState {
   /** The gathering interaction in progress, if any. */
   harvest: HarvestAction | null;
   scan: ScanState;
-  /** What Emerson is holding. One slot, deliberately. */
+  /** What Kai is holding. One slot, deliberately. */
   equipped: EquippedWeapon;
   /** The swing in progress, if any. */
   strike: StrikeState | null;
@@ -902,7 +902,7 @@ export interface PlayerState {
   buffered: BufferedInput | null;
   /** Sim time the last strike in the current chain began, for the chain window. */
   lastStrikeAt: number;
-  /** Sim time until which a dodge roll makes Emerson untouchable. */
+  /** Sim time until which a dodge roll makes Kai untouchable. */
   invulnUntil: number;
   /** Real seconds left of the roll's visual trail. Presentation only. */
   dodgeTrail: number;
@@ -912,7 +912,7 @@ export interface PlayerState {
   lastHurtAt: number;
   /** Brief flinch on taking a hit. Never long enough to chain into helplessness. */
   hitStunUntil: number;
-  /** Sim time until which Emerson cannot be flinched again. */
+  /** Sim time until which Kai cannot be flinched again. */
   hitStunImmuneUntil: number;
   /** Direction the last hit came from, for the flinch and the damage indicator. */
   lastHurtFrom: V2 | null;
@@ -922,8 +922,52 @@ export interface PlayerState {
   extraction: { startedAt: number; endsAt: number } | null;
   /** What the last extraction actually cost, so the HUD can say so plainly. */
   extractionLoss: { materialId: MaterialId; amount: number }[];
-  /** How many times ARI has had to pull Emerson out. */
+  /** How many times ARI has had to pull Kai out. */
   extractions: number;
+}
+
+/**
+ * THE SIGNAL's progress, one forward step at a time.
+ *
+ * Deliberately an explicit list rather than a generic objective system. One
+ * mission does not justify a quest framework, and inventing the abstraction
+ * from a single example is how you get the abstraction wrong.
+ */
+export type MissionPhase =
+  | 'dormant'
+  | 'signalDetected'
+  | 'tracking'
+  | 'crashSiteReached'
+  | 'survivorFound'
+  | 'survivorRescued'
+  | 'completed';
+
+export interface MissionState {
+  state: MissionPhase;
+  /** Where Pod Seven came down, chosen from the terrain at worldgen. */
+  podPos: V2;
+  podHeading: number;
+  survivorPos: V2;
+  homePos: V2;
+  /** Sim times, or -1 for "has not happened". */
+  startedAt: number;
+  detectedAt: number;
+  reachedAt: number;
+  rescuedAt: number;
+  completedAt: number;
+  /** 0..1 carrier strength where the player last stood. */
+  signalStrength: number;
+  /**
+   * How far Kai was from the pod when the carrier was first detected.
+   *
+   * The baseline for "is he actually following it". Human Landing is already
+   * inside the carrier's range, so a non-zero reading does not mean the player
+   * has set off — only a reading that has *improved* on this does.
+   */
+  detectDist: number;
+  talkedTo: boolean;
+  choiceMade: string | null;
+  agricultureUnlocked: boolean;
 }
 
 export type Weather = 'clear' | 'mist';
@@ -972,6 +1016,17 @@ export interface World {
   beams: BeamShot[];
   /** Pulse Blaster bolts currently in flight. Bounded and short-lived. */
   shots: PulseShot[];
+  /** THE SIGNAL. The game's first authored mission; see `sim/mission.ts`. */
+  mission: MissionState | null;
+  /**
+   * The authored conversation currently on screen, if any.
+   *
+   * Typed as `unknown` here and narrowed by `survivorDialogue.ts` so the world
+   * type does not have to import the script format — the mission owns its own
+   * dialogue shape, and `types.ts` stays the description of the simulation
+   * rather than of one mission's script.
+   */
+  dialogueScript: import('./survivorDialogue').ActiveDialogue | null;
   /**
    * Injected by `index.ts` so combat can name a place without importing the
    * landmark table (which would close an import cycle through worldgen).

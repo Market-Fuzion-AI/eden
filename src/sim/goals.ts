@@ -619,7 +619,7 @@ const SETTLER_FLEE_RANGE = 18;
  * The nearest dangerous creature that is actually roused.
  *
  * A dozing Rakhor is scenery; one that has noticed something is a reason to
- * leave. This deliberately does not care whether Emerson is the one it noticed
+ * leave. This deliberately does not care whether Kai is the one it noticed
  * — a settler running from a fight they are not part of is exactly right.
  */
 function nearestDanger(world: World, s: Settler): { creature: Creature; d: number } | null {
@@ -1946,7 +1946,7 @@ export function settlerExecute(world: World, s: Settler, dt: number): void {
   const t = world.timeSec;
   const g = s.goal;
 
-  // Talking to Emerson supersedes locomotion: the settler stops and turns to
+  // Talking to Kai supersedes locomotion: the settler stops and turns to
   // face him for the duration of the exchange, then resumes its own life.
   if (g.type === 'talk-emerson') {
     stand(s);

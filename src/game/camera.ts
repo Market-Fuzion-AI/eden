@@ -111,7 +111,7 @@ export function drainLook(): { yaw: number; pitch: number } {
   return out;
 }
 
-/** Recenter request, consumed by the camera to sweep smoothly behind Emerson. */
+/** Recenter request, consumed by the camera to sweep smoothly behind Kai. */
 export const recenter = { requested: false };
 
 export function requestRecenter(): void {

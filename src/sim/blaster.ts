@@ -27,7 +27,7 @@ import { dist } from './vec';
  * there is no free-aim cursor to point at anything. A locked target owns the
  * aim outright; failing that, a hostile already inside a narrow forward cone is
  * taken to be what the player meant. Outside that cone the bolt goes exactly
- * where Emerson is facing and misses, which is the correct outcome.
+ * where Kai is facing and misses, which is the correct outcome.
  */
 
 export type FireRefusal = 'unarmed' | 'cooldown' | 'no-charge' | 'dead' | 'busy';
@@ -103,7 +103,7 @@ export function firePulse(world: World): FireAttempt {
   world.shots.push({
     id: `shot_${shotCounter++}`,
     // Leaves from about chest height, offset ahead so the bolt is never born
-    // inside Emerson's own body.
+    // inside Kai's own body.
     pos: { x: p.pos.x + dir.x * 0.6, z: p.pos.z + dir.z * 0.6 },
     y: p.y + MUZZLE_HEIGHT,
     dir,

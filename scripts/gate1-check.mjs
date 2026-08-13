@@ -93,7 +93,7 @@ const elapsed = Math.max(0.001, during.clock - gateBefore.clock);
 check('the arrow keys turn the camera', Math.abs(during.yaw - gateBefore.yaw) > 0.3,
   `${Math.abs(during.yaw - gateBefore.yaw).toFixed(2)} rad`);
 check('W is still held while the camera turns', during.held);
-check('Emerson keeps walking while the camera turns',
+check('Kai keeps walking while the camera turns',
   walk.path > 0.4 && walk.path / elapsed > 2 && walk.topSpeed > 2.5,
   `${walk.path.toFixed(2)}m in ${elapsed.toFixed(2)}s of player time, top ${walk.topSpeed.toFixed(2)} m/s`);
 

@@ -19,7 +19,7 @@ import { useUI } from '../state/store';
  * consumes materials, so a double-click or a mid-job speed change can never
  * produce two of anything.
  *
- * The world stays visible behind it: this is a machine Emerson is standing at,
+ * The world stays visible behind it: this is a machine Kai is standing at,
  * not a menu he opened.
  */
 export function FabricatorPanel() {

@@ -12,7 +12,7 @@ import { threatPhase } from '../sim/threats';
 import { buildCreatureRig, buildLumiRig, buildSettlerRig, type Rig } from './factories';
 import { speechBubbleMaterial, statusSpriteMaterial } from './toon';
 
-/** Ambient conversation bubbles only appear within earshot of Emerson. */
+/** Ambient conversation bubbles only appear within earshot of Kai. */
 const BUBBLE_RANGE = 26;
 const WHITE = new THREE.Color('#ffffff');
 
@@ -211,7 +211,7 @@ function AgentView({ id }: { id: string }) {
         else if (e.kind === 'settler' && e.goal.type === 'share-food') kind = 'gift';
         else kind = 'social';
       } else if (e.resting) kind = 'sleep';
-      // A creature squaring up to Emerson gets the same marker as a startled
+      // A creature squaring up to Kai gets the same marker as a startled
       // one: the warning is the last moment walking away still works.
       else if (e.kind === 'creature' && e.combat && (e.combat.state === 'warn' || e.combat.state === 'alert')) {
         kind = 'alert';

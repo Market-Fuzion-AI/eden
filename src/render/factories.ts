@@ -38,7 +38,7 @@ export interface Rig {
   /** Approximate head height for status sprites / selection rings. */
   height: number;
   /**
-   * Combat telegraph, 0..1. Present only on rigs that can threaten Emerson:
+   * Combat telegraph, 0..1. Present only on rigs that can threaten Kai:
    * the renderer feeds it the wind-up progress so the tell is part of the
    * creature itself — a lowered head, a brightening core — rather than an
    * icon floating above it.
@@ -77,7 +77,7 @@ function addEyes(parent: THREE.Object3D, spread: number, y: number, z: number, r
 }
 
 // ---------------------------------------------------------------------------
-// Bipedal settlers (Humans, Veyra, Caelari) + Emerson
+// Bipedal settlers (Humans, Veyra, Caelari) + Kai
 // ---------------------------------------------------------------------------
 
 export function buildSettlerRig(

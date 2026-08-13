@@ -52,7 +52,7 @@ function give(world: World, alloy: number, ore: number, crystal: number): void {
   world.player.materials.crystal = crystal;
 }
 
-/** Stand Emerson at a node of the given type and work it to completion. */
+/** Stand Kai at a node of the given type and work it to completion. */
 function harvestOnce(world: World, type: MaterialId): number {
   const node = world.resources.find((r) => r.type === MATERIALS[type].nodeType && r.quantity >= 1)!;
   world.player.pos = { ...node.pos };

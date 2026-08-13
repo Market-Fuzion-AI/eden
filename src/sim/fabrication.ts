@@ -284,7 +284,7 @@ export function fabricationTick(world: World): void {
         p.unlocks.arcBlade = true;
         p.equipped = 'arcBlade';
         world.ariQueue.push(
-          'ARC BLADE MK I ONLINE. Discharge is stable. Emerson — this changes where you can go, not what the valley is. Most of what lives out there still wants nothing to do with you.',
+          'ARC BLADE MK I ONLINE. Discharge is stable. Kai — this changes where you can go, not what the valley is. Most of what lives out there still wants nothing to do with you.',
         );
         world.flags.arcBladeBuiltAt = world.timeSec;
       }
@@ -294,11 +294,11 @@ export function fabricationTick(world: World): void {
         p.unlocks.capacitor = true;
         world.flags.capacitorBuiltAt = world.timeSec;
         world.ariQueue.push(
-          'ARC BLADE CAPACITOR INSTALLED. Discharge is holding half again the charge it did. Heavy strikes will put things on the back foot now, Emerson — that fragment was worth what it cost you.',
+          'ARC BLADE CAPACITOR INSTALLED. Discharge is holding half again the charge it did. Heavy strikes will put things on the back foot now, Kai — that fragment was worth what it cost you.',
         );
         chronicle(world, 'emerson', 'Petra wired a recovered synthetic core into the Arc Blade.', {
           actorIds: ['emerson'],
-          actorNames: ['Emerson'],
+          actorNames: ['Kai'],
           pos: { ...p.pos },
           cause: ['A Warden Wisp was disabled and its core recovered'],
           effects: ['The blade hits harder against a guarded stance', 'Nobody can explain the core'],

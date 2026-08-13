@@ -22,8 +22,8 @@ import { buildSettlerRig } from './factories';
 import { toonMat } from './toon';
 
 /**
- * Emerson's visual + the third-person chase camera. The visual persists in
- * Creator Mode (Emerson still exists in the world); only camera control and
+ * Kai's visual + the third-person chase camera. The visual persists in
+ * Creator Mode (Kai still exists in the world); only camera control and
  * pointer lock are Live-Mode concerns.
  */
 export function PlayerRig() {
@@ -53,7 +53,7 @@ export function PlayerRig() {
    * Dodge afterimage.
    *
    * Three translucent copies of a simplified silhouette dropped along the path
-   * of the roll and faded out. Emerson himself never disappears — the point is
+   * of the roll and faded out. Kai himself never disappears — the point is
    * to confirm "I dodged", not to make the character hard to follow.
    */
   const ghosts = useMemo(() => {
@@ -231,7 +231,7 @@ export function PlayerRig() {
       turnRate: dt > 0 ? turned / dt : 0,
       airborne: !p.onGround,
       air: p.vy,
-      // Emerson's own clock, not the world's — the landing dip must last the
+      // Kai's own clock, not the world's — the landing dip must last the
       // same fraction of a second whatever speed the valley is running at.
       landedAgo: p.clock - ((world.flags.lastLandAt as number) ?? -99),
     });
@@ -262,7 +262,7 @@ export function PlayerRig() {
       }
       const stow = 1 - bladeDeploy.current;
       const engage = Math.min(1, Math.abs(swing));
-      // The whole assembly sits in Emerson's right hand and turns with him.
+      // The whole assembly sits in Kai's right hand and turns with him.
       // Tilting it away from the body (negative z) is what keeps a metre of
       // blade from passing through his own ribs at rest.
       blade.position.set(p.pos.x, p.y, p.pos.z);
@@ -440,7 +440,7 @@ export function PlayerRig() {
     inputState.camPitch = Math.max(PITCH_LIMIT.min, Math.min(PITCH_LIMIT.max, inputState.camPitch));
 
     // --- recenter ----------------------------------------------------------
-    // Sweep smoothly behind Emerson rather than snapping. Any manual look
+    // Sweep smoothly behind Kai rather than snapping. Any manual look
     // input cancels it, so the player is never fighting their own camera.
     if (recenter.requested) {
       recenter.requested = false;
@@ -484,7 +484,7 @@ export function PlayerRig() {
     // boulder, the Fabricator — shortens the arm, because there is no way past
     // it. A rising bank behind the player does not: the boom climbs it and
     // looks down, which keeps the fight framed instead of shoving the camera
-    // onto the back of Emerson's head every time the ground tilts.
+    // onto the back of Kai's head every time the ground tilts.
     const desired = dist;
     const SAMPLES = 12;
     for (let i = 1; i <= SAMPLES; i++) {
@@ -497,7 +497,7 @@ export function PlayerRig() {
         // Trees and boulders are tall enough to matter; anything the camera
         // is already above is not in the way. Obstacles that know their own
         // height say so — a course block is barely a metre tall, and treating
-        // it like a tree pinned the camera against Emerson's back every time he
+        // it like a tree pinned the camera against Kai's back every time he
         // stood on the platform next to it.
         const r = o.radius + 0.55;
         const dx = hx - o.pos.x;
@@ -543,7 +543,7 @@ export function PlayerRig() {
       camPos.y += Math.max(0, Math.min(lift, ceiling));
     }
 
-    // When the boom ends up jammed right against Emerson, drawing him fills the
+    // When the boom ends up jammed right against Kai, drawing him fills the
     // screen with the inside of his own head. Fade him out instead — the camera
     // keeps working and the player keeps seeing what is in front of it.
     const effDist = camPos.distanceTo(camTarget);

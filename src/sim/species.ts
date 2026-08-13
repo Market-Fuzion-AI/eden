@@ -162,12 +162,12 @@ export interface CreatureSpeciesDef {
   /** Ancient machine rather than Eden biology. Changes salvage and ARI's read. */
   synthetic?: boolean;
   /**
-   * Can threaten Emerson. Only these creatures carry a `combat` record, get a
+   * Can threaten Kai. Only these creatures carry a `combat` record, get a
    * lock-on reticle, or ever attack anybody.
    *
    * `staggerResist` is the stagger load it absorbs before it is knocked out of
    * whatever it was doing — one number, no poise system, never shown in Live
-   * Mode. `purpose` is what it does when Emerson is nowhere near it, which is
+   * Mode. `purpose` is what it does when Kai is nowhere near it, which is
    * the difference between a creature and a spawn point.
    */
   dangerous?: {

@@ -122,8 +122,8 @@ check('Veyra start in the Ashlands', geo.spawn.veyra.home === geo.spawn.veyra.to
   `${geo.spawn.veyra.home}/${geo.spawn.veyra.total}`);
 check('Caelari start on the Skyreach', geo.spawn.caelari.home === geo.spawn.caelari.total,
   `${geo.spawn.caelari.home}/${geo.spawn.caelari.total}`);
-check('Emerson starts at Human Landing', geo.playerRegion === 'riverlands' && /Landing/.test(geo.playerPlace), geo.playerPlace);
-check('Emerson does not start in the water', !geo.playerInWater);
+check('Kai starts at Human Landing', geo.playerRegion === 'riverlands' && /Landing/.test(geo.playerPlace), geo.playerPlace);
+check('Kai does not start in the water', !geo.playerInWater);
 check('Human Landing has its landing infrastructure', geo.landing.includes('pod') && geo.landing.includes('fabricator'));
 
 // Live Mode should read as a game, not a dashboard.
@@ -176,7 +176,7 @@ const move = await page.evaluate(async () => {
       p.speed = 0;
       input.inputState.keys.clear();
       input.inputState.keys.add(code);
-      // Emerson now accelerates and turns toward his travel direction rather
+      // Kai now accelerates and turns toward his travel direction rather
       // than snapping to it, so let the heading settle before measuring the
       // direction actually travelled.
       for (let i = 0; i < 30; i++) window.__EDEN__.stepPlayer(1 / 60);
@@ -220,7 +220,7 @@ for (const [yaw, r] of Object.entries(move)) {
 check('D moves screen-right at every camera yaw', dOk);
 check('A moves screen-left at every camera yaw', aOk);
 check('W moves forward at every camera yaw', wOk);
-check('arrow keys no longer move Emerson', arrowOk,
+check('arrow keys no longer move Kai', arrowOk,
   `right ${move['0.00'].ArrowRight.travelled.toFixed(3)}m, up ${move['0.00'].ArrowUp.travelled.toFixed(3)}m`);
 
 // ---------------------------------------------------------------------------
@@ -299,10 +299,10 @@ const held = await page.evaluate(async () => {
 });
 check('holding W keeps the key down while looking', held.stillHeld);
 check('the camera turns while running', held.turned > 0.5, `${held.turned.toFixed(2)} rad`);
-check('Emerson keeps moving throughout the turn', held.moved > 1.5, `${held.moved.toFixed(2)}m`);
+check('Kai keeps moving throughout the turn', held.moved > 1.5, `${held.moved.toFixed(2)}m`);
 check('a full turn while running covers ground', held.travelled > 0.5, `${held.travelled.toFixed(2)}m`);
 
-// Recenter sweeps the camera behind Emerson rather than snapping.
+// Recenter sweeps the camera behind Kai rather than snapping.
 const recentered = await page.evaluate(async () => {
   const { input, getWorld, camera } = window.__EDEN__;
   const p = getWorld().player;
@@ -315,7 +315,7 @@ const recentered = await page.evaluate(async () => {
   if (err < -Math.PI) err += Math.PI * 2;
   return { err: Math.abs(err), moved: Math.abs(input.inputState.camYaw - start) };
 });
-check('C recenters the camera behind Emerson', recentered.err < 0.25, `err ${recentered.err.toFixed(3)}`);
+check('C recenters the camera behind Kai', recentered.err < 0.25, `err ${recentered.err.toFixed(3)}`);
 check('recentering actually moves the camera', recentered.moved > 0.5);
 
 // Zoom is a pinch (ctrl+wheel), not an ordinary swipe.
@@ -345,7 +345,7 @@ console.log('\nGATE 1 — KEYBOARD ONLY (the 3Cs)');
  */
 
 /*
- * Waits measured in Emerson's own seconds, not wall-clock ones.
+ * Waits measured in Kai's own seconds, not wall-clock ones.
  *
  * Headless WebGL runs at one or two frames a second and the loop clamps dt to
  * 0.1 s, so two real seconds can be a fifth of a second of game time. A fixed
@@ -362,7 +362,7 @@ const awaitPlayerSeconds = async (seconds, capMs = 45000) => {
   }
 };
 
-/** Put Emerson at the start of the run, at rest, with the camera behind him. */
+/** Put Kai at the start of the run, at rest, with the camera behind him. */
 const toCourse = async () => {
   await page.evaluate(() => {
     const { getWorld, input, camera, course } = window.__EDEN__;
@@ -389,7 +389,7 @@ const afterReset = await page.evaluate(() => {
     t: world.timeSec,
   };
 });
-check('F4 returns Emerson to the 3Cs start', afterReset.dist < 3, `${afterReset.dist.toFixed(1)}m away`);
+check('F4 returns Kai to the 3Cs start', afterReset.dist < 3, `${afterReset.dist.toFixed(1)}m away`);
 check('the reset does not restart the valley', afterReset.settlers > 0 && afterReset.t > 0,
   `${afterReset.settlers} settlers at t=${afterReset.t.toFixed(0)}`);
 
@@ -400,7 +400,7 @@ const gateBefore = await page.evaluate(() => {
   const p = getWorld().player;
   return { x: p.pos.x, z: p.pos.z, yaw: input.inputState.camYaw, clock: p.clock };
 });
-// Sample the path continuously. Emerson turns to follow the camera, so he
+// Sample the path continuously. Kai turns to follow the camera, so he
 // travels an arc: end-to-end displacement understates how far he actually
 // walked, and at two frames a second it understates it badly.
 await page.evaluate(() => {
@@ -441,13 +441,13 @@ check('the arrow keys turn the camera', gateTurned > 0.3, `${gateTurned.toFixed(
 check('W is still held while the camera turns', during.held);
 /*
  * Judged on distance actually covered and on the speed the simulation reported,
- * both over Emerson's own clock. Headless WebGL runs at one or two frames a
+ * both over Kai's own clock. Headless WebGL runs at one or two frames a
  * second and the loop clamps dt to 0.1 s, so three real seconds advance him
  * less than half a second: a raw distance threshold here would really be a
  * framerate threshold, failing on the machine rather than on a bug.
  */
 const gateElapsed = Math.max(0.001, during.clock - gateBefore.clock);
-check('Emerson keeps walking while the camera turns',
+check('Kai keeps walking while the camera turns',
   walkSamples.path > 0.4 && walkSamples.path / gateElapsed > 2 && walkSamples.topSpeed > 2.5,
   `${walkSamples.path.toFixed(2)}m path (${gateWalked.toFixed(2)}m net) in ${gateElapsed.toFixed(2)}s, ` +
   `top ${walkSamples.topSpeed.toFixed(2)} m/s`);
@@ -509,7 +509,7 @@ const jumped = await page.evaluate(() => {
   };
 });
 check('Space jumps', jumped.sawAir && jumped.lastJumpAt > 0, JSON.stringify(jumped));
-check('and Emerson comes back down', jumped.onGround);
+check('and Kai comes back down', jumped.onGround);
 
 // Sprint. Measured as achieved ground speed, not as the key being registered.
 const speeds = await page.evaluate(async () => {
@@ -834,7 +834,7 @@ const talk = await page.evaluate(async () => {
   const { getWorld, sim } = window.__EDEN__;
   const world = getWorld();
   // Pick a settler and make sure they are genuinely available to talk, and
-  // that nobody else is standing nearer to Emerson than they are.
+  // that nobody else is standing nearer to Kai than they are.
   const target = world.settlers[3];
   target.resting = false;
   target.socialTimer = 0;
@@ -862,7 +862,7 @@ const talkState = await page.evaluate((id) => {
   const s = window.__EDEN__.getWorld().settlers.find((x) => x.id === id);
   return { goal: s.goal.type, speed: s.speed, affinity: s.relationships.emerson?.affinity ?? null };
 }, talk.id);
-check('settler halts and faces Emerson', talkState.goal === 'talk-emerson' && talkState.speed === 0, JSON.stringify(talkState));
+check('settler halts and faces Kai', talkState.goal === 'talk-emerson' && talkState.speed === 0, JSON.stringify(talkState));
 check('relationship actually moved', talkState.affinity > 0, `affinity ${talkState.affinity}`);
 await page.screenshot({ path: `${SHOT_DIR}/01-dialogue.png` });
 
@@ -1423,7 +1423,7 @@ if (norms.contestedId) {
   }
 }
 
-// ARI must not know things Emerson never saw.
+// ARI must not know things Kai never saw.
 const ariScope = await page.evaluate(() => {
   const world = window.__EDEN__.getWorld();
   return {
@@ -1434,7 +1434,7 @@ const ariScope = await page.evaluate(() => {
     ),
   };
 });
-check('Emerson only carries what he witnessed', ariScope.bounded, `${ariScope.witnessed}`);
+check('Kai only carries what he witnessed', ariScope.bounded, `${ariScope.witnessed}`);
 check('witnessed records are well-formed', ariScope.allReal);
 
 // ---------------------------------------------------------------------------
@@ -1705,7 +1705,7 @@ check('ARI announces it', /ARC BLADE MK I ONLINE/.test(armed.ari), armed.ari.sli
 await page.evaluate(() => window.__EDEN__.useUI.getState().setFabricatorOpen(false));
 await page.waitForTimeout(300);
 
-// Nothing may hunt Emerson at home.
+// Nothing may hunt Kai at home.
 const atHome = await page.evaluate(() => {
   const { getWorld, combat, species, config } = window.__EDEN__;
   const w = getWorld();
@@ -1962,7 +1962,7 @@ const extraction = await page.evaluate(() => {
   };
 });
 check('going down starts an extraction rather than a respawn', extraction.extracting);
-check('Emerson comes back at Human Landing, alive', extraction.home && extraction.health > 0,
+check('Kai comes back at Human Landing, alive', extraction.home && extraction.health > 0,
   JSON.stringify({ home: extraction.home, health: extraction.health }));
 check('no capability is ever taken away', extraction.scanner && extraction.blade && extraction.fragments === 3,
   JSON.stringify(extraction));
@@ -1970,7 +1970,7 @@ check('some of the haul is lost', extraction.alloy === 6, `${extraction.alloy}`)
 // The Chronicle is a bounded ring, so by this point in the run its length has
 // stopped growing — "the log got longer" is not evidence of anything. What
 // matters is that nobody vanished, nothing was rebuilt, no relationship was
-// forgotten, and time kept moving the whole time Emerson was down.
+// forgotten, and time kept moving the whole time Kai was down.
 check('the valley never restarted',
   extraction.after.settlers === extraction.before.settlers &&
     extraction.after.names === extraction.before.names &&

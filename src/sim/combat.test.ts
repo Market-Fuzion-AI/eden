@@ -38,7 +38,7 @@ import { dist, v2 } from './vec';
 
 const IDLE = { moveX: 0, moveZ: 0, sprint: false, jump: false, camYaw: 0 };
 
-/** One frame of the real game loop: world in sim time, Emerson in real time. */
+/** One frame of the real game loop: world in sim time, Kai in real time. */
 function step(world: World, seconds: number, input = IDLE): void {
   const ticks = Math.ceil(seconds / SIM_DT);
   for (let i = 0; i < ticks; i++) {
@@ -54,7 +54,7 @@ function stepPlayer(world: World, seconds: number): void {
   for (let i = 0; i < ticks; i++) updatePlayer(world, SIM_DT, IDLE);
 }
 
-/** Give Emerson the blade the way the game does: through the Fabricator. */
+/** Give Kai the blade the way the game does: through the Fabricator. */
 function armPlayer(world: World): void {
   const recipe = RECIPE_BY_ID['arc-blade-mk1'];
   for (const [id, need] of Object.entries(recipe.costs)) {
@@ -199,7 +199,7 @@ describe('player strikes', () => {
     expect(chain.chain).toBe(1);
   });
 
-  it('never hits what is behind Emerson', () => {
+  it('never hits what is behind Kai', () => {
     const world = createWorld(4805);
     armPlayer(world);
     const p = world.player;
@@ -231,7 +231,7 @@ describe('the dodge', () => {
     expect(p.health).toBe(60);
   });
 
-  it('rolls away from Emerson when he is standing still', () => {
+  it('rolls away from Kai when he is standing still', () => {
     const world = createWorld(4807);
     const p = world.player;
     const spot = wilderness(world);
@@ -287,7 +287,7 @@ describe('lock-on', () => {
 });
 
 describe('dangerous creatures', () => {
-  it('do not notice Emerson from across the valley', () => {
+  it('do not notice Kai from across the valley', () => {
     const world = createWorld(4811);
     const spot = wilderness(world);
     world.player.pos = v2(spot.x, spot.z);
@@ -313,7 +313,7 @@ describe('dangerous creatures', () => {
       const state = c.combat!.state;
       if (seen[seen.length - 1] !== state) seen.push(state);
       if (state === 'lunge') break;
-      // Pin Emerson in place: this test is about the creature, not the chase.
+      // Pin Kai in place: this test is about the creature, not the chase.
       p.pos = v2(spot.x, spot.z);
       p.health = 100;
     }
@@ -326,7 +326,7 @@ describe('dangerous creatures', () => {
     expect(seen.indexOf('warn')).toBeLessThan(seen.indexOf('hostile'));
   });
 
-  it('give up when Emerson leaves — retreat is always a real option', () => {
+  it('give up when Kai leaves — retreat is always a real option', () => {
     const world = createWorld(4813);
     const spot = wilderness(world);
     const p = world.player;
@@ -352,7 +352,7 @@ describe('dangerous creatures', () => {
     expect(c.combat!.targetId).toBeNull();
   });
 
-  it('never hunt Emerson inside Human Landing', () => {
+  it('never hunt Kai inside Human Landing', () => {
     const world = createWorld(4814);
     const camp = world.camps.find((c) => c.speciesId === 'human')!;
     const p = world.player;
@@ -513,7 +513,7 @@ describe('settlers and danger', () => {
     const c = placeThreat(world, 'rakhor', { x: anchor.x + 5, z: anchor.z });
     const health = victim.health;
 
-    // Hold a roused predator beside them. It is engaged with Emerson, not with
+    // Hold a roused predator beside them. It is engaged with Kai, not with
     // the settler — a bystander running from somebody else's fight is exactly
     // the behaviour being asserted.
     let fled = false;
@@ -575,7 +575,7 @@ describe('danger in the world as generated', () => {
         }
       }
     }
-    // Emerson standing at Human Landing all day is never attacked.
+    // Kai standing at Human Landing all day is never attacked.
     expect(world.player.extractions).toBe(0);
     expect(world.player.health).toBeGreaterThan(50);
     for (const s of world.settlers) expect(s.health).toBeGreaterThan(0);
@@ -601,7 +601,7 @@ describe('danger in the world as generated', () => {
 // that inputs are not dropped, that the three chain steps are genuinely
 // different, that stagger opens a window without becoming a lock, that both
 // archetypes fight in their own way, and that a creature exists for its own
-// reasons before Emerson ever shows up.
+// reasons before Kai ever shows up.
 // ---------------------------------------------------------------------------
 
 describe('input buffering', () => {
@@ -966,7 +966,7 @@ describe('the Warden', () => {
     p.health = 100;
 
     // Let it engage and start a charge on its own, standing still so the shot
-    // is committed toward where Emerson is right now.
+    // is committed toward where Kai is right now.
     for (let i = 0; i < 6000; i++) {
       simTick(world, SIM_DT);
       updatePlayer(world, SIM_DT, IDLE);
@@ -1014,9 +1014,9 @@ describe('the Warden', () => {
 });
 
 describe('creature purpose', () => {
-  it('gives both archetypes something to do that is not about Emerson', () => {
+  it('gives both archetypes something to do that is not about Kai', () => {
     const world = createWorld(4917);
-    // Emerson stays home, so nothing is ever provoked.
+    // Kai stays home, so nothing is ever provoked.
     const camp = world.camps.find((c) => c.speciesId === 'human')!;
     world.player.pos = v2(camp.pos.x, camp.pos.z);
     step(world, 400);

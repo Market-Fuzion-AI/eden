@@ -12,6 +12,8 @@ import {
   playerToggleLock,
 } from '../sim/player';
 import { selectWeapon } from '../sim/blaster';
+import { survivorAtHand } from '../sim/player';
+import { advanceDialogue, awaitingChoice, beginSurvivorDialogue, endDialogue } from '../sim/survivorDialogue';
 import { useMedkit } from '../sim/fabrication';
 import { performScan } from '../sim/scanner';
 import { useUI } from '../state/store';
@@ -150,6 +152,26 @@ export function installInput(): void {
       return;
     }
 
+    // The authored conversation owns the keyboard while it is open: Space or E
+    // advances a line, Escape leaves. Handled before anything else so a line
+    // advance can never also fire a jump.
+    if (getWorld().dialogueScript) {
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        endDialogue(getWorld());
+        ui.bumpPulse();
+        return;
+      }
+      if (isBound('jump', e.code) || isBound('interact', e.code)) {
+        e.preventDefault();
+        if (!awaitingChoice(getWorld())) {
+          advanceDialogue(getWorld());
+          ui.bumpPulse();
+        }
+        return;
+      }
+    }
+
     if (e.code === 'Escape') {
       // Escape's first job is always to give the cursor back. The browser
       // releases the lock itself; we simply do not also open a menu, so the
@@ -172,7 +194,7 @@ export function installInput(): void {
       ui.toggleDebug();
       return;
     }
-    // Development reset: put Emerson back at the start of the 3Cs course
+    // Development reset: put Kai back at the start of the 3Cs course
     // without reloading, so a traversal run can be repeated immediately.
     if (isBound('qaReset', e.code)) {
       e.preventDefault();
@@ -214,8 +236,12 @@ export function installInput(): void {
     if (ui.mode === 'live' && !ui.helpOpen) {
       if (isBound('interact', e.code)) {
         const world = getWorld();
-        // Standing at the fabricator opens it; otherwise gather, otherwise talk.
-        if (fabricatorAtHand(world) && !ui.fabricatorOpen) {
+        // The survivor first: she is the reason the player walked out here, and
+        // E must never pick a berry bush over the person they came to find.
+        if (survivorAtHand(world)) {
+          if (beginSurvivorDialogue(world)) ui.bumpPulse();
+        } else if (fabricatorAtHand(world) && !ui.fabricatorOpen) {
+          // Standing at the fabricator opens it; otherwise gather, otherwise talk.
           ui.setFabricatorOpen(true);
         } else {
           const acted = playerGather(world);

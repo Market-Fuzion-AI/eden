@@ -101,7 +101,7 @@ export function threatPhase(world: World, c: Creature): ThreatPhase {
   return { progress: Math.max(0, Math.min(1, elapsed / span)), state: combat.state };
 }
 
-/** Can this creature currently perceive Emerson? */
+/** Can this creature currently perceive Kai? */
 function perceives(world: World, c: Creature): boolean {
   const p = world.player;
   if (p.dead || p.extraction) return false;
@@ -126,7 +126,7 @@ function healthFrac(c: Creature): number {
 // ---------------------------------------------------------------------------
 
 /**
- * Decide what a dangerous creature does about Emerson.
+ * Decide what a dangerous creature does about Kai.
  *
  * Runs before the ordinary creature think, and returns true when it has taken
  * control. A dangerous creature always keeps control now — even when nothing
@@ -144,7 +144,7 @@ export function threatThink(world: World, c: Creature): boolean {
   const canSee = perceives(world, c);
   if (canSee) combat.lastSeenAt = t;
 
-  // Human Landing is home. Nothing hunts Emerson inside it — enforced by
+  // Human Landing is home. Nothing hunts Kai inside it — enforced by
   // behaviour rather than an invisible wall, so a creature simply turns back.
   const playerAtHome = insideSafeZone(world, p.pos.x, p.pos.z);
 
@@ -228,7 +228,7 @@ export function threatThink(world: World, c: Creature): boolean {
         return true;
       }
 
-      // The Rakhor sizes Emerson up before it commits. Circling first is what
+      // The Rakhor sizes Kai up before it commits. Circling first is what
       // separates a predator from something that runs straight at you forever.
       if (d <= def.dangerous.attackRange * 2.6) {
         setThreatState(world, c, 'circle');
@@ -264,7 +264,7 @@ export function threatThink(world: World, c: Creature): boolean {
       }
       if (t - combat.since >= windupDuration(c)) {
         if (def.synthetic) {
-          // Close-range burst: instantaneous, short, and it pushes Emerson off.
+          // Close-range burst: instantaneous, short, and it pushes Kai off.
           setThreatState(world, c, 'strike');
           resolvePulseBurst(world, c);
           combat.nextBurstAt = t + THREAT.warden.burstCooldown;
@@ -333,7 +333,7 @@ export function threatThink(world: World, c: Creature): boolean {
         combat.targetId = null;
         combat.hasStruck = false;
         c.aggroUntil = 0;
-        // It remembers being beaten: no re-engaging Emerson for a while.
+        // It remembers being beaten: no re-engaging Kai for a while.
         combat.nextAttackAt = t + 60;
       }
       return true;
@@ -355,14 +355,14 @@ export function threatThink(world: World, c: Creature): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Purpose — what a dangerous creature does when Emerson is not around
+// Purpose — what a dangerous creature does when Kai is not around
 // ---------------------------------------------------------------------------
 
 /**
  * Give an idle predator or guardian something of its own to do.
  *
  * This is the smallest thing that makes a creature read as an inhabitant
- * rather than an encounter: before it ever notices Emerson, he can watch it
+ * rather than an encounter: before it ever notices Kai, he can watch it
  * doing something that has nothing to do with him. The Rakhor stalks whatever
  * small fauna is in its range; the Warden walks its own pylons.
  */
@@ -524,7 +524,7 @@ export function threatExecute(world: World, c: Creature, dt: number): boolean {
     }
 
     case 'circle': {
-      // Strafe around Emerson at a readable distance. This is the state that
+      // Strafe around Kai at a readable distance. This is the state that
       // makes a Rakhor fight look like an animal deciding rather than a script.
       const want = THREAT.rakhor.circleRadius;
       const toPlayer = angleTo(c.pos, p.pos);
@@ -581,7 +581,7 @@ export function threatExecute(world: World, c: Creature, dt: number): boolean {
       break;
 
     case 'retreat': {
-      // Wounded: get away from Emerson, then go home.
+      // Wounded: get away from Kai, then go home.
       const away = v2(
         c.pos.x + (c.pos.x - p.pos.x) * 0.4,
         c.pos.z + (c.pos.z - p.pos.z) * 0.4,
@@ -712,12 +712,12 @@ function recordFirstAttack(world: World, c: Creature): void {
   const m = c.combat;
   if (!m || world.flags[`attacked_${def.id}`]) return;
   world.flags[`attacked_${def.id}`] = true;
-  chronicle(world, 'wildlife', `A ${def.name} attacked Emerson near ${world.landmarkNameAt?.(c.pos) ?? 'the valley'}.`, {
+  chronicle(world, 'wildlife', `A ${def.name} attacked Kai near ${world.landmarkNameAt?.(c.pos) ?? 'the valley'}.`, {
     actorIds: ['emerson'],
-    actorNames: ['Emerson'],
+    actorNames: ['Kai'],
     pos: { ...c.pos },
     cause: [def.synthetic ? 'He entered its guarded perimeter' : 'He stayed inside its territory after the warning'],
-    effects: ['Emerson took damage'],
+    effects: ['Kai took damage'],
   });
 }
 
@@ -729,11 +729,11 @@ function announceFirstContact(world: World, c: Creature): void {
   world.flags[key] = true;
   if (def.synthetic) {
     world.ariQueue.push(
-      'That mechanism predates every colony signal in the valley. It is powering up, Emerson, and I have no idea what it is for.',
+      'That mechanism predates every colony signal in the valley. It is powering up, Kai, and I have no idea what it is for.',
     );
-    chronicle(world, 'wildlife', 'Emerson encountered an unknown synthetic organism at the Sunken Ring.', {
+    chronicle(world, 'wildlife', 'Kai encountered an unknown synthetic organism at the Sunken Ring.', {
       actorIds: ['emerson'],
-      actorNames: ['Emerson'],
+      actorNames: ['Kai'],
       pos: { ...c.pos },
       cause: ['He approached the ancient pylons'],
       effects: ['Something there is still running', 'Its purpose is unknown'],
@@ -753,7 +753,7 @@ function announceRetreat(world: World, c: Creature): void {
   );
   chronicle(world, 'wildlife', `A wounded ${def.name} broke off its attack near ${world.landmarkNameAt?.(c.pos) ?? 'the valley'}.`, {
     actorIds: ['emerson'],
-    actorNames: ['Emerson'],
+    actorNames: ['Kai'],
     pos: { ...c.pos },
     cause: ['It was losing'],
     effects: ['It withdrew to its own ground', 'Not every encounter ends in a death'],

@@ -31,7 +31,7 @@ await page.waitForTimeout(5000);
 if (await page.locator('.help').isVisible().catch(() => false)) await page.locator('.help-resume').click();
 await page.waitForTimeout(1000);
 
-/** Put the world into broad daylight and arm Emerson, once. */
+/** Put the world into broad daylight and arm Kai, once. */
 await page.evaluate(() => {
   const { getWorld, config } = window.__EDEN__;
   const w = getWorld();
@@ -44,7 +44,7 @@ await page.evaluate(() => {
 });
 
 /**
- * Stand Emerson somewhere and point the camera at a subject.
+ * Stand Kai somewhere and point the camera at a subject.
  * Yaw follows the sim's convention: forward is (sin yaw, cos yaw).
  */
 async function shot(name, setup, { settle = 2600, pitch = -0.22, dist = 7, yawOffset = 0 } = {}) {
@@ -60,7 +60,7 @@ async function shot(name, setup, { settle = 2600, pitch = -0.22, dist = 7, yawOf
       w.player.y = window.__EDEN__.terrain.groundY(aim.from.x, aim.from.z);
       const yaw = Math.atan2(aim.at.x - aim.from.x, aim.at.z - aim.from.z);
       w.player.heading = yaw;
-      // Offsetting the camera keeps Emerson from standing squarely in front of
+      // Offsetting the camera keeps Kai from standing squarely in front of
       // whatever the shot is meant to show.
       input.inputState.camYaw = yaw + yawOffset;
       input.inputState.camPitch = pitch;
@@ -87,7 +87,7 @@ await shot(
   { dist: 5.2, pitch: -0.2 },
 );
 
-// 2. A Rakhor warning Emerson off, from the distance the warning happens at.
+// 2. A Rakhor warning Kai off, from the distance the warning happens at.
 await shot(
   'v08-rakhor-warning',
   `
@@ -216,7 +216,7 @@ console.log('  · v08-extraction');
 await page.evaluate(() => {
   const { getWorld, combat } = window.__EDEN__;
   const w = getWorld();
-  // The extraction shot above left Emerson on the floor. Finish the retrieval
+  // The extraction shot above left Kai on the floor. Finish the retrieval
   // before staging anything else, or every frame below is a death screen.
   if (w.player.extraction) combat.finishExtraction(w);
   w.player.dead = false;

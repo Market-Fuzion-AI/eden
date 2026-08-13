@@ -32,7 +32,7 @@ const MOVE: [string, string][] = [
 const CAMERA: [string, string][] = [
   ['← →', 'Turn the camera'],
   ['↑ ↓', 'Look up and down'],
-  [keyLabel('camRecenter'), 'Recenter behind Emerson'],
+  [keyLabel('camRecenter'), 'Recenter behind Kai'],
   ['[  ]', 'Zoom out and in'],
   ['Trackpad swipe', 'Look around — optional, the keyboard does everything'],
 ];
@@ -167,7 +167,7 @@ export function HelpOverlay() {
         </div>
 
         <div className="help-note">
-          Beacons west of the landing mark a traversal run. Walk it, jump it, and see whether Emerson does what you
+          Beacons west of the landing mark a traversal run. Walk it, jump it, and see whether Kai does what you
           meant.
         </div>
         <button className="btn help-resume" onClick={() => setHelpOpen(false)}>

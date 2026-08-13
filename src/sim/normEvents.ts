@@ -266,7 +266,7 @@ export function resolveAsk(
 }
 
 /**
- * Emerson asked, and the settlers standing nearby watched him get an answer.
+ * Kai asked, and the settlers standing nearby watched him get an answer.
  * He is a participant in the valley's social life like anyone else, so what
  * happens to him teaches the people who saw it.
  */
@@ -396,7 +396,7 @@ export function noticeUse(world: World, user: Settler, structure: Structure): vo
         ],
       });
       noteSurprise(world, user, prediction, 'personal', claimant, structure);
-      // If Emerson happens to be standing there, he sees it too — and that is
+      // If Kai happens to be standing there, he sees it too — and that is
       // the only way ARI ever comes to know anything about who claims what.
       witnessNorm(world, structure, claimant, 'personal', `objected to ${user.name} using`);
 
@@ -488,7 +488,7 @@ export function noteSharedUse(world: World, user: Settler, structure: Structure)
 }
 
 /**
- * Whoever would consider Emerson's use of this place an intrusion.
+ * Whoever would consider Kai's use of this place an intrusion.
  * He has no building history, so any strong personal claimant qualifies.
  */
 export function emersonBlocker(world: World, structure: Structure): { settler: Settler; attachment: number } | null {

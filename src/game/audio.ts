@@ -243,7 +243,7 @@ export function sfxWardenBurst(): void {
   hiss({ duration: 0.3, freq: 2200, toFreq: 200, gain: 0.2, q: 0.6 });
 }
 
-/** Emerson taking a hit. */
+/** Kai taking a hit. */
 export function sfxPlayerHurt(): void {
   tone({ type: 'triangle', from: 300, to: 92, duration: 0.28, gain: 0.24, filter: { type: 'lowpass', freq: 1100 } });
   hiss({ duration: 0.16, freq: 520, toFreq: 150, gain: 0.16, q: 0.7 });

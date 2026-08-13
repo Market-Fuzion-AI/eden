@@ -41,7 +41,7 @@ await page.evaluate(() => {
 });
 
 /**
- * Stand Emerson at a point on the course and aim the camera down the run.
+ * Stand Kai at a point on the course and aim the camera down the run.
  *
  * `bay` is an index into the props; the shot is composed from the prop's own
  * position so it keeps working if the course is re-tuned or the terrain puts

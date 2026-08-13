@@ -20,7 +20,7 @@ export function CreatorRig() {
   const raycaster = useMemo(() => new THREE.Raycaster(), []);
   const pointer = useMemo(() => new THREE.Vector2(), []);
 
-  // On entering creator mode, lift the camera above Emerson.
+  // On entering creator mode, lift the camera above Kai.
   useEffect(() => {
     const world = getWorld();
     const p = world.player;

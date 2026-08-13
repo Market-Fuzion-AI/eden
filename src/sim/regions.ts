@@ -36,7 +36,7 @@ export const REGIONS: Region[] = [
     pos: { x: 86, z: 30 },
     radius: 132,
     ariLine:
-      'Human Riverlands. Fresh water, workable ground, and the landing wreck for a landmark. This is home, Emerson.',
+      'Human Riverlands. Fresh water, workable ground, and the landing wreck for a landmark. This is home, Kai.',
   },
   {
     id: 'ashlands',

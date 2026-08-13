@@ -4,7 +4,7 @@ import type { Entity, IntelligentSpeciesId, World } from './types';
 import { dist } from './vec';
 
 /**
- * ARI's unobtrusive identification of whatever Emerson is looking at.
+ * ARI's unobtrusive identification of whatever Kai is looking at.
  * Live Mode only ever reveals what a participant could plausibly perceive:
  * name, species and an outward disposition — never internal needs or goals.
  */
@@ -18,7 +18,7 @@ export interface Identification {
   notable: boolean;
   /**
    * Scanner read-out. Present only with the Pathfinder Scanner installed —
-   * without it Emerson sees a shape and has to judge for himself, which is the
+   * without it Kai sees a shape and has to judge for himself, which is the
    * point of building the thing.
    */
   scan?: {
@@ -47,7 +47,7 @@ function dispositionOf(world: World, e: Entity): string {
     return 'neutral';
   }
   // Dangerous fauna report the state machine that is actually driving them,
-  // rather than a species stereotype: a Rakhor that has not noticed Emerson
+  // rather than a species stereotype: a Rakhor that has not noticed Kai
   // genuinely is placid, and saying otherwise would make every read-out a lie.
   if (e.combat) {
     switch (e.combat.state) {
@@ -89,7 +89,7 @@ function dispositionOf(world: World, e: Entity): string {
 }
 
 /**
- * Identify the entity Emerson is looking at (or standing beside).
+ * Identify the entity Kai is looking at (or standing beside).
  * Gaze-weighted so labels do not follow him around the valley.
  */
 export function identifyFocus(world: World, camForwardX: number, camForwardZ: number): Identification | null {
@@ -162,7 +162,7 @@ export function identifyFocus(world: World, camForwardX: number, camForwardZ: nu
     dangerous: Boolean(def.dangerous),
     healthFrac: def.dangerous ? Math.max(0, Math.min(1, e.health / maxHealth)) : undefined,
     // The scanner is what turns "something is moving over there" into a
-    // classification. Without it Emerson gets the name and the posture only.
+    // classification. Without it Kai gets the name and the posture only.
     scan: world.player.unlocks.scanner
       ? {
           category: def.synthetic ? 'Synthetic' : 'Biological',
@@ -176,7 +176,7 @@ export function identifyFocus(world: World, camForwardX: number, camForwardZ: nu
   };
 }
 
-/** Distance from Emerson, for HUD affordances. */
+/** Distance from Kai, for HUD affordances. */
 export function distanceToPlayer(world: World, e: Entity): number {
   return dist(world.player.pos, e.pos);
 }

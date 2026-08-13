@@ -10,6 +10,7 @@ import { MATERIALS } from '../sim/fabrication';
 import { availableWeapons, blasterChargeFrac } from '../sim/blaster';
 import { jetpackFuelFrac } from '../sim/jetpack';
 import { devMode } from '../sim/dev';
+import { missionObjective, missionTracking, signalBearing, signalStrengthAt } from '../sim/mission';
 import { scanCooldownRemaining, scanWouldSpendCell } from '../sim/scanner';
 import type { MaterialId } from '../sim/types';
 import { useUI } from '../state/store';
@@ -46,10 +47,10 @@ export function LiveHUD() {
   const p = world.player;
   const prompts = getInteractions(world);
 
-  // ARI identifies whatever Emerson is actually looking at.
+  // ARI identifies whatever Kai is actually looking at.
   const ident = identifyFocus(world, Math.sin(inputState.camYaw), Math.cos(inputState.camYaw));
 
-  // Where Emerson is, and which way he is looking — the two things a
+  // Where Kai is, and which way he is looking — the two things a
   // third-person explorer actually needs on screen at all times.
   // Recent pickups, shown briefly then dropped — no permanent inventory panel.
   const recentPickups = world.pickups.filter((x) => world.timeSec - x.at < 4);
@@ -61,6 +62,13 @@ export function LiveHUD() {
   const blasterCharge = blasterChargeFrac(world);
   const weapons = availableWeapons(world);
   const dev = devMode();
+  // THE SIGNAL. The objective line is a purpose, not an instruction, and the
+  // carrier meter is the whole navigation system — no minimap, no waypoint
+  // pinned through the terrain.
+  const objective = missionObjective(world);
+  const tracking = missionTracking(world);
+  const signal = tracking ? signalStrengthAt(world, p.pos.x, p.pos.z) : 0;
+  const bearing = signalBearing(world);
 
   // Combat state, read straight off the simulation. Nothing here is owned by
   // React — the HUD is a view of the fight, not a participant in it.
@@ -109,8 +117,37 @@ export function LiveHUD() {
                 </span>
               );
             })}
+            {bearing !== null &&
+              (() => {
+                // The carrier's direction, drawn on the compass Kai already
+                // has. It only appears while the signal is being tracked, and
+                // it is a bearing rather than a distance — it says which way to
+                // set off, not how far to walk or exactly where to stop.
+                const deg = ((bearing * 180) / Math.PI + 360) % 360;
+                let delta = ((deg - heading + 540) % 360) - 180;
+                if (Math.abs(delta) > 62) return null;
+                return (
+                  <span className="compass-signal" style={{ left: `${50 + (delta / 62) * 50}%` }}>
+                    ◈
+                  </span>
+                );
+              })()}
           </div>
         </div>
+        {objective && (
+          <div className="objective">
+            <div className="objective-title">{objective.title}</div>
+            <div className="objective-detail">{objective.detail}</div>
+            {tracking && (
+              <div className="objective-signal">
+                <span className="objective-signal-label">CARRIER</span>
+                <div className="bar">
+                  <div className="bar-fill signal" style={{ width: `${Math.round(signal * 100)}%` }} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="hud-topright">
@@ -146,7 +183,7 @@ export function LiveHUD() {
           <div className="ident-disp">
             <span className="ident-disp-label">Disposition</span> {ident.disposition}
           </div>
-          {/* The scanner read-out. Without the Pathfinder installed Emerson
+          {/* The scanner read-out. Without the Pathfinder installed Kai
               gets the shape and the posture and has to make his own call. */}
           {ident.scan && (
             <>

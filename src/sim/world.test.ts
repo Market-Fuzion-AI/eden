@@ -137,7 +137,7 @@ describe('starting geography', () => {
     }
   });
 
-  it('starts Emerson at Human Landing, on dry level ground', () => {
+  it('starts Kai at Human Landing, on dry level ground', () => {
     for (const seed of [711, 712, 713]) {
       const world = createWorld(seed);
       setTerrainSeed(world.seed);

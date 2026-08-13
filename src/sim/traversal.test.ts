@@ -7,7 +7,7 @@ import type { World } from './types';
 import { createWorld } from './worldgen';
 
 /**
- * Gate 1: does Emerson move the way the player meant?
+ * Gate 1: does Kai move the way the player meant?
  *
  * These are the machine half of the answer — the half that can say "the jump
  * clears 1.05 m" and "walking into a boulder stops you rather than shoving you
@@ -466,7 +466,7 @@ describe('the 3Cs course', () => {
 });
 
 describe('movement telemetry', () => {
-  it('reports contact when Emerson is pressed against a boulder', () => {
+  it('reports contact when Kai is pressed against a boulder', () => {
     const world = createWorld(5501);
     const rock = world.obstacles.find((o) => o.radius > 1 && !isWater(o.pos.x, o.pos.z))!;
     placeAt(world, rock.pos.x, rock.pos.z - (rock.radius + 1));

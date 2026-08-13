@@ -74,7 +74,7 @@ export const PLAYER = {
   /**
    * Movement responsiveness. Acceleration is deliberately much faster than
    * deceleration: starting must feel instant, while a short coast on stopping
-   * is what stops Emerson reading as a debug capsule that teleports to a halt.
+   * is what stops Kai reading as a debug capsule that teleports to a halt.
    * The coast is short — long enough to have weight, not long enough to skate.
    */
   accel: 16,
@@ -406,7 +406,7 @@ export const SOCIAL = {
  * at these yields is two salvage stops, two extractions and two harvests.
  */
 export const GATHER = {
-  /** How close Emerson must be to work a node. */
+  /** How close Kai must be to work a node. */
   range: 3.2,
   /** Seconds of interaction per pull. Long enough to feel physical, short
    *  enough that six of them are not a chore. */
@@ -428,7 +428,7 @@ export const SCANNER = {
   pulseDuration: 1.1,
 } as const;
 
-/** How close Emerson must stand to operate the fabricator. */
+/** How close Kai must stand to operate the fabricator. */
 export const FABRICATOR = { range: 4.6 } as const;
 
 /**
@@ -527,7 +527,7 @@ export const BLASTER = {
   /** Idle time after firing before the cell starts recovering. */
   rechargeDelay: 1.1,
   /**
-   * Aim assist cone, in radians from Emerson's facing. A keyboard player has no
+   * Aim assist cone, in radians from Kai's facing. A keyboard player has no
    * fine aim, so a hostile already in front of him is what he meant to shoot.
    * Narrow enough that it cannot pick a target he is not looking at.
    */
@@ -535,6 +535,55 @@ export const BLASTER = {
   assistRange: 34,
   /** Bolts alive at once. A bound, not a budget — firing is rate-limited. */
   maxShots: 24,
+} as const;
+
+/**
+ * THE SIGNAL — Gate 2A's mission tuning.
+ *
+ * The distances are the design. Close enough that the walk is a journey rather
+ * than an expedition, far enough that arriving feels like having gone somewhere,
+ * and the signal range is set so the carrier is audible for most of the trip —
+ * navigation should be a needle you follow, not a needle you first have to find.
+ */
+export const MISSION = {
+  survivorName: 'Dr. Maya Reyes',
+  survivorRole: 'Agricultural Systems Specialist',
+  /**
+   * Seconds of ordinary play before ARI says anything.
+   *
+   * The first thing that happens to a player in a new world should not be a
+   * task. This is the length of the breath before the mission starts.
+   */
+  openingGrace: 25,
+  /** How far from Human Landing the pod may have come down. */
+  minRange: 105,
+  maxRange: 165,
+  /** Beyond this the carrier is inaudible and the strength meter reads zero. */
+  signalRange: 210,
+  /**
+   * How much closer Kai must get before ARI starts calling it warmer or colder.
+   * Human Landing is inside the carrier's range already, so this is what
+   * distinguishes "he set off" from "he is standing where he was".
+   */
+  setOffDistance: 18,
+  /** Close enough to have found the wreck. */
+  arriveRange: 14,
+  /** Close enough to have found her. */
+  findRange: 7,
+  /** Close enough to Human Landing to count as home. */
+  homeRange: 26,
+  /** Range at which the E prompt to speak with her appears. */
+  talkRange: 3.6,
+  /**
+   * What ARI says as the needle climbs. Thresholds rather than continuous
+   * commentary: she should sound like someone watching a dial, not like a
+   * proximity alarm.
+   */
+  signalMilestones: [
+    { at: 0.15, line: 'Stronger. Whatever is transmitting, you are walking toward it.' },
+    { at: 0.4, line: 'Carrier is clean now. This is close, Kai.' },
+    { at: 0.7, line: 'It is right on top of us. Look for wreckage — expedition plating does not weather like rock.' },
+  ],
 } as const;
 
 /**
@@ -556,7 +605,7 @@ export const COMBAT = {
   maxChain: 3,
   /**
    * Heavy attack. Deliberately not "light with a bigger number": it starts far
-   * slower, roots Emerson for longer, and carries enough stagger on its own to
+   * slower, roots Kai for longer, and carries enough stagger on its own to
    * break a creature out of a wind-up. Its job is punishing a recovery window.
    */
   heavy: { windup: 0.32, active: 0.2, recover: 0.46, damage: 54, range: 3.6, arcCos: 0.32, stagger: 62 },
@@ -575,7 +624,7 @@ export const COMBAT = {
   chainWindow: 0.62,
 
   /**
-   * Soft target assist. Unlocked melee snaps Emerson's facing toward a hostile
+   * Soft target assist. Unlocked melee snaps Kai's facing toward a hostile
    * already inside this cone, by at most `assistMaxTurn` radians. It exists to
    * cancel the small aiming error of steering with WASD while looking with a
    * trackpad — never to aim for the player.
@@ -615,17 +664,17 @@ export const COMBAT = {
   /** Nothing may be staggered again until this long after recovering. */
   staggerImmunity: 2.2,
 
-  /** Emerson's own reaction to being hit: brief, and never a stun chain. */
+  /** Kai's own reaction to being hit: brief, and never a stun chain. */
   hitStun: 0.22,
   hitStunImmunity: 1.4,
 
-  /** Emerson recovers slowly out of combat, and not at all during it. */
+  /** Kai recovers slowly out of combat, and not at all during it. */
   regenDelay: 6,
 } as const;
 
 /** Threat behaviour shared by both encounter archetypes. */
 export const THREAT = {
-  /** Nothing notices Emerson from across the valley. */
+  /** Nothing notices Kai from across the valley. */
   noticeRange: 22,
   /** Inside this, a warning becomes a real threat. */
   provokeRange: 9,
@@ -645,7 +694,7 @@ export const THREAT = {
   rakhor: {
     circleDuration: 1.9,
     circleSpeed: 0.85,
-    /** Distance it prefers to hold while sizing Emerson up. */
+    /** Distance it prefers to hold while sizing Kai up. */
     circleRadius: 5.2,
     lungeSpeed: 13,
     lungeDuration: 0.34,
@@ -656,7 +705,7 @@ export const THREAT = {
   /**
    * Warden. A guardian, not a brawler: it holds the ring at range, charges a
    * beam you have to move out of, and only uses the close-range burst to push
-   * Emerson back out when he crowds it.
+   * Kai back out when he crowds it.
    */
   warden: {
     /** Where it wants to be: far enough that closing is the player's problem. */

@@ -467,7 +467,7 @@ export type PermissionOutcome = 'allow' | 'reluctant' | 'refuse';
 export function decidePermission(
   world: World,
   claimant: Settler,
-  /** Identified by id and name so Emerson can be asked about too. */
+  /** Identified by id and name so Kai can be asked about too. */
   asker: { id: EntityId; name: string },
   structure: Structure,
   askerUrgency: number,

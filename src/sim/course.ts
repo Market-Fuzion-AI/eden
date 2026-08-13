@@ -6,7 +6,7 @@ import { v2, type V2 } from './vec';
 /**
  * The 3Cs test course.
  *
- * Gate 1 asks one question — does Emerson feel good to control — and answering
+ * Gate 1 asks one question — does Kai feel good to control — and answering
  * it needs ground that deliberately poses movement problems, one after another,
  * within a short walk. This is greyboxing inside the existing world: no new
  * map, no new art, no mission, no objective. Just a sequence of traversal
@@ -187,13 +187,13 @@ function layoutFor(origin: V2, heading: number): CourseLayout {
   return { start: at(-3, 1.7), dir, props };
 }
 
-/** Where a QA reset puts Emerson. */
+/** Where a QA reset puts Kai. */
 export function courseStart(world: World): V2 {
   if (!layout) buildCourse(world);
   return { ...layout!.start };
 }
 
-/** Put Emerson back at the start of the run, without touching the world. */
+/** Put Kai back at the start of the run, without touching the world. */
 export function resetToCourseStart(world: World): void {
   const p = world.player;
   const start = courseStart(world);
@@ -267,7 +267,7 @@ export function propTop(prop: CourseProp): number {
 }
 
 /**
- * The highest course surface Emerson can be standing on at this point.
+ * The highest course surface Kai can be standing on at this point.
  *
  * A surface only supports him if it is at or below his feet plus a tolerance —
  * otherwise it is a wall, and walking into it should not silently teleport him

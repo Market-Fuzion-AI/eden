@@ -1,7 +1,9 @@
 import { useUI } from '../state/store';
 import { Agents } from './Agents';
 import { Beams } from './Beams';
+import { AgricultureSite } from './AgricultureSite';
 import { CampVisuals } from './CampVisuals';
+import { CrashSite } from './CrashSite';
 import { CreatorRig } from './CreatorRig';
 import { EdenEnvironment } from './Environment';
 import { LandingSite } from './LandingSite';
@@ -29,6 +31,8 @@ export function Scene() {
       <CampVisuals />
       <LandingSite />
       <SyntheticSite />
+      <CrashSite />
+      <AgricultureSite />
       <TestCourse />
       <ResourceNodes />
       <StructureVisuals />

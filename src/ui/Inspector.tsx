@@ -101,7 +101,7 @@ export function Inspector() {
             </span>
             <span className="combat-timer">{data.combat.forSeconds.toFixed(1)}s</span>
             {data.combat.distance > 0 && (
-              <span className="combat-timer">{Math.round(data.combat.distance)}m to Emerson</span>
+              <span className="combat-timer">{Math.round(data.combat.distance)}m to Kai</span>
             )}
           </div>
           {data.combat.lines.map((line, i) => (

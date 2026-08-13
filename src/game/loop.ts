@@ -9,7 +9,7 @@ import { soundTick } from './sound';
 
 /**
  * The game loop. World simulation advances in fixed SIM_DT steps scaled by
- * the chosen sim speed; Emerson integrates in real time so he stays
+ * the chosen sim speed; Kai integrates in real time so he stays
  * controllable while the world fast-forwards around him.
  */
 

@@ -1,5 +1,6 @@
 import { BLASTER, JETPACK, LUMI, START_TIME, THREAT } from './config';
 import { buildCourse, distToCourse, propTop } from './course';
+import { initMission } from './mission';
 import { armThreat } from './threats';
 import { makeRng, type Rng } from './rng';
 import {
@@ -668,7 +669,7 @@ export function createWorld(seed: number): World {
 
   const player: PlayerState = {
     id: 'emerson',
-    name: 'Emerson',
+    name: 'Kai',
     // Placed properly once the terrain is known — see `createWorld`.
     pos: v2(0, 0),
     y: 0,
@@ -698,7 +699,7 @@ export function createWorld(seed: number): World {
     moveSpeed: 0,
     lastSprintAt: -999,
     witnessed: [],
-    // Emerson lands with nothing to fabricate from: the Scanner cannot be
+    // Kai lands with nothing to fabricate from: the Scanner cannot be
     // built without leaving Human Landing, which is the whole point.
     materials: { alloy: 0, ore: 0, crystal: 0 },
     items: { medkit: 0, energyCell: 0 },
@@ -743,6 +744,8 @@ export function createWorld(seed: number): World {
     pickupsSalvage: [],
     beams: [],
     shots: [],
+    mission: null,
+    dialogueScript: null,
     landmarkNameAt: (p: V2) => placeName(p),
     camps: [
       { speciesId: 'human', label: 'Human camp', pos: { ...ANCHORS.humanCamp } },
@@ -807,7 +810,7 @@ export function createWorld(seed: number): World {
     });
   }
 
-  // Emerson opens the game standing at Human Landing on dry, level ground.
+  // Kai opens the game standing at Human Landing on dry, level ground.
   // Derived from the terrain rather than hard-coded: a literal spawn point
   // silently put him waist-deep in the river the moment the river moved.
   const humanCamp = world.camps.find((c) => c.speciesId === 'human')!;
@@ -844,6 +847,17 @@ export function createWorld(seed: number): World {
   }
 
   spawnDangers(world, rng);
+
+  // THE SIGNAL. Placed last so it can read the finished camp and terrain, and
+  // so its crash site can be scored against the 3Cs course it must avoid.
+  initMission(world);
+  // The wreck is solid. Without this Kai walks through the hull, which makes
+  // the most important object in the mission read as a painting rather than as
+  // a thing that fell out of the sky. Sized to the hull, not to the debris —
+  // the scattered plating is scenery and should be walked over.
+  if (world.mission) {
+    world.obstacles.push({ pos: { ...world.mission.podPos }, radius: 3.1 });
+  }
 
   // Lumi — a persistent named individual, not a disposable animal.
   const lumiDef = CREATURE_SPECIES.find((s) => s.id === 'lumin')!;

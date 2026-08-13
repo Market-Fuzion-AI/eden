@@ -14,7 +14,7 @@ import { dist } from './vec';
 export interface Landmark {
   id: string;
   name: string;
-  /** Short line ARI speaks the first time Emerson arrives. */
+  /** Short line ARI speaks the first time Kai arrives. */
   ariLine: string;
   pos: V2;
   radius: number;
@@ -96,7 +96,7 @@ export const LANDMARKS: Landmark[] = [
   {
     id: 'crags',
     name: 'the Southern Crags',
-    ariLine: 'The Southern Crags. Predator territory. I would not linger here, Emerson.',
+    ariLine: 'The Southern Crags. Predator territory. I would not linger here, Kai.',
     pos: { x: -46, z: 118 },
     radius: 36,
   },
@@ -105,7 +105,7 @@ export const LANDMARKS: Landmark[] = [
     id: 'sunkenring',
     name: 'the Sunken Ring',
     ariLine:
-      'Emerson, stop. These pylons are not ours. They are not Veyra or Caelari either, and the weathering says they have been here far longer than any of us.',
+      'Kai, stop. These pylons are not ours. They are not Veyra or Caelari either, and the weathering says they have been here far longer than any of us.',
     pos: { x: -86, z: -14 },
     radius: 30,
   },

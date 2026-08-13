@@ -16,7 +16,7 @@ import { useUI } from '../state/store';
  * The QA overlay (F3).
  *
  * Gate 1 is judged by a human playing the game, and a human cannot see why a
- * step felt wrong — whether Emerson was actually airborne, whether a boulder
+ * step felt wrong — whether Kai was actually airborne, whether a boulder
  * was eating the input, whether the camera had drifted. This shows the handful
  * of numbers that answer those questions and nothing else. It is off by default
  * and never appears during normal play.
@@ -95,7 +95,7 @@ const ROWS: Row[] = [
     label: 'facing',
     read: () => {
       const p = getWorld().player;
-      // The difference between where the camera looks and where Emerson goes is
+      // The difference between where the camera looks and where Kai goes is
       // exactly where an A/D inversion would show up.
       let rel = (p.heading - inputState.camYaw) % (Math.PI * 2);
       if (rel > Math.PI) rel -= Math.PI * 2;

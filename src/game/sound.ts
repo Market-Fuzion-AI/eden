@@ -161,7 +161,7 @@ export function soundTick(world: World): void {
   }
 }
 
-/** The species id of whatever Emerson is most likely to have just hit. */
+/** The species id of whatever Kai is most likely to have just hit. */
 function nearestEngaged(world: World): string | null {
   const p = world.player;
   let best: string | null = null;

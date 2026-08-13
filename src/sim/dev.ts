@@ -114,7 +114,7 @@ export function applyDevLoadout(world: World): void {
 /**
  * The F4 QA reset.
  *
- * Puts Emerson back at the start of the 3Cs run and, in Developer Mode, tops
+ * Puts Kai back at the start of the 3Cs run and, in Developer Mode, tops
  * the loadout back up — a reset that leaves the tester re-gathering materials
  * is a reset nobody presses twice. The valley itself is untouched either way:
  * this moves the player, not the world.
