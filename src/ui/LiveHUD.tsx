@@ -50,6 +50,13 @@ export function LiveHUD() {
   // ARI identifies whatever Kai is actually looking at.
   const ident = identifyFocus(world, Math.sin(inputState.camYaw), Math.cos(inputState.camYaw));
 
+  // A conversation takes the screen. The portraits sit where the ARI transcript
+  // and the identification card live, and two panels of text overlapping each
+  // other is the fastest way to make a scene unreadable — so while Kai is
+  // talking to someone, the ambient readouts stand down. Nothing is disabled;
+  // they come straight back when he steps away.
+  const talking = Boolean(world.conversation);
+
   // Where Kai is, and which way he is looking — the two things a
   // third-person explorer actually needs on screen at all times.
   // Recent pickups, shown briefly then dropped — no permanent inventory panel.
@@ -169,7 +176,7 @@ export function LiveHUD() {
         {dev && <div className="hint-chip dev">DEV MODE</div>}
       </div>
 
-      {ident && (
+      {ident && !talking && (
         <div className={`ident-card ${ident.notable ? 'notable' : ''} ${ident.dangerous ? 'danger' : ''}`}>
           <div className="ident-name">{ident.name}</div>
           <div className="ident-line">{ident.line}</div>
@@ -203,7 +210,7 @@ export function LiveHUD() {
       {lowHealth && !p.extraction && <div className="hurt-vignette critical" />}
 
       <div className="hud-bottomleft">
-        {ariLine && (
+        {ariLine && !talking && (
           <div className="ari panel">
             <span className="ari-tag">ARI</span>
             <span className="ari-text">{ariLine}</span>

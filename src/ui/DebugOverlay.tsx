@@ -8,6 +8,8 @@ import { standingSlope } from '../sim/course';
 import { availableWeapons, blasterChargeFrac } from '../sim/blaster';
 import { jetpackFuelFrac } from '../sim/jetpack';
 import { devMode } from '../sim/dev';
+import { providerMode } from '../sim/conversation';
+import { dialogueProviderStatus } from '../game/openaiDialogue';
 import { MATERIAL_IDS, SALVAGE_IDS } from '../sim/fabrication';
 import { PLAYER } from '../sim/config';
 import { useUI } from '../state/store';
@@ -127,6 +129,21 @@ const ROWS: Row[] = [
  * say "why did that step feel wrong", these say "do I have what I need to test
  * the next thing". Diagnostic only — none of this belongs in a player's HUD.
  */
+/**
+ * Whether a key is configured, refreshed occasionally.
+ *
+ * Cached rather than fetched per frame — the row is redrawn sixty times a
+ * second and the answer changes at most when a developer restarts a server.
+ */
+let lastStatus: { available: boolean; model: string | null } = { available: false, model: null };
+let statusAsked = false;
+/** Probe the first time the overlay is opened, not at boot. */
+function refreshStatus(): void {
+  if (statusAsked) return;
+  statusAsked = true;
+  void dialogueProviderStatus().then((s) => (lastStatus = s));
+}
+
 const DEV_ROWS: Row[] = [
   {
     label: 'mode',
@@ -171,6 +188,19 @@ const DEV_ROWS: Row[] = [
       const salv = SALVAGE_IDS.map((id) => `${id.slice(0, 4)} ${p.salvage[id]}`).join(' · ');
       return `${mats} · ${salv} · med ${p.items.medkit} · cell ${p.items.energyCell}`;
     },
+  },
+  {
+    label: 'dialogue',
+    read: () => {
+      refreshStatus();
+      const mode = providerMode();
+      const status = lastStatus;
+      if (mode === 'openai') {
+        return status.available ? `OPENAI (${status.model ?? 'model set'})  [F6 → local]` : 'OPENAI — API UNAVAILABLE, using LOCAL  [F6]';
+      }
+      return `LOCAL${status.available ? '  [F6 → openai]' : '  (no API configured)'}`;
+    },
+    warn: () => providerMode() === 'openai' && !lastStatus.available,
   },
   {
     label: 'unlocks',

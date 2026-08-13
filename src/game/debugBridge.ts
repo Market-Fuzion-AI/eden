@@ -24,6 +24,8 @@ import * as jetpack from '../sim/jetpack';
 import * as blaster from '../sim/blaster';
 import * as mission from '../sim/mission';
 import * as story from '../sim/survivorDialogue';
+import * as conversation from '../sim/conversation';
+import * as npcContext from '../sim/npcContext';
 import * as bindings from './bindings';
 import { getInteractions, updatePlayer } from '../sim/player';
 import { simTick } from '../sim/simulation';
@@ -95,6 +97,8 @@ export function installDebugBridge(): void {
     blaster,
     mission,
     story,
+    conversation,
+    npcContext,
     creator,
     goals,
     rel,

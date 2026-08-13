@@ -45,6 +45,7 @@ export type BindingId =
   | 'help'
   | 'qaOverlay'
   | 'qaReset'
+  | 'qaDialogueProvider'
   | 'pause'
   | 'speed1'
   | 'speed2'
@@ -105,6 +106,8 @@ export const BINDINGS: Binding[] = [
   { id: 'help', codes: ['Escape'], label: 'Help & settings', group: 'meta' },
   { id: 'qaOverlay', codes: ['F3'], label: 'QA overlay', group: 'meta' },
   { id: 'qaReset', codes: ['F4'], label: 'Reset to the 3Cs start', group: 'meta' },
+  // Developer tooling only; never shown or usable in Player Mode.
+  { id: 'qaDialogueProvider', codes: ['F6'], label: 'Dialogue provider (dev)', group: null },
   { id: 'pause', codes: ['KeyP'], label: 'Pause', group: null },
   // Sim speed moved off the number row when the weapon slots arrived.
   //

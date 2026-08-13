@@ -1028,6 +1028,14 @@ export interface World {
    */
   dialogueScript: import('./survivorDialogue').ActiveDialogue | null;
   /**
+   * The general NPC conversation currently on screen, if any.
+   *
+   * Distinct from `dialogueScript`, which is authored story dialogue. This one
+   * is generated — locally, or by a language model expressing the same facts —
+   * and the two never run at once.
+   */
+  conversation: import('./conversation').Conversation | null;
+  /**
    * Injected by `index.ts` so combat can name a place without importing the
    * landmark table (which would close an import cycle through worldgen).
    */

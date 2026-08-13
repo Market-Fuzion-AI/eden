@@ -6,6 +6,7 @@ import { fabricationTick } from './fabrication';
 import { separateAgents } from './movement';
 import { scanTick } from './scanner';
 import { missionTick } from './mission';
+import { conversationTick } from './conversation';
 import { beamTick } from './threats';
 import { setTerrainSeed, terrainSeed } from './terrain';
 import { tickOfferedFood } from './player';
@@ -51,6 +52,8 @@ export function simTick(world: World, dt: number): void {
   // THE SIGNAL advances on where the player is and what they have done. Every
   // transition inside is caused by the player; nothing here pushes it along.
   missionTick(world);
+  // Hold whoever Kai is talking to in place. Nobody wanders off mid-sentence.
+  conversationTick(world);
   // Warden beams are short-lived world entities; retire the finished ones.
   beamTick(world);
 

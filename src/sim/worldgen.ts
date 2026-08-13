@@ -746,6 +746,7 @@ export function createWorld(seed: number): World {
     shots: [],
     mission: null,
     dialogueScript: null,
+    conversation: null,
     landmarkNameAt: (p: V2) => placeName(p),
     camps: [
       { speciesId: 'human', label: 'Human camp', pos: { ...ANCHORS.humanCamp } },

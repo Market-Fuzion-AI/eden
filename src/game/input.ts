@@ -14,12 +14,14 @@ import {
 import { selectWeapon } from '../sim/blaster';
 import { survivorAtHand } from '../sim/player';
 import { advanceDialogue, awaitingChoice, beginSurvivorDialogue, endDialogue } from '../sim/survivorDialogue';
+import { beginConversation, conversationPartner, endConversation, providerMode, setProviderMode } from '../sim/conversation';
 import { useMedkit } from '../sim/fabrication';
 import { performScan } from '../sim/scanner';
 import { useUI } from '../state/store';
 import { addLook, requestRecenter, type KeyLookInput } from './camera';
 import { held, isBound } from './bindings';
-import { qaReset } from '../sim/dev';
+import { devMode, qaReset } from '../sim/dev';
+import { dialogueProviderStatus } from './openaiDialogue';
 import { primeAudio } from './audio';
 
 /**
@@ -172,6 +174,14 @@ export function installInput(): void {
       }
     }
 
+    // A general conversation owns Escape while it is open.
+    if (getWorld().conversation && e.code === 'Escape') {
+      e.preventDefault();
+      endConversation(getWorld());
+      ui.bumpPulse();
+      return;
+    }
+
     if (e.code === 'Escape') {
       // Escape's first job is always to give the cursor back. The browser
       // releases the lock itself; we simply do not also open a menu, so the
@@ -202,6 +212,21 @@ export function installInput(): void {
       // leaves the tester re-gathering materials is a reset nobody presses.
       qaReset(getWorld());
       requestRecenter();
+      return;
+    }
+    // Developer Mode only: swap which provider answers conversations. Deliberately
+    // gated on the mode rather than merely hidden, so a Player Mode build cannot
+    // reach the switch at all.
+    if (isBound('qaDialogueProvider', e.code)) {
+      e.preventDefault();
+      if (devMode()) {
+        const next = providerMode() === 'openai' ? 'local' : 'openai';
+        setProviderMode(next);
+        // Re-probe on the way in, so the overlay can say whether the switch
+        // will actually do anything before the tester tries a conversation.
+        if (next === 'openai') void dialogueProviderStatus(true);
+        ui.bumpPulse();
+      }
       return;
     }
     if (isBound('speed1', e.code)) ui.setSpeed(1);
@@ -246,8 +271,16 @@ export function installInput(): void {
         } else {
           const acted = playerGather(world);
           if (!acted) {
-            const exchange = playerTalk(world);
-            if (exchange) ui.openDialogue(exchange);
+            // The general RPG conversation. Replaces the old one-line exchange:
+            // someone speaks, Kai answers, and it holds them in place while it
+            // lasts. `playerTalk` still runs the simulation side of meeting
+            // somebody, so the relationship and the memory are formed exactly
+            // as before.
+            const partner = conversationPartner(world);
+            if (partner) {
+              playerTalk(world);
+              if (beginConversation(world, partner)) ui.bumpPulse();
+            }
           }
         }
       }

@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { initWorld } from './sim';
 import { applyDevLoadout, devMode } from './sim/dev';
+import { setProviderMode, setRemoteProvider } from './sim/conversation';
+import { OpenAIDialogueProvider } from './game/openaiDialogue';
 import { installDebugBridge } from './game/debugBridge';
 import { installInput } from './game/input';
 import { startLoop } from './game/loop';
@@ -27,6 +29,13 @@ if (!localStorage.getItem('eden.seenHelp')) {
   localStorage.setItem('eden.seenHelp', '1');
   useUI.getState().setHelpOpen(true);
 }
+
+// The remote dialogue provider is installed, not imported by the simulation —
+// nothing in src/sim may depend on the network. Which one is actually used is
+// decided by the Developer Mode switch; the default is always local, so a build
+// with no server behind it behaves exactly as it did before.
+setRemoteProvider(new OpenAIDialogueProvider());
+setProviderMode('local');
 
 installInput();
 installDebugBridge();

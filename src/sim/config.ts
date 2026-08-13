@@ -538,6 +538,37 @@ export const BLASTER = {
 } as const;
 
 /**
+ * Conversation.
+ *
+ * The caps are the interesting part. Every one of them bounds what leaves the
+ * game: how many memories a settler may mention, how many facts they may draw
+ * on, how long a line may be. They exist so a request stays small, cheap and
+ * fast, and so a text generator cannot pad its way into saying something the
+ * simulation never agreed to.
+ */
+export const DIALOGUE = {
+  /** Highest-relevance memories included in a request. */
+  maxMemories: 6,
+  /** Places the settler has personally visited that may be mentioned. */
+  maxKnownPlaces: 4,
+  /** Total world facts, including the places. */
+  maxKnownFacts: 6,
+  minReplies: 2,
+  maxReplies: 4,
+  /** Anything longer than this is a model rambling, and is rejected. */
+  maxLineChars: 400,
+  /**
+   * How long the game will wait for a remote turn before speaking for itself.
+   *
+   * Short on purpose. A conversation that hangs is worse than a conversation
+   * that is slightly less expressive, and the local provider is always there.
+   */
+  requestTimeoutMs: 6000,
+  /** Turns of a single conversation kept for the bounded memory write. */
+  maxTurnsRemembered: 8,
+} as const;
+
+/**
  * THE SIGNAL — Gate 2A's mission tuning.
  *
  * The distances are the design. Close enough that the walk is a journey rather

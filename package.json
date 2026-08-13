@@ -3,13 +3,15 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "EDEN — an interactive artificial-life and civilization simulation experienced from inside the world.",
+  "description": "EDEN \u2014 an interactive artificial-life and civilization simulation experienced from inside the world.",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev:client": "vite",
+    "dev:dialogue": "node --env-file-if-exists=.env server/dialogue.mjs"
   },
   "dependencies": {
     "@react-three/drei": "9.114.3",
