@@ -19,6 +19,9 @@ import * as identify from '../sim/identify';
 import * as species from '../sim/species';
 import * as player from '../sim/player';
 import * as course from '../sim/course';
+import * as dev from '../sim/dev';
+import * as jetpack from '../sim/jetpack';
+import * as blaster from '../sim/blaster';
 import * as bindings from './bindings';
 import { getInteractions, updatePlayer } from '../sim/player';
 import { simTick } from '../sim/simulation';
@@ -85,6 +88,9 @@ export function installDebugBridge(): void {
     player,
     course,
     bindings,
+    dev,
+    jetpack,
+    blaster,
     creator,
     goals,
     rel,

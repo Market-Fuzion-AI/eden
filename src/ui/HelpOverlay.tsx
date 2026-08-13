@@ -7,6 +7,7 @@ import {
   type Sensitivity,
 } from '../game/camera';
 import { keyLabel } from '../game/bindings';
+import { getWorld } from '../sim';
 import { useUI } from '../state/store';
 
 /**
@@ -36,6 +37,18 @@ const CAMERA: [string, string][] = [
   ['Trackpad swipe', 'Look around — optional, the keyboard does everything'],
 ];
 
+const JETPACK_ROWS: [string, string][] = [
+  ['Space (airborne)', 'Engage the jetpack — press again after a jump'],
+  ['Hold Space', 'Keep thrusting while fuel lasts'],
+];
+
+const FIGHT: [string, string][] = [
+  [`${keyLabel('selectBlade')}  /  ${keyLabel('selectBlaster')}`, 'Arc Blade / Pulse Blaster'],
+  [keyLabel('attackLight'), 'Attack — swing or fire, whichever is in hand'],
+  [keyLabel('attackHeavy'), 'Heavy swing (Arc Blade)'],
+  [keyLabel('lockOn'), 'Lock on — the blaster aims at what you lock'],
+];
+
 const WORLD: [string, string][] = [
   [keyLabel('interact'), 'Interact · gather · talk'],
   [keyLabel('creatorMode'), 'Creator Mode'],
@@ -63,6 +76,11 @@ export function HelpOverlay() {
   // local tick purely to re-render the buttons.
   const [, force] = useState(0);
   const bump = () => force((n) => n + 1);
+  // Only teach the keys Kai can actually use. Listing a jetpack he has not got
+  // is how a controls card stops being trusted.
+  const unlocks = getWorld().player.unlocks;
+  const hasJetpack = unlocks.jetpack;
+  const armed = unlocks.arcBlade || unlocks.pulseBlaster;
 
   return (
     <div className="help-overlay" onClick={() => setHelpOpen(false)}>
@@ -73,8 +91,22 @@ export function HelpOverlay() {
         <div className="help-section-title">MOVE</div>
         <Rows rows={MOVE} />
 
+        {hasJetpack && (
+          <>
+            <div className="help-section-title">JETPACK</div>
+            <Rows rows={JETPACK_ROWS} />
+          </>
+        )}
+
         <div className="help-section-title">CAMERA</div>
         <Rows rows={CAMERA} />
+
+        {armed && (
+          <>
+            <div className="help-section-title">IF SOMETHING COMES AT YOU</div>
+            <Rows rows={FIGHT} />
+          </>
+        )}
 
         <div className="help-section-title">EVERYTHING ELSE</div>
         <Rows rows={WORLD} />
@@ -142,7 +174,7 @@ export function HelpOverlay() {
           Enter Eden
         </button>
         <div className="help-more">
-          F3 QA overlay · F4 reset to the run · Q scan · J K attack · L lock on · H medkit · 1/2/3 speed · P pause
+          F3 QA overlay · F4 reset to the run · Q scan · H medkit · F offer · R ask · , . / speed · P pause
         </div>
       </div>
     </div>

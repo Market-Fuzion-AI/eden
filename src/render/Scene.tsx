@@ -7,6 +7,7 @@ import { EdenEnvironment } from './Environment';
 import { LandingSite } from './LandingSite';
 import { MistLayer } from './MistLayer';
 import { PlayerRig } from './PlayerRig';
+import { PulseShots } from './PulseShots';
 import { ScannerFX } from './ScannerFX';
 import { ResourceNodes } from './ResourceNodes';
 import { SocialLinks } from './SocialLinks';
@@ -34,6 +35,7 @@ export function Scene() {
       <MistLayer />
       <Agents />
       <Beams />
+      <PulseShots />
       <PlayerRig />
       <ScannerFX />
       {mode === 'creator' && <CreatorRig />}

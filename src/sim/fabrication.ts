@@ -66,6 +66,16 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
 
 export const MATERIAL_IDS: MaterialId[] = ['alloy', 'ore', 'crystal'];
 
+/**
+ * Every kind of salvage the player can be carrying.
+ *
+ * Enumerated for the same reason `MATERIAL_IDS` is: anything that wants to
+ * walk the player's whole inventory — the QA loadout, a save file, a HUD
+ * summary — must be able to do it from data rather than from a list somebody
+ * has to remember to update.
+ */
+export const SALVAGE_IDS: SalvageId[] = ['coreFragment'];
+
 /** The node types that yield player fabrication materials. */
 export const MATERIAL_NODE_TYPES: ResourceType[] = ['alloy', 'ore', 'crystal'];
 

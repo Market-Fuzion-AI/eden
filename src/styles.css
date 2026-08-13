@@ -1000,6 +1000,14 @@
   width: 420px;
   text-align: center;
   padding: 26px 30px;
+  /*
+   * The card grows as Kai earns things — a jetpack section, a combat section —
+   * and on a laptop it outgrew the window, taking the "Enter Eden" button off
+   * the bottom of the screen with it. Bounded and scrollable, so no amount of
+   * future equipment can put the way out of this screen out of reach.
+   */
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
 }
 .help-sub {
   color: var(--text-dim);
@@ -1087,6 +1095,41 @@
   margin: 6px 0;
 }
 .debug-note { opacity: 0.5; }
+
+/* --- developer mode / loadout ------------------------------------------- */
+
+/*
+ * The DEV MODE chip is deliberately the one warm-bordered thing in the corner.
+ * A build that hands the player a full inventory must never be mistakable for
+ * the real game, and the tester should be able to tell which one they are in
+ * from a screenshot alone.
+ */
+.hint-chip.dev {
+  color: var(--warn);
+  border-color: rgba(255, 176, 63, 0.55);
+  letter-spacing: 0.14em;
+}
+.bar-fill.jet { background: linear-gradient(90deg, #4a9de0, #8fd6ff); }
+.bar-fill.jet.burning { background: linear-gradient(90deg, #ffa03f, #ffe08a); }
+.bar-fill.cell { background: linear-gradient(90deg, #3fc9ff, #9ff2ff); }
+.weapon-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.weapon-chip {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  border: 1px solid rgba(126, 151, 163, 0.3);
+  border-radius: 3px;
+  color: var(--text-dim);
+}
+.weapon-chip.active {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+  background: rgba(89, 214, 230, 0.08);
+}
 
 /* Scrollbars */
 ::-webkit-scrollbar { width: 8px; }

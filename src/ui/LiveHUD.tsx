@@ -7,6 +7,9 @@ import { regionAt, regionShortName } from '../sim/regions';
 import { identifyFocus } from '../sim/identify';
 import { getInteractions, harvestProgress } from '../sim/player';
 import { MATERIALS } from '../sim/fabrication';
+import { availableWeapons, blasterChargeFrac } from '../sim/blaster';
+import { jetpackFuelFrac } from '../sim/jetpack';
+import { devMode } from '../sim/dev';
 import { scanCooldownRemaining, scanWouldSpendCell } from '../sim/scanner';
 import type { MaterialId } from '../sim/types';
 import { useUI } from '../state/store';
@@ -54,6 +57,10 @@ export function LiveHUD() {
   const harvesting = harvestProgress(world);
   const scanCooldown = scanCooldownRemaining(world);
   const scanCell = scanWouldSpendCell(world);
+  const jetFuel = jetpackFuelFrac(world);
+  const blasterCharge = blasterChargeFrac(world);
+  const weapons = availableWeapons(world);
+  const dev = devMode();
 
   // Combat state, read straight off the simulation. Nothing here is owned by
   // React — the HUD is a view of the fight, not a participant in it.
@@ -120,6 +127,9 @@ export function LiveHUD() {
         {paused && <div className="hint-chip warn">PAUSED</div>}
         {!paused && speed !== 1 && <div className="hint-chip">{speed}×</div>}
         <div className="hint-chip dim">TAB Creator · ESC Help</div>
+        {/* Developer Mode is marked, quietly and always. A build that hands the
+            player a full inventory must never be mistakable for the real one. */}
+        {dev && <div className="hint-chip dev">DEV MODE</div>}
       </div>
 
       {ident && (
@@ -178,6 +188,33 @@ export function LiveHUD() {
               <div className="bar-fill sta" style={{ width: `${p.stamina}%` }} />
             </div>
           </div>
+          {/* Fuel appears only once the pack exists, and goes quiet again when
+              it is full and unused — a meter that is always at 100% is noise. */}
+          {p.unlocks.jetpack && (jetFuel < 0.999 || p.jetpackOn) && (
+            <div className={`vital-row ${p.jetpackOn ? 'prominent' : ''}`}>
+              <span className="vital-label">JET</span>
+              <div className="bar">
+                <div className={`bar-fill jet ${p.jetpackOn ? 'burning' : ''}`} style={{ width: `${jetFuel * 100}%` }} />
+              </div>
+            </div>
+          )}
+          {p.equipped === 'pulseBlaster' && (
+            <div className="vital-row">
+              <span className="vital-label">CEL</span>
+              <div className="bar">
+                <div className="bar-fill cell" style={{ width: `${blasterCharge * 100}%` }} />
+              </div>
+            </div>
+          )}
+          {weapons.length > 1 && (
+            <div className="weapon-row">
+              {weapons.map((w, i) => (
+                <span key={w} className={`weapon-chip ${p.equipped === w ? 'active' : ''}`}>
+                  {i + 1} · {w === 'arcBlade' ? 'Arc Blade' : 'Pulse Blaster'}
+                </span>
+              ))}
+            </div>
+          )}
           {p.salvage.coreFragment > 0 && (
             <div className="mat-row">
               <span className="mat-chip synth">◈ Core Fragment × {p.salvage.coreFragment}</span>

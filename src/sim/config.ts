@@ -458,6 +458,98 @@ export const LIGHT_CHAIN = [
   { windup: 0.18, active: 0.2, recover: 0.4, damage: 38, range: 3.4, arcCos: 0.15, stagger: 34 },
 ] as const;
 
+/**
+ * Pathfinder Jetpack.
+ *
+ * Assisted traversal, not flight. The shape of the fantasy is jump → boost →
+ * a long, controlled arc → land: enough to cross a river, clear a gap, save a
+ * jump that fell short, or skip a stretch of walking that has nothing in it.
+ *
+ * Two numbers keep it from becoming free flight. `riseCap` bounds how fast
+ * thrust can lift you, so holding it does not climb forever at speed; and
+ * `rechargeAir` is zero, so a hover cannot be sustained by tapping — once the
+ * tank is dry the only way to fill it is to be on the ground. Together they
+ * make altitude something you spend rather than something you have.
+ *
+ * Tuned generously on purpose: Developer Mode exists to make QA fast, and
+ * Player Mode can be tightened later.
+ */
+export const JETPACK = {
+  maxFuel: 100,
+  /** Upward acceleration while thrusting, m/s². Fights gravity, beats it. */
+  thrust: 30,
+  /** Ceiling on climb rate — thrust stops adding speed past this. */
+  riseCap: 5.2,
+  /** Fuel per second while thrusting: ~4.2 s of continuous burn from full. */
+  drain: 24,
+  /** Fuel per second standing on the ground. Full tank in about two seconds. */
+  rechargeGround: 48,
+  /**
+   * Fuel per second in the air. Zero, and deliberately: any air recharge at all
+   * turns a fuel meter into a duty cycle, and a duty cycle is a hover.
+   */
+  rechargeAir: 0,
+  /** Grounded delay before recharge begins, so a bunny-hop cannot refill. */
+  rechargeDelay: 0.35,
+  /** Below this the jetpack will not light. Stops a useless one-frame cough. */
+  minToEngage: 6,
+  /** Gravity multiplier while thrusting — the burn feels like it is lifting. */
+  thrustGravityScale: 0.55,
+} as const;
+
+/**
+ * Pathfinder Pulse Blaster.
+ *
+ * The minimum honest ranged weapon: one projectile, one target, a charge meter
+ * that refills itself. It exists to prove EDEN's third-person ranged foundation
+ * works — that a shot can be aimed, travel, hit the thing it was aimed at, and
+ * read as a hit — and nothing more. No rarity, no upgrades, no ammo types.
+ *
+ * The shot travels rather than hitting instantly. That is a deliberate choice
+ * over the Warden's hitscan beam: a visible bolt is readable at a glance, and a
+ * projectile that stops at the first body it touches cannot rake a crowd.
+ */
+export const BLASTER = {
+  damage: 17,
+  stagger: 9,
+  /** Seconds between shots. */
+  cooldown: 0.28,
+  /** Metres per second. Fast enough to feel like energy, slow enough to see. */
+  speed: 46,
+  range: 42,
+  /** How close a bolt must pass to a body to count as a hit. */
+  hitRadius: 0.85,
+  maxCharge: 100,
+  /** Charge per shot: twelve shots from full. */
+  costPerShot: 8,
+  /** Charge per second, once the recovery delay has passed. */
+  recharge: 14,
+  /** Idle time after firing before the cell starts recovering. */
+  rechargeDelay: 1.1,
+  /**
+   * Aim assist cone, in radians from Emerson's facing. A keyboard player has no
+   * fine aim, so a hostile already in front of him is what he meant to shoot.
+   * Narrow enough that it cannot pick a target he is not looking at.
+   */
+  assistCos: 0.86,
+  assistRange: 34,
+  /** Bolts alive at once. A bound, not a budget — firing is rate-limited. */
+  maxShots: 24,
+} as const;
+
+/**
+ * Developer Mode QA loadout amounts. See `sim/dev.ts` for what this is for and
+ * what it is forbidden from touching.
+ */
+export const DEV = {
+  /** Units of every material, salvage type and glowberry. */
+  stack: 100,
+  /** Consumables. */
+  items: 10,
+  jetpackFuelStart: JETPACK.maxFuel,
+  blasterChargeStart: BLASTER.maxCharge,
+} as const;
+
 export const COMBAT = {
   /** Light chain steps, 1-based via `LIGHT_CHAIN[chain - 1]`. */
   chain: LIGHT_CHAIN,

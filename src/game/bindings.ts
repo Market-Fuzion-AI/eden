@@ -34,10 +34,12 @@ export type BindingId =
   | 'medkit'
   | 'offer'
   | 'ask'
-  // --- combat (frozen for Gate 1, still bound) ------------------------------
+  // --- combat ---------------------------------------------------------------
   | 'attackLight'
   | 'attackHeavy'
   | 'lockOn'
+  | 'selectBlade'
+  | 'selectBlaster'
   // --- meta -----------------------------------------------------------------
   | 'creatorMode'
   | 'help'
@@ -90,18 +92,31 @@ export const BINDINGS: Binding[] = [
   { id: 'offer', codes: ['KeyF'], label: 'Offer a glowberry', group: 'world' },
   { id: 'ask', codes: ['KeyR'], label: 'Ask permission', group: 'world' },
 
-  { id: 'attackLight', codes: ['KeyJ'], label: 'Light attack', group: 'combat' },
-  { id: 'attackHeavy', codes: ['KeyK'], label: 'Heavy attack', group: 'combat' },
+  // J is "primary attack", not "swing": it swings the blade or fires the
+  // blaster depending on what is in Kai's hand. One binding, because from the
+  // player's side it is one intention.
+  { id: 'attackLight', codes: ['KeyJ'], label: 'Attack · fire', group: 'combat' },
+  { id: 'attackHeavy', codes: ['KeyK'], label: 'Heavy attack (blade)', group: 'combat' },
   { id: 'lockOn', codes: ['KeyL'], label: 'Lock on', group: 'combat' },
+  { id: 'selectBlade', codes: ['Digit1'], label: 'Arc Blade', group: 'combat' },
+  { id: 'selectBlaster', codes: ['Digit2'], label: 'Pulse Blaster', group: 'combat' },
 
   { id: 'creatorMode', codes: ['Tab'], label: 'Creator Mode', group: 'meta' },
   { id: 'help', codes: ['Escape'], label: 'Help & settings', group: 'meta' },
   { id: 'qaOverlay', codes: ['F3'], label: 'QA overlay', group: 'meta' },
   { id: 'qaReset', codes: ['F4'], label: 'Reset to the 3Cs start', group: 'meta' },
   { id: 'pause', codes: ['KeyP'], label: 'Pause', group: null },
-  { id: 'speed1', codes: ['Digit1'], label: 'Speed 1×', group: null },
-  { id: 'speed2', codes: ['Digit2'], label: 'Speed 5×', group: null },
-  { id: 'speed3', codes: ['Digit3'], label: 'Speed 20×', group: null },
+  // Sim speed moved off the number row when the weapon slots arrived.
+  //
+  // 1 and 2 selecting a weapon is what a third-person action game means by
+  // those keys, and sim speed is an observer control that also has buttons in
+  // Creator Mode. Comma/period/slash reads as a speed ladder and collides with
+  // nothing. The alternative — making the digits mean different things in
+  // different modes — is exactly the scattered, context-dependent binding this
+  // table exists to prevent.
+  { id: 'speed1', codes: ['Comma'], label: 'Speed 1×', group: null },
+  { id: 'speed2', codes: ['Period'], label: 'Speed 5×', group: null },
+  { id: 'speed3', codes: ['Slash'], label: 'Speed 20×', group: null },
 ];
 
 const BY_ID = new Map<BindingId, Binding>(BINDINGS.map((b) => [b.id, b]));
@@ -135,6 +150,9 @@ export function keyLabel(id: BindingId): string {
     ArrowDown: '↓',
     BracketLeft: '[',
     BracketRight: ']',
+    Comma: ',',
+    Period: '.',
+    Slash: '/',
     Escape: 'Esc',
     Tab: 'Tab',
   };

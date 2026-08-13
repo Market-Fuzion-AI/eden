@@ -89,6 +89,26 @@ describe('the bindings table', () => {
     for (const id of essential) expect(binding(id).codes.length).toBeGreaterThan(0);
   });
 
+  it('gives the number row to the weapon slots, not to sim speed', () => {
+    // 1 and 2 mean "which weapon" in a third-person action game. Sim speed is
+    // an observer control and moved off the digits when the blaster arrived;
+    // the alternative was digits meaning different things in different modes,
+    // which is the scattered binding this table exists to prevent.
+    expect(binding('selectBlade').codes).toEqual(['Digit1']);
+    expect(binding('selectBlaster').codes).toEqual(['Digit2']);
+    for (const id of ['speed1', 'speed2', 'speed3'] as BindingId[]) {
+      for (const code of binding(id).codes) expect(code.startsWith('Digit')).toBe(false);
+    }
+  });
+
+  it('keeps every combat action reachable from the keyboard', () => {
+    // Ranged combat has to be playable with no mouse: something to fire with,
+    // something to aim with, and a way to change weapon.
+    for (const id of ['attackLight', 'attackHeavy', 'lockOn', 'selectBlade', 'selectBlaster'] as BindingId[]) {
+      expect(binding(id).codes.length, id).toBeGreaterThan(0);
+    }
+  });
+
   it('answers both shift keys, so neither hand is privileged', () => {
     expect(held('sprint', new Set(['ShiftLeft']))).toBe(true);
     expect(held('sprint', new Set(['ShiftRight']))).toBe(true);

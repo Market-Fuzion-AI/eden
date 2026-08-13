@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { initWorld } from './sim';
+import { applyDevLoadout, devMode } from './sim/dev';
 import { installDebugBridge } from './game/debugBridge';
 import { installInput } from './game/input';
 import { startLoop } from './game/loop';
@@ -13,8 +14,13 @@ const stored = localStorage.getItem('eden.seed');
 const seed = stored ? Number(stored) : Math.floor(Math.random() * 1_000_000);
 localStorage.setItem('eden.seed', String(seed));
 
-initWorld(seed);
+const world = initWorld(seed);
 useUI.getState().setSeed(seed);
+
+// Developer Mode, if it is on. The check lives here rather than inside the
+// grant so Player Mode is the absence of a call, not a branch buried in the
+// simulation — see `sim/dev.ts`.
+if (devMode()) applyDevLoadout(world);
 
 // First visit: show the compact control card once, then never again.
 if (!localStorage.getItem('eden.seenHelp')) {

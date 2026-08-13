@@ -13,6 +13,8 @@ import {
   toggleLock,
   type StrikeAttempt,
 } from './combat';
+import { blasterTick, firePulse, shotsTick, type FireAttempt } from './blaster';
+import { jetpackTick } from './jetpack';
 import { buildExchange, type DialogueExchange } from './dialogue';
 import { placeName } from './landmarks';
 import { remember } from './memory';
@@ -38,6 +40,18 @@ export interface PlayerInput {
   moveZ: number; // -1..1 forward: +1 = away from the camera
   sprint: boolean;
   jump: boolean;
+  /**
+   * A fresh jump press since the last update, latched from the keyboard event
+   * rather than inferred from the held state.
+   *
+   * Inferring the edge from `jump && !jumpHeld` is correct at sixty frames a
+   * second and wrong at two: a tap-release-tap faster than the frame interval
+   * is sampled as one continuous hold, and the second press — the one that
+   * lights the jetpack — is never seen at all. Events do not miss; frames do.
+   *
+   * Optional so headless probes can leave it out and get the old inference.
+   */
+  jumpPressed?: boolean;
   camYaw: number;
 }
 
@@ -110,6 +124,11 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
 
   // Combat advances in real time alongside movement, never at the simulation's
   // speed multiplier — a strike must not get faster because the world does.
+  // Ranged combat advances on the same real-time clock as melee: a bolt must
+  // not fly faster because the valley is being fast-forwarded.
+  blasterTick(world, dt);
+  shotsTick(world, dt);
+
   const hits = strikeTick(world, dt);
   for (const h of hits) {
     world.flags.lastHitAt = world.timeSec;
@@ -325,29 +344,43 @@ export function updatePlayer(world: World, dt: number, input: PlayerInput): void
   }
   if (p.onGround) p.coyoteUntil = p.clock + PLAYER.coyoteTime;
 
-  const pressedJump = input.jump && !p.jumpHeld;
+  const pressedJump = Boolean(input.jumpPressed) || (input.jump && !p.jumpHeld);
   p.jumpHeld = input.jump;
   if (pressedJump) p.jumpBufferedUntil = p.clock + PLAYER.jumpBuffer;
 
   const mayJump = p.onGround || p.clock < p.coyoteUntil;
+  // A ground jump consumes the press. Only a press that was *not* spent on a
+  // jump can reach the jetpack, which is what makes "Space, then Space again"
+  // read as two separate decisions rather than one key doing two things at once.
+  let jumpPressAvailable = pressedJump;
   if (p.clock < p.jumpBufferedUntil && mayJump && !p.dodgeTimer) {
     p.vy = PLAYER.jumpVel;
     p.onGround = false;
     p.coyoteUntil = 0;
     p.jumpBufferedUntil = 0;
+    p.jetpackOn = false;
+    jumpPressAvailable = false;
     world.flags.lastJumpAt = p.clock;
   }
 
+  // The jetpack runs before gravity and reports back how heavy this step is.
+  const jet = jetpackTick(world, dt, { jump: input.jump, pressedJump: jumpPressAvailable });
+  if (jet.thrusting) world.flags.lastThrustAt = p.clock;
+
   if (!p.onGround) {
-    // Releasing early clamps the climb. Held, the jump goes to full height.
-    if (p.vy > PLAYER.jumpCutVel && !input.jump) p.vy = PLAYER.jumpCutVel;
-    const g = PLAYER.gravity * (p.vy < 0 ? PLAYER.fallGravityScale : 1);
+    // Releasing early clamps the climb. Held, the jump goes to full height —
+    // but never while the pack is lit, or the clamp would fight the thrust the
+    // same key is asking for.
+    if (!jet.thrusting && p.vy > PLAYER.jumpCutVel && !input.jump) p.vy = PLAYER.jumpCutVel;
+    const g = PLAYER.gravity * (p.vy < 0 ? PLAYER.fallGravityScale : 1) * jet.gravityScale;
     p.vy -= g * dt;
     p.y += p.vy * dt;
     if (p.y <= ground) {
       p.y = ground;
       p.vy = 0;
       p.onGround = true;
+      p.jetpackOn = false;
+      p.jetpackIdle = 0;
       world.flags.lastLandAt = p.clock;
     }
   } else {
@@ -378,6 +411,26 @@ export function playerStrike(world: World, kind: 'light' | 'heavy'): StrikeAttem
     );
   }
   return result;
+}
+
+/**
+ * The primary attack, whatever is in Kai's hand.
+ *
+ * One entry point on purpose. The input layer knows "the player pressed
+ * attack"; it must never be the thing that knows a blaster fires and a blade
+ * swings, or every future weapon becomes another branch in a key handler.
+ */
+export function playerAttack(world: World): StrikeAttempt | FireAttempt {
+  const p = world.player;
+  if (p.equipped === 'pulseBlaster') {
+    const shot = firePulse(world);
+    if (!shot.ok && shot.reason === 'no-charge' && !world.flags.blasterEmptyHinted) {
+      world.flags.blasterEmptyHinted = true;
+      world.ariQueue.push('Blaster cell is flat, Emerson. Give it a moment — it recovers on its own.');
+    }
+    return shot;
+  }
+  return playerStrike(world, 'light');
 }
 
 /**

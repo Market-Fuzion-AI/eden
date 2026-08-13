@@ -3,6 +3,7 @@ import { ariCreatorToggle } from '../sim/ari';
 import {
   fabricatorAtHand,
   playerAskPermission,
+  playerAttack,
   playerDodge,
   playerGather,
   playerOfferFood,
@@ -10,12 +11,13 @@ import {
   playerTalk,
   playerToggleLock,
 } from '../sim/player';
+import { selectWeapon } from '../sim/blaster';
 import { useMedkit } from '../sim/fabrication';
 import { performScan } from '../sim/scanner';
 import { useUI } from '../state/store';
 import { addLook, requestRecenter, type KeyLookInput } from './camera';
 import { held, isBound } from './bindings';
-import { resetToCourseStart } from '../sim/course';
+import { qaReset } from '../sim/dev';
 import { primeAudio } from './audio';
 
 /**
@@ -41,7 +43,24 @@ export const inputState = {
  * no mouse had four keys that walked and none that turned — the single reason
  * keyboard-only play was impossible. They are the camera now; see `bindings.ts`.
  */
-export function readMoveAxes(): { moveX: number; moveZ: number; sprint: boolean; jump: boolean } {
+/**
+ * Jump presses seen since the loop last read them.
+ *
+ * Latched here, in the event handler, because a key edge belongs to the event
+ * that produced it. Deriving it from the held state once per frame loses any
+ * press-and-release that fits between two frames — which at the one or two
+ * frames a second a software renderer manages is most of them, and the second
+ * press of a jetpack activation in particular.
+ */
+let jumpPresses = 0;
+
+export function readMoveAxes(): {
+  moveX: number;
+  moveZ: number;
+  sprint: boolean;
+  jump: boolean;
+  jumpPressed: boolean;
+} {
   const k = inputState.keys;
   let moveX = 0;
   let moveZ = 0;
@@ -54,7 +73,10 @@ export function readMoveAxes(): { moveX: number; moveZ: number; sprint: boolean;
     moveX /= mag;
     moveZ /= mag;
   }
-  return { moveX, moveZ, sprint: held('sprint', k), jump: held('jump', k) };
+  // Consumed on read: each press is delivered to exactly one update.
+  const jumpPressed = jumpPresses > 0;
+  jumpPresses = 0;
+  return { moveX, moveZ, sprint: held('sprint', k), jump: held('jump', k), jumpPressed };
 }
 
 /** Arrow-key camera state, read by the camera each frame. */
@@ -154,7 +176,9 @@ export function installInput(): void {
     // without reloading, so a traversal run can be repeated immediately.
     if (isBound('qaReset', e.code)) {
       e.preventDefault();
-      resetToCourseStart(getWorld());
+      // In Developer Mode this also tops the QA loadout back up — a reset that
+      // leaves the tester re-gathering materials is a reset nobody presses.
+      qaReset(getWorld());
       requestRecenter();
       return;
     }
@@ -220,13 +244,25 @@ export function installInput(): void {
       // Combat. Keyboard alternatives to the mouse buttons, because a trackpad
       // cannot hold a look-drag and click at the same time — every combat
       // action must be reachable from the left hand alone.
-      if (isBound('attackLight', e.code) && !inputState.keys.has(e.code)) playerStrike(getWorld(), 'light');
+      //
+      // J is the primary attack for whatever is equipped; `playerAttack` is the
+      // one place that decision lives, so adding a weapon never means adding a
+      // key handler here.
+      if (isBound('attackLight', e.code) && !inputState.keys.has(e.code)) playerAttack(getWorld());
       if (isBound('attackHeavy', e.code) && !inputState.keys.has(e.code)) playerStrike(getWorld(), 'heavy');
       if (isBound('lockOn', e.code) && !inputState.keys.has(e.code)) playerToggleLock(getWorld());
+      if (isBound('selectBlade', e.code)) selectWeapon(getWorld(), 'arcBlade');
+      if (isBound('selectBlaster', e.code)) selectWeapon(getWorld(), 'pulseBlaster');
       if (isBound('jump', e.code)) {
         // Space is Jump again. Never let it scroll the page under the canvas.
         e.preventDefault();
-        if (!inputState.keys.has(e.code)) inputTelemetry.lastJumpAt = performance.now();
+        // `repeat` filters the operating system's auto-repeat, which is a held
+        // key rather than a new decision. A genuine second press is what lights
+        // the jetpack, and it is latched here so no frame rate can lose it.
+        if (!e.repeat && !inputState.keys.has(e.code)) {
+          jumpPresses++;
+          inputTelemetry.lastJumpAt = performance.now();
+        }
       }
       if (isBound('offer', e.code)) playerOfferFood(getWorld());
       if (isBound('ask', e.code)) {
@@ -269,6 +305,8 @@ export function installInput(): void {
   window.addEventListener('blur', () => {
     inputState.keys.clear();
     shiftDownAt = 0;
+    // A press the player never got to act on must not fire when they come back.
+    jumpPresses = 0;
   });
 
   window.addEventListener('mousemove', (e) => {
@@ -346,7 +384,9 @@ export function installCanvasLook(canvas: HTMLElement): () => void {
     // A press that barely moved was a click, not a look. Only then does it
     // count as an action — so turning the camera never swings a fist.
     if (travelled < 6) {
-      if (e.button === 0) playerStrike(getWorld(), 'light');
+      // Same routing as the keyboard: left button is the primary attack for
+      // whatever is equipped, right button is the blade's heavy swing.
+      if (e.button === 0) playerAttack(getWorld());
       if (e.button === 2) playerStrike(getWorld(), 'heavy');
     }
   };

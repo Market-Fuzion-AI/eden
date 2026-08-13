@@ -1,4 +1,4 @@
-import { LUMI, START_TIME, THREAT } from './config';
+import { BLASTER, JETPACK, LUMI, START_TIME, THREAT } from './config';
 import { buildCourse, distToCourse, propTop } from './course';
 import { armThreat } from './threats';
 import { makeRng, type Rng } from './rng';
@@ -680,6 +680,12 @@ export function createWorld(seed: number): World {
     coyoteUntil: 0,
     jumpBufferedUntil: 0,
     jumpHeld: false,
+    jetpackFuel: JETPACK.maxFuel,
+    jetpackOn: false,
+    jetpackIdle: 0,
+    blasterCharge: BLASTER.maxCharge,
+    blasterCooldown: 0,
+    blasterIdle: 0,
     health: 100,
     stamina: 100,
     berries: 0,
@@ -696,7 +702,7 @@ export function createWorld(seed: number): World {
     // built without leaving Human Landing, which is the whole point.
     materials: { alloy: 0, ore: 0, crystal: 0 },
     items: { medkit: 0, energyCell: 0 },
-    unlocks: { scanner: false, arcBlade: false, capacitor: false },
+    unlocks: { scanner: false, arcBlade: false, capacitor: false, jetpack: false, pulseBlaster: false },
     harvest: null,
     scan: { lastAt: -9999, activeUntil: -9999, pulseStartedAt: -9999, radius: 0, nodeIds: [] },
     equipped: 'none',
@@ -736,6 +742,7 @@ export function createWorld(seed: number): World {
     pickups: [],
     pickupsSalvage: [],
     beams: [],
+    shots: [],
     landmarkNameAt: (p: V2) => placeName(p),
     camps: [
       { speciesId: 'human', label: 'Human camp', pos: { ...ANCHORS.humanCamp } },

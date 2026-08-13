@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { getWorld } from '../sim';
 import { COMBAT } from '../sim/config';
 import { inCombat, lockedTarget, specFor } from '../sim/combat';
+import { blasterChargeFrac } from '../sim/blaster';
 import { CREATURE_SPECIES_BY_ID } from '../sim/species';
 import { heightAt } from '../sim/terrain';
 import { useUI } from '../state/store';
@@ -114,6 +115,48 @@ export function PlayerRig() {
     pivot.add(accent);
     return { bladeGroup: root, bladePivot: { current: pivot }, capacitorGlow: accent };
   }, []);
+  /**
+   * The Pulse Blaster, greybox.
+   *
+   * Built to the same rule as the blade — pointing along its own axis, pivoted
+   * at the grip — so it reads as held rather than as an object floating beside
+   * Kai. Deliberately plain: this ticket is proving the ranged foundation, not
+   * designing a weapon. Its one job is that a tester can tell at a glance which
+   * weapon is in his hand, which the HUD chip alone could not do.
+   */
+  const { blasterGroup, blasterPivot, muzzleGlow } = useMemo(() => {
+    const root = new THREE.Group();
+    const pivot = new THREE.Group();
+    root.add(pivot);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.11, 0.36), toonMat('#464e5e'));
+    body.position.z = 0.1;
+    pivot.add(body);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.19, 0.08), toonMat('#313744'));
+    grip.position.set(0, -0.13, -0.02);
+    grip.rotation.x = -0.25;
+    pivot.add(grip);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.26, 8), toonMat('#8f96a8'));
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.z = 0.34;
+    pivot.add(barrel);
+    // The emitter, lit like the bolts it throws, so the business end is obvious.
+    const emitter = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.062, 0),
+      new THREE.MeshBasicMaterial({ color: '#9ff2ff', transparent: true, opacity: 0.9 }),
+    );
+    emitter.position.z = 0.48;
+    pivot.add(emitter);
+    const cell = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.05, 0.12),
+      new THREE.MeshBasicMaterial({ color: '#3fc9ff', transparent: true, opacity: 0.85 }),
+    );
+    cell.position.set(0, 0.08, 0.02);
+    pivot.add(cell);
+    return { blasterGroup: root, blasterPivot: { current: pivot }, muzzleGlow: emitter };
+  }, []);
+  /** 0..1 — how far the blaster has come up out of its stow. */
+  const blasterDeploy = useRef(0);
+
   const camTarget = useMemo(() => new THREE.Vector3(), []);
   const camPos = useMemo(() => new THREE.Vector3(), []);
   /** Damped look velocity, so trackpad bursts read as smooth camera motion. */
@@ -251,6 +294,31 @@ export function PlayerRig() {
         const pulse = 0.55 + Math.sin(state.clock.elapsedTime * 3.4) * 0.2 + engage * 0.5;
         (capacitorGlow.material as THREE.MeshBasicMaterial).opacity = Math.min(1, pulse);
       }
+    }
+
+    // --- Pulse Blaster -----------------------------------------------------
+    // Unlike the blade this stays out whenever it is selected. A weapon you
+    // chose with a key press should be visible for as long as that choice
+    // stands, or the tester cannot tell the switch worked.
+    const holdingBlaster = p.equipped === 'pulseBlaster';
+    blasterDeploy.current += ((holdingBlaster ? 1 : 0) - blasterDeploy.current) * Math.min(1, dt * 9);
+    blasterGroup.visible = holdingBlaster && blasterDeploy.current > 0.03;
+    if (blasterGroup.visible) {
+      const stow = 1 - blasterDeploy.current;
+      blasterGroup.position.set(p.pos.x, p.y, p.pos.z);
+      blasterGroup.rotation.set(0, p.heading, 0);
+      // Right hand, brought up across the body as it deploys.
+      blasterPivot.current.position.set(0.3, 1.02 - stow * 0.2, 0.16 - stow * 0.3);
+      // Raised toward whatever is being aimed at while a target is held, and
+      // carried low the rest of the time.
+      const aiming = p.lockedId !== null || inCombat(world);
+      blasterPivot.current.rotation.set(stow * -0.9 + (aiming ? 0.02 : -0.35), -0.06, aiming ? 0 : -0.2);
+      // The emitter brightens as the cell recovers and flares on a shot.
+      const sinceShot = p.clock - ((world.flags.lastShotAt as number) ?? -99);
+      const charge = 0.35 + blasterChargeFrac(world) * 0.4;
+      const flash = sinceShot < 0.12 ? 1 : 0;
+      (muzzleGlow.material as THREE.MeshBasicMaterial).opacity = Math.min(1, charge + flash);
+      muzzleGlow.scale.setScalar(1 + flash * 0.9);
     }
 
     // Swing trail. Present only during the window that can actually damage
@@ -482,6 +550,7 @@ export function PlayerRig() {
     const rigVisible = rig.group.visible && effDist > 1.9;
     rig.group.visible = rigVisible;
     if (bladeGroup.visible) bladeGroup.visible = rigVisible;
+    if (blasterGroup.visible) blasterGroup.visible = rigVisible;
 
     if (needsCamSnap.current) {
       // Coming back from the god camera: take the shot immediately rather than
@@ -501,6 +570,7 @@ export function PlayerRig() {
     <>
       <primitive object={rig.group} />
       <primitive object={bladeGroup} visible={false} />
+      <primitive object={blasterGroup} visible={false} />
       <primitive object={ghostGroup} />
       <mesh ref={slashRef} visible={false}>
         <ringGeometry args={[0.7, 1.15, 18, 1, 0, Math.PI * 0.8]} />

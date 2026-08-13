@@ -418,7 +418,30 @@ export type MaterialId = 'alloy' | 'ore' | 'crystal';
  */
 export type SalvageId = 'coreFragment';
 
-export type EquippedWeapon = 'none' | 'arcBlade';
+export type EquippedWeapon = 'none' | 'arcBlade' | 'pulseBlaster';
+
+/**
+ * A Pulse Blaster bolt in flight.
+ *
+ * Owned by the simulation and advanced on the player's real-time clock, like
+ * every other combat timing. It carries its own damage rather than reading the
+ * config at impact, so a bolt already in the air is unaffected by anything that
+ * changes behind it.
+ */
+export interface PulseShot {
+  id: string;
+  pos: V2;
+  /** Height above the ground plane, in metres. */
+  y: number;
+  /** Unit direction, fixed at the muzzle. Bolts do not steer. */
+  dir: V2;
+  /** Metres still to travel before it expires. */
+  remaining: number;
+  damage: number;
+  stagger: number;
+  /** Set on the frame it hits something, so the renderer can flash and clear. */
+  spent: boolean;
+}
 
 /** Player attack phases. Damage lands only during `active`. */
 export type StrikePhase = 'windup' | 'active' | 'recover';
@@ -808,6 +831,25 @@ export interface PlayerState {
   jumpBufferedUntil: number;
   /** Last frame's jump key state, so a press is distinguishable from a hold. */
   jumpHeld: boolean;
+  /**
+   * Jetpack state.
+   *
+   * `jetpackOn` is latched by a second Space press while airborne and cleared
+   * on release, on landing, or when the tank empties. `jetpackIdle` counts the
+   * seconds since the last burn, so a recharge delay can stop a bunny-hop from
+   * topping the tank up between jumps.
+   */
+  jetpackFuel: number;
+  jetpackOn: boolean;
+  jetpackIdle: number;
+  /**
+   * Pulse Blaster charge, and the real-time clocks that gate it. Both are on
+   * the player's own clock rather than the world's, so neither a paused valley
+   * nor a fast-forwarded one changes how quickly the weapon comes back.
+   */
+  blasterCharge: number;
+  blasterCooldown: number;
+  blasterIdle: number;
   health: number;
   stamina: number;
   berries: number;
@@ -842,7 +884,13 @@ export interface PlayerState {
    * Permanent capabilities earned through fabrication. Never revoked — an
    * emergency extraction costs materials, never a capability.
    */
-  unlocks: { scanner: boolean; arcBlade: boolean; capacitor: boolean };
+  unlocks: {
+    scanner: boolean;
+    arcBlade: boolean;
+    capacitor: boolean;
+    jetpack: boolean;
+    pulseBlaster: boolean;
+  };
   /** The gathering interaction in progress, if any. */
   harvest: HarvestAction | null;
   scan: ScanState;
@@ -922,6 +970,8 @@ export interface World {
   pickupsSalvage: { salvageId: SalvageId; amount: number; at: number }[];
   /** Warden beams currently in flight. Bounded and short-lived. */
   beams: BeamShot[];
+  /** Pulse Blaster bolts currently in flight. Bounded and short-lived. */
+  shots: PulseShot[];
   /**
    * Injected by `index.ts` so combat can name a place without importing the
    * landmark table (which would close an import cycle through worldgen).

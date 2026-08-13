@@ -5,6 +5,10 @@ import { held } from '../game/bindings';
 import { inputState, inputTelemetry } from '../game/input';
 import { moveTelemetry } from '../sim/player';
 import { standingSlope } from '../sim/course';
+import { availableWeapons, blasterChargeFrac } from '../sim/blaster';
+import { jetpackFuelFrac } from '../sim/jetpack';
+import { devMode } from '../sim/dev';
+import { MATERIAL_IDS, SALVAGE_IDS } from '../sim/fabrication';
 import { PLAYER } from '../sim/config';
 import { useUI } from '../state/store';
 
@@ -116,6 +120,67 @@ const ROWS: Row[] = [
   },
 ];
 
+/**
+ * Developer QA readouts.
+ *
+ * Split from the movement rows because they answer a different question: those
+ * say "why did that step feel wrong", these say "do I have what I need to test
+ * the next thing". Diagnostic only — none of this belongs in a player's HUD.
+ */
+const DEV_ROWS: Row[] = [
+  {
+    label: 'mode',
+    read: () => (devMode() ? 'DEVELOPER — loadout granted' : 'PLAYER — normal progression'),
+    warn: () => devMode(),
+  },
+  {
+    label: 'weapon',
+    read: () => {
+      const p = getWorld().player;
+      const name =
+        p.equipped === 'arcBlade' ? 'Arc Blade Mk I' : p.equipped === 'pulseBlaster' ? 'Pulse Blaster' : 'unarmed';
+      const held = availableWeapons(getWorld());
+      return `${name}  (held: ${held.length ? held.length : 'none'})`;
+    },
+  },
+  {
+    label: 'jetpack',
+    read: () => {
+      const p = getWorld().player;
+      if (!p.unlocks.jetpack) return 'not available';
+      const pct = Math.round(jetpackFuelFrac(getWorld()) * 100);
+      return `${pct}% fuel${p.jetpackOn ? '  BURNING' : p.onGround ? '  (recharging)' : ''}`;
+    },
+    warn: () => getWorld().player.jetpackOn,
+  },
+  {
+    label: 'cell',
+    read: () => {
+      const p = getWorld().player;
+      if (!p.unlocks.pulseBlaster) return 'no blaster';
+      return `${Math.round(blasterChargeFrac(getWorld()) * 100)}%  shots in flight ${getWorld().shots.length}`;
+    },
+  },
+  {
+    label: 'inventory',
+    read: () => {
+      const p = getWorld().player;
+      // Walked from the data tables, so a new material shows up here without
+      // anyone remembering to add it.
+      const mats = MATERIAL_IDS.map((id) => `${id.slice(0, 3)} ${p.materials[id]}`).join(' · ');
+      const salv = SALVAGE_IDS.map((id) => `${id.slice(0, 4)} ${p.salvage[id]}`).join(' · ');
+      return `${mats} · ${salv} · med ${p.items.medkit} · cell ${p.items.energyCell}`;
+    },
+  },
+  {
+    label: 'unlocks',
+    read: () => {
+      const u = getWorld().player.unlocks;
+      return (Object.keys(u) as (keyof typeof u)[]).filter((k) => u[k]).join(' ') || 'none';
+    },
+  },
+];
+
 export function DebugOverlay() {
   useUI((s) => s.uiPulse);
   const world = getWorld();
@@ -126,15 +191,18 @@ export function DebugOverlay() {
   const requested = paused ? 0 : speed;
   const lagging = !paused && perf.simRate > 0 && perf.simRate < requested * 0.8;
 
+  // Both blocks share one pool of cells: movement rows first, then the dev
+  // rows, so a single rAF pass updates everything on screen.
+  const ALL = [...ROWS, ...DEV_ROWS];
   const cells = useRef<(HTMLSpanElement | null)[]>([]);
   useEffect(() => {
     let raf = 0;
     const tick = () => {
-      for (let i = 0; i < ROWS.length; i++) {
+      for (let i = 0; i < ALL.length; i++) {
         const el = cells.current[i];
         if (!el) continue;
-        el.textContent = ROWS[i].read();
-        const warn = ROWS[i].warn?.() ?? false;
+        el.textContent = ALL[i].read();
+        const warn = ALL[i].warn?.() ?? false;
         // Toggling only on change keeps this off the style recalc path.
         if (warn !== el.classList.contains('debug-warn')) el.classList.toggle('debug-warn', warn);
       }
@@ -142,6 +210,9 @@ export function DebugOverlay() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
+    // ALL is rebuilt each render from two module-level constants; its contents
+    // never change, so the effect only ever needs to start once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -164,6 +235,21 @@ export function DebugOverlay() {
       ) : (
         <div className="debug-note">Creator Mode — movement readouts pause</div>
       )}
+      <div className="debug-sep" />
+      <div className="debug-title">LOADOUT</div>
+      <div className="debug-rows">
+        {DEV_ROWS.map((r, i) => (
+          <div key={r.label} className="debug-row">
+            <span className="debug-label">{r.label}</span>
+            <span
+              className="debug-value"
+              ref={(el) => {
+                cells.current[ROWS.length + i] = el;
+              }}
+            />
+          </div>
+        ))}
+      </div>
       <div className="debug-sep" />
       <div>fps {perf.fps} · ticks/s {perf.tps}</div>
       <div className={lagging ? 'debug-warn' : undefined}>
