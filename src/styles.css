@@ -2390,26 +2390,12 @@
   --hud-scale: 1;
 }
 
-/* The EDEN panel: clipped top-right and bottom-left, lit along the top edge. */
-.hud-surface {
-  background: var(--hud-bg);
-  border: 1px solid var(--hud-edge);
-  box-shadow: var(--hud-shadow);
-  backdrop-filter: blur(7px);
-  clip-path: polygon(
-    0 0,
-    calc(100% - var(--hud-notch)) 0,
-    100% var(--hud-notch),
-    100% 100%,
-    var(--hud-notch) 100%,
-    0 calc(100% - var(--hud-notch))
-  );
-}
+/* The EDEN panel shape, written out on each surface that wears it: clipped
+   top-right and bottom-left, translucent, lit along the edge. */
 
 /* --- Player status, top left --------------------------------------------- */
 
 .status-card {
-  composes: hud-surface;
   background: var(--hud-bg);
   border: 1px solid var(--hud-edge);
   box-shadow: var(--hud-shadow);
