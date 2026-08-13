@@ -560,10 +560,14 @@ export const DIALOGUE = {
   /**
    * How long the game will wait for a remote turn before speaking for itself.
    *
-   * Short on purpose. A conversation that hangs is worse than a conversation
+   * Short on purpose: a conversation that hangs is worse than a conversation
    * that is slightly less expressive, and the local provider is always there.
+   * But it has to clear a cold serverless function *plus* the model call, and
+   * the deployed endpoint gives up at 9s and answers honestly — this sits just
+   * above that, so a real answer arrives rather than being cut off a moment
+   * early on the first conversation after a quiet period.
    */
-  requestTimeoutMs: 6000,
+  requestTimeoutMs: 12000,
   /** Turns of a single conversation kept for the bounded memory write. */
   maxTurnsRemembered: 8,
 } as const;

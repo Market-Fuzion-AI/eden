@@ -135,7 +135,7 @@ const ROWS: Row[] = [
  * Cached rather than fetched per frame — the row is redrawn sixty times a
  * second and the answer changes at most when a developer restarts a server.
  */
-let lastStatus: { available: boolean; model: string | null } = { available: false, model: null };
+let lastStatus: { available: boolean; model: string | null } | null = null;
 let statusAsked = false;
 /** Probe the first time the overlay is opened, not at boot. */
 function refreshStatus(): void {
@@ -195,12 +195,16 @@ const DEV_ROWS: Row[] = [
       refreshStatus();
       const mode = providerMode();
       const status = lastStatus;
+      // Until the first answer comes back, say so rather than claiming there is
+      // no API — on a deployed build the probe is a real round trip, and
+      // "unavailable" flashing up before it resolves is a lie the tester acts on.
+      if (!status) return mode === 'openai' ? 'OPENAI — checking…' : 'LOCAL  (checking for API…)';
       if (mode === 'openai') {
         return status.available ? `OPENAI (${status.model ?? 'model set'})  [F6 → local]` : 'OPENAI — API UNAVAILABLE, using LOCAL  [F6]';
       }
       return `LOCAL${status.available ? '  [F6 → openai]' : '  (no API configured)'}`;
     },
-    warn: () => providerMode() === 'openai' && !lastStatus.available,
+    warn: () => providerMode() === 'openai' && lastStatus !== null && !lastStatus.available,
   },
   {
     label: 'unlocks',
