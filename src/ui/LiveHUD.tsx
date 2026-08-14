@@ -28,6 +28,28 @@ function signalWord(strength: number): string {
   return 'Barely audible';
 }
 
+/**
+ * A world yaw as a compass bearing in degrees.
+ *
+ * The two conventions in this codebase disagreed, and the compass was the one
+ * that was wrong. Moving forward at yaw θ takes Kai toward (sin θ, cos θ), and
+ * the world's own place names call −z north and +x east ("the northern
+ * reaches", "the Eastern Meadow" at x=112). So yaw 0 walks *south*, and the
+ * compass was reading it as N — a hundred and eighty degrees out, on the one
+ * instrument the player uses to find things.
+ *
+ * Both the cardinal letters and the signal marker go through here, so they
+ * cannot drift apart again.
+ */
+export function compassAngle(yaw: number): number {
+  return (((180 - (yaw * 180) / Math.PI) % 360) + 360) % 360;
+}
+
+/** The cardinal letter shown for a given yaw. Exported so it can be tested. */
+export function cardinalFor(yaw: number): string {
+  return CARDINALS[Math.round(compassAngle(yaw) / 45) % 8];
+}
+
 /** Compass marks, laid out around the eight cardinal directions. */
 const CARDINALS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const COMPASS_TICKS = Array.from({ length: 24 }, (_, i) => {
@@ -91,7 +113,7 @@ export function LiveHUD() {
   const recentLoss =
     !p.extraction && p.lastHurtAt > 0 && world.timeSec - p.lastHurtAt < 14 ? p.extractionLoss : [];
 
-  const heading = ((-inputState.camYaw * 180) / Math.PI + 360 * 4) % 360;
+  const heading = compassAngle(inputState.camYaw);
   const cardinal = CARDINALS[Math.round(heading / 45) % 8];
 
   return (
@@ -128,7 +150,7 @@ export function LiveHUD() {
                 // has. It only appears while the signal is being tracked, and
                 // it is a bearing rather than a distance — it says which way to
                 // set off, not how far to walk or exactly where to stop.
-                const deg = ((bearing * 180) / Math.PI + 360) % 360;
+                const deg = compassAngle(bearing);
                 let delta = ((deg - heading + 540) % 360) - 180;
                 if (Math.abs(delta) > 62) return null;
                 return (

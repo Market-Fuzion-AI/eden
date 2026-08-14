@@ -275,7 +275,7 @@ function localReplies(c: DialogueContext, seed: string): DialogueReply[] {
   };
 
   if (c.relationship.firstMeeting) {
-    add(`Kai. Independent Pathfinder — I do the walking so the rest of you don't have to.`, 'friendly');
+    add(`Kai. Pathfinder — I do the walking so the rest of you don't have to.`, 'friendly');
     add(`What is it you do here?`, 'curious');
     add(`How are people holding up?`, 'concerned');
     return out;

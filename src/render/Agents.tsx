@@ -6,7 +6,7 @@ import { settlerRole } from '../sim/npcContext';
 import { CREATURE_SPECIES_BY_ID } from '../sim/species';
 import { PLAYER, WORLD } from '../sim/config';
 import { groundY } from '../sim/terrain';
-import type { Entity, IntelligentSpeciesId } from '../sim/types';
+import type { Creature, Entity, IntelligentSpeciesId, World } from '../sim/types';
 import { useUI } from '../state/store';
 import { ambientChatter } from '../sim/dialogue';
 import { threatPhase } from '../sim/threats';
@@ -24,6 +24,25 @@ const BUBBLE_RANGE = 26;
  */
 const NAME_NEAR = 19;
 const NAME_FAR = 36;
+/** Danger is worth naming from further off than a colleague is. */
+const HOSTILE_NAME_NEAR = 26;
+const HOSTILE_NAME_FAR = 48;
+
+/**
+ * One word under a dangerous creature's name: what it is doing about Kai.
+ *
+ * Read from the same threat state machine that drives its behaviour, so the
+ * label cannot claim something the creature is not doing. Deliberately not a
+ * health bar — the locked-target card stays the only one of those.
+ */
+function hostileLabel(world: World, c: Creature): string {
+  const phase = threatPhase(world, c).state;
+  if (phase === 'hostile' || phase === 'windup' || phase === 'strike' || phase === 'charge' || phase === 'lunge') {
+    return 'Hostile';
+  }
+  if (phase === 'warn' || phase === 'alert') return 'Agitated';
+  return 'Dangerous';
+}
 const WHITE = new THREE.Color('#ffffff');
 
 /**
@@ -268,17 +287,29 @@ function AgentView({ id }: { id: string }) {
       bubble.visible = show;
     }
 
-    // Who this is. Only people get one — the valley's wildlife is identified by
-    // looking at it, not by a label.
+    // Who this is.
+    //
+    // People get a name and a posting. Ordinary wildlife gets nothing — a
+    // valley labelled to the horizon is a spreadsheet. The exception is the two
+    // dangerous archetypes: something that can kill Kai should be identifiable
+    // before it is close enough to do it, and it gets its species and a short
+    // warning rather than a health bar. The locked-target card remains the only
+    // floating health bar in the game.
     const plate = nameRef.current;
     if (plate) {
       let show = false;
-      if (e.kind === 'settler') {
+      const hostileDef = e.kind === 'creature' ? CREATURE_SPECIES_BY_ID[e.speciesId] : null;
+      const hostile = Boolean(hostileDef?.dangerous);
+      if (e.kind === 'settler' || hostile) {
         const dx = e.pos.x - world.player.pos.x;
         const dz = e.pos.z - world.player.pos.z;
         const d = Math.hypot(dx, dz);
-        if (d < NAME_FAR) {
-          const entry = nameplateTexture(e.name, settlerRole(e));
+        const far = hostile ? HOSTILE_NAME_FAR : NAME_FAR;
+        if (d < far) {
+          const entry =
+            e.kind === 'settler'
+              ? nameplateTexture(e.name, settlerRole(e))
+              : nameplateTexture(hostileDef!.name, hostileLabel(world, e));
           const mat = plate.material as THREE.SpriteMaterial;
           if (mat.map !== entry.tex) {
             mat.map = entry.tex;
@@ -287,8 +318,12 @@ function AgentView({ id }: { id: string }) {
           }
           // Fades out with distance, and the person Kai could actually talk to
           // right now reads brightest, so the crowd resolves into one answer.
-          const fade = 1 - Math.max(0, (d - NAME_NEAR) / (NAME_FAR - NAME_NEAR));
-          const focused = world.conversation?.settlerId === e.id || d < PLAYER.talkRange;
+          const near = hostile ? HOSTILE_NAME_NEAR : NAME_NEAR;
+          const fade = 1 - Math.max(0, (d - near) / (far - near));
+          const focused =
+            world.conversation?.settlerId === e.id ||
+            world.player.lockedId === e.id ||
+            (!hostile && d < PLAYER.talkRange);
           mat.opacity = Math.min(1, fade * (focused ? 1 : 0.82));
           plate.position.set(0, rig.height + 0.72, 0);
           show = mat.opacity > 0.02;

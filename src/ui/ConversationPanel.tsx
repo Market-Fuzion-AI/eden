@@ -109,7 +109,7 @@ export function ConversationPanel() {
         <div className="convo-header">
           <div>
             <span className="convo-name">{last?.side === 'right' ? 'Kai' : c.name}</span>
-            <span className="convo-role">{last?.side === 'right' ? 'Independent Pathfinder' : c.role}</span>
+            <span className="convo-role">{last?.side === 'right' ? 'Pathfinder' : c.role}</span>
           </div>
           <button className="btn close-btn" onClick={leave}>
             ✕

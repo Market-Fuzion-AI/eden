@@ -40,6 +40,16 @@ export function toMapPixel(x: number, z: number, size: number): { px: number; py
 }
 
 /**
+ * Canvas rotation for Kai's arrow, given his yaw.
+ *
+ * Exported so the sign can be tested: it was wrong, and a heading indicator
+ * that points exactly backwards is worse than no heading indicator at all.
+ */
+export function arrowRotation(yaw: number): number {
+  return Math.PI - yaw;
+}
+
+/**
  * Paint the valley once.
  *
  * Height drives the colour ramp, so the river reads as a river, the meadow as
@@ -162,7 +172,15 @@ export function Minimap() {
       const [kx, ky] = toPx(player.pos.x, player.pos.z);
       ctx.save();
       ctx.translate(kx, ky);
-      ctx.rotate(-inputState.camYaw);
+      // Kai's facing, converted from world yaw to canvas rotation.
+      //
+      // Forward at yaw θ moves toward (sin θ, cos θ) in world x/z, and this map
+      // puts +x right and +z down — so the arrow must end up pointing at
+      // (sin θ, cos θ) in canvas pixels. A triangle drawn pointing up is
+      // (0, −1), and canvas `rotate(a)` sends it to (sin a, −cos a); solving
+      // gives a = π − θ. The old `-θ` produced exactly (−sin θ, −cos θ), the
+      // precise negation — which is why the arrow read as pointing backwards.
+      ctx.rotate(arrowRotation(inputState.camYaw));
       ctx.beginPath();
       ctx.moveTo(0, -6.5);
       ctx.lineTo(4.4, 5);

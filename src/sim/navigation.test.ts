@@ -4,7 +4,10 @@ import { chooseCrashSite, signalStrengthAt, walkableRoute } from './mission';
 import { performScan } from './scanner';
 import { isWalkable, isWater } from './terrain';
 import { createWorld } from './worldgen';
-import { toMapPixel } from '../ui/Minimap';
+import { arrowRotation, toMapPixel } from '../ui/Minimap';
+import { cardinalFor } from '../ui/LiveHUD';
+import { placeName } from './landmarks';
+import { updatePlayer } from './player';
 
 /**
  * Getting there, and knowing where "there" is.
@@ -203,6 +206,61 @@ describe('the minimap puts things where they are', () => {
     const large = toMapPixel(50, -50, 400);
     expect(large.px).toBeCloseTo(small.px * 4, 5);
     expect(large.py).toBeCloseTo(small.py * 4, 5);
+  });
+});
+
+describe('which way is which', () => {
+  /**
+   * The world's own conventions, measured rather than assumed.
+   *
+   * Moving forward at yaw θ takes Kai toward (sin θ, cos θ), and the place
+   * namer calls −z north and +x east. Two instruments disagreed with that: the
+   * compass letters were 180° out, and the minimap arrow was drawn as the exact
+   * negation of Kai's heading.
+   */
+  const forward = (yaw: number) => ({ x: Math.sin(yaw), z: Math.cos(yaw) });
+
+  it('walks Kai the way the place names say', () => {
+    const world = createWorld(31337);
+    const p = world.player;
+    const go = (yaw: number) => {
+      p.pos = { x: 0, z: 0 };
+      p.speed = 0;
+      p.y = 0;
+      for (let i = 0; i < 60; i++) {
+        updatePlayer(world, 1 / 30, { moveX: 0, moveZ: 1, sprint: false, jump: false, camYaw: yaw });
+      }
+      return { ...p.pos };
+    };
+    // Yaw 0 is +z, and +z is south by the world's own naming.
+    expect(go(0).z).toBeGreaterThan(3);
+    expect(placeName({ x: 0, z: 90 })).toMatch(/southern/i);
+    // Yaw π is −z, which is north.
+    expect(go(Math.PI).z).toBeLessThan(-3);
+    expect(placeName({ x: 0, z: -90 })).toMatch(/northern/i);
+    // Yaw π/2 is +x, which is east.
+    expect(go(Math.PI / 2).x).toBeGreaterThan(3);
+  });
+
+  it('points the compass at the direction Kai is actually facing', () => {
+    // Yaw 0 walks south, so the compass must read S — it used to read N.
+    expect(cardinalFor(0)).toBe('S');
+    expect(cardinalFor(Math.PI)).toBe('N');
+    expect(cardinalFor(Math.PI / 2)).toBe('E');
+    expect(cardinalFor(-Math.PI / 2)).toBe('W');
+  });
+
+  it('draws the minimap arrow along Kai\'s heading, not against it', () => {
+    // A triangle drawn pointing up is (0, -1); canvas rotate(a) sends it to
+    // (sin a, -cos a). On this map +x is right and +z is down, so the arrow has
+    // to end up at (sin θ, cos θ) — the same direction Kai walks.
+    for (const yaw of [0, 0.7, Math.PI / 2, Math.PI, -1.2]) {
+      const a = arrowRotation(yaw);
+      const tip = { x: Math.sin(a), y: -Math.cos(a) };
+      const want = forward(yaw);
+      expect(tip.x, `yaw ${yaw}`).toBeCloseTo(want.x, 6);
+      expect(tip.y, `yaw ${yaw}`).toBeCloseTo(want.z, 6);
+    }
   });
 });
 
