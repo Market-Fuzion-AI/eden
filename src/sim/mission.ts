@@ -1,4 +1,5 @@
 import { MISSION, WORLD } from './config';
+import { missionUnlocked } from './firstLight';
 import { chronicle } from './chronicle';
 import { isWalkable, isWater, groundY, slopeAt } from './terrain';
 import type { MissionState, World } from './types';
@@ -283,6 +284,10 @@ export function missionTick(world: World): void {
 
   switch (m.state) {
     case 'dormant': {
+      // FIRST LIGHT holds this shut. Before the headcount nobody has noticed
+      // anyone is missing, so ARI has no reason to be talking about a pod —
+      // and the opening would be talking over itself if she did.
+      if (!missionUnlocked(world)) return;
       // A moment to breathe first. The player has just arrived in a world; the
       // very first thing that happens to them should not be a task.
       if (m.startedAt < 0) m.startedAt = t;

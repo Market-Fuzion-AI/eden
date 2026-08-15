@@ -2804,3 +2804,28 @@
   .minimap { width: 118px; }
   .status-card { padding: 8px 10px 9px; }
 }
+
+/* First Light beat jumps, Developer Mode only. */
+.dev-beats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 8px 0 4px;
+}
+.dev-beat {
+  flex: 1 1 44%;
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  padding: 6px 4px;
+  cursor: pointer;
+  color: var(--text-dim);
+  background: rgba(10, 20, 28, 0.6);
+  border: 1px solid var(--panel-border);
+}
+.dev-beat:hover { color: var(--text); }
+.dev-beat.active {
+  color: #241503;
+  background: var(--warn);
+  border-color: var(--warn);
+}

@@ -98,8 +98,14 @@ try {
   check('the active slot names the weapon', /Arc Blade|Pulse Blaster/.test(activeName), activeName);
   check('each slot carries an icon', (await page.locator('.slot .slot-glyph').count()) === 2);
   await page.keyboard.press('Digit2');
-  await page.waitForTimeout(500);
-  const afterSwitch = await page.locator('.slot.active').innerText();
+  // Poll rather than wait a fixed beat: the HUD heartbeat rides the render
+  // loop, and software rendering here manages a frame or two a second, so a
+  // half-second wait can contain no frame at all.
+  let afterSwitch = activeName;
+  for (let i = 0; i < 20 && afterSwitch === activeName; i++) {
+    await page.waitForTimeout(250);
+    afterSwitch = await page.locator('.slot.active').innerText();
+  }
   check('pressing 2 moves the highlight', afterSwitch !== activeName, `${activeName} → ${afterSwitch}`);
   await page.keyboard.press('Digit1');
   await page.waitForTimeout(400);
@@ -161,7 +167,22 @@ try {
   });
 
   // --- F. Objective --------------------------------------------------------
-  const objective = await page.locator('.objective').innerText().catch(() => '');
+  // The distress signal is no longer waiting on the HUD when the game opens:
+  // First Light holds it until the headcount finds Maya missing. So check that
+  // silence first, then earn the objective the way the opening hands it over.
+  const beforeReveal = await page.locator('.objective').innerText().catch(() => '');
+  check('nothing is asked of Kai before the headcount', beforeReveal === '', beforeReveal.slice(0, 60));
+
+  await page.evaluate(() => {
+    window.__EDEN__.firstLight.jumpToBeat(window.__EDEN__.getWorld(), 'headcount');
+    window.__EDEN__.useUI.getState().setSpeed(20);
+  });
+  let objective = '';
+  for (let i = 0; i < 90 && !/DISTRESS SIGNAL/i.test(objective); i++) {
+    await page.waitForTimeout(1000);
+    objective = await page.locator('.objective').innerText().catch(() => '');
+  }
+  await page.evaluate(() => window.__EDEN__.useUI.getState().setSpeed(1));
   check('the objective says what it is', /DISTRESS SIGNAL/i.test(objective), objective.slice(0, 60));
   check('CARRIER is gone', !/CARRIER/i.test(objective), objective);
   check('the meter says what it measures', /Signal strength/i.test(objective), objective);

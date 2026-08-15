@@ -14,7 +14,23 @@ import { regionAt } from './regions';
 import { performScan, scanCooldownRemaining, scannerReady, scanTick } from './scanner';
 import { simTick } from './simulation';
 import { isWalkable, setTerrainSeed } from './terrain';
-import { createWorld } from './worldgen';
+import { jumpToBeat, restoreFabricator } from './firstLight';
+import { createWorld as makeWorld } from './worldgen';
+
+/**
+ * A world with a working Fabricator.
+ *
+ * First Light starts the game with the machine broken — that is the point of
+ * the opening — so these tests, which are about the fabrication loop itself,
+ * set up the world it lives in: the opening over, and the Fabricator repaired.
+ * Phase 2's repair mission will produce exactly this state.
+ */
+function createWorld(seed: number) {
+  const world = makeWorld(seed);
+  jumpToBeat(world, 'released');
+  restoreFabricator(world);
+  return world;
+}
 import { materialNodeAtHand, startHarvest, updatePlayer } from './player';
 import type { MaterialId, World } from './types';
 

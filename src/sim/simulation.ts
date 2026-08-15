@@ -5,6 +5,7 @@ import { settlerExecute, settlerNeedsTick, settlerThink } from './goals';
 import { fabricationTick } from './fabrication';
 import { separateAgents } from './movement';
 import { scanTick } from './scanner';
+import { firstLightTick } from './firstLight';
 import { missionTick } from './mission';
 import { conversationTick } from './conversation';
 import { beamTick } from './threats';
@@ -51,6 +52,7 @@ export function simTick(world: World, dt: number): void {
   scanTick(world);
   // THE SIGNAL advances on where the player is and what they have done. Every
   // transition inside is caused by the player; nothing here pushes it along.
+  firstLightTick(world);
   missionTick(world);
   // Hold whoever Kai is talking to in place. Nobody wanders off mid-sentence.
   conversationTick(world);

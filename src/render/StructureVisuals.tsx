@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { getWorld } from '../sim';
+import { registerCampfire } from '../game/debugBridge';
 import { daylight01 } from '../sim/chronicle';
 import { constructionStage } from '../sim/structures';
 import type { Structure } from '../sim/types';
@@ -103,7 +104,10 @@ function buildCampfire(): CampfireRig {
   );
   group.add(embers);
 
-  const light = new THREE.PointLight(new THREE.Color('#ff9a44'), 0, 18, 2);
+  // Reach far enough to wash the shelters pitched round it. A hearth that
+  // lights only the stones it sits in is the least convincing thing on a
+  // dark map — on the first night it is supposed to be why people are here.
+  const light = new THREE.PointLight(new THREE.Color('#ff9a44'), 0, 26, 2);
   light.position.y = 0.8;
   group.add(light);
 
@@ -271,8 +275,11 @@ function StructureView({ id }: { id: string }) {
   useEffect(() => {
     if (!rig) return;
     structureGroups.set(id, rig.group);
+    const fire = campfireRef.current;
+    if (fire) registerCampfire(id, fire);
     return () => {
       structureGroups.delete(id);
+      if (fire) registerCampfire(id, null);
     };
   }, [id, rig]);
 
@@ -314,7 +321,7 @@ function StructureView({ id }: { id: string }) {
         pos.setZ(i, Math.cos(t * 1.1 + i * 1.7) * 0.28);
       }
       pos.needsUpdate = true;
-      fire.light.intensity = (3.2 + night * 7) * (0.86 + Math.sin(t * 9) * 0.14);
+      fire.light.intensity = (10 + night * 46) * (0.86 + Math.sin(t * 9) * 0.14);
     }
 
     const shelter = shelterRef.current;

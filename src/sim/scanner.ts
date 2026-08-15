@@ -1,4 +1,5 @@
 import { SCANNER } from './config';
+import { noteScan } from './firstLight';
 import { MATERIALS, materialForNodeType } from './fabrication';
 import { placeName } from './landmarks';
 import { CREATURE_SPECIES_BY_ID } from './species';
@@ -105,6 +106,9 @@ export function performScan(world: World): ScanResult {
   p.scan.pulseStartedAt = world.timeSec;
 
   world.ariQueue.push(describeScan(world, counts, boosted, radius, threats));
+  // The opening asks Kai to sweep the crash site once. This is that sweep —
+  // the mechanic is untouched, First Light just notices it happened.
+  noteScan(world);
   // Scanning at the ring itself gets one extra observation, once. It deepens
   // the implication without answering anything: EDEN still never says what the
   // site is, who built it, or what the Wardens are guarding.

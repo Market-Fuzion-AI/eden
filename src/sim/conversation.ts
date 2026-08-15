@@ -1,4 +1,5 @@
 import { DIALOGUE, PLAYER, SETTLER } from './config';
+import { noteMet } from './firstLight';
 import { buildDialogueContext, settlerRole } from './npcContext';
 import {
   DeterministicDialogueProvider,
@@ -133,6 +134,8 @@ export function beginConversation(world: World, s: Settler): Conversation | null
   // *already* be the conversation; an empty string means "nothing to report"
   // rather than passing that circularity straight through.
   const npcGoal = s.goal.type === 'talk-emerson' ? '' : s.goal.label;
+  // Reaching someone is how the opening measures progress.
+  noteMet(world, s);
   holdForConversation(world, s);
 
   const portraitId = `settler:${s.speciesId}:${s.sex}`;

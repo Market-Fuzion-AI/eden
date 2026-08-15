@@ -47,13 +47,21 @@ await page.waitForTimeout(5000);
 if (await page.locator('.help').isVisible().catch(() => false)) await page.locator('.help-resume').click();
 await page.waitForTimeout(1200);
 
-/** Broad daylight, so the screenshots are judged on content and not on dusk. */
+/**
+ * Broad daylight, so the screenshots are judged on content and not on dusk.
+ *
+ * Only ever forwards. Grace periods and beat timers are measured against world
+ * time, so winding the clock back to this morning does not merely delay them —
+ * it puts them out of reach until the world catches up with itself again.
+ */
 const noon = () =>
   page.evaluate(() => {
     const { getWorld, config } = window.__EDEN__;
     const w = getWorld();
     const day = Math.floor(w.timeSec / config.DAY_SEC);
-    w.timeSec = day * config.DAY_SEC + config.DAY_SEC * 0.5;
+    let t = day * config.DAY_SEC + config.DAY_SEC * 0.5;
+    if (t < w.timeSec) t += config.DAY_SEC;
+    w.timeSec = t;
   });
 
 /*
@@ -186,7 +194,20 @@ check('no objective is shown before the signal', opening.objective === null, JSO
 await page.screenshot({ path: `${SHOT_DIR}/m1-01-before-signal.png` });
 await noon();
 
-// ARI detects it on her own, after a moment of ordinary play.
+// First Light holds the signal back. Nobody is going looking for a missing
+// woman before anyone has noticed she is missing, so the mission stays dormant
+// through the whole of the first day however long ordinary play runs.
+const heldBack = await until(() => window.__EDEN__.getWorld().mission.state !== 'dormant', 12000);
+check('the opening holds the signal until somebody is missed', !heldBack, await state());
+
+// Play the opening through to the headcount, which is where it hands over.
+await page.evaluate(() => {
+  window.__EDEN__.firstLight.jumpToBeat(window.__EDEN__.getWorld(), 'headcount');
+});
+await page.waitForTimeout(800);
+await noon();
+
+// From there ARI detects it on her own, after a moment of ordinary play.
 const detected = await until(() => window.__EDEN__.getWorld().mission.state !== 'dormant', 90000);
 check('ARI detects the distress carrier without being prompted', detected, await state());
 const afterDetect = await page.evaluate(() => {

@@ -4,6 +4,7 @@ import { LANDMARKS, landmarkAt, placeName } from './landmarks';
 import { REGIONS, regionAt, regionShortName, regionWeights, SPECIES_REGION } from './regions';
 import { simTick } from './simulation';
 import { heightAt, isWalkable, isWater, riverX, setTerrainSeed, slopeAt, terrainSeed } from './terrain';
+import { jumpToBeat } from './firstLight';
 import { createWorld } from './worldgen';
 import type { World } from './types';
 import { SETTLER_ROSTER } from './species';
@@ -153,19 +154,29 @@ describe('starting geography', () => {
 
   it('gives Human Landing a recognisable silhouette', () => {
     const world = createWorld(714);
+    // The morning of the crash: a broken pod, its debris, and salvage dragged
+    // clear of it. No Fabricator — that came down with the expedition and did
+    // not survive, which is what First Light's opening is about.
     const kinds = world.landmarksBuilt.map((b) => b.kind);
     expect(kinds).toContain('pod');
-    expect(kinds).toContain('fabricator');
+    expect(kinds).toContain('debris');
     expect(kinds).toContain('staging');
+    expect(kinds).not.toContain('fabricator');
     // Everything stands within a short walk of the camp.
     const camp = world.camps.find((c) => c.speciesId === 'human')!;
     for (const b of world.landmarksBuilt) {
       expect(Math.hypot(b.pos.x - camp.pos.x, b.pos.z - camp.pos.z)).toBeLessThan(30);
     }
-    // The colony hearth is lit from the first minute, and every contributor to
-    // it is a real settler — the provenance model reads these ids back.
+    // No hearth yet. It used to be lit from the first minute, which is exactly
+    // what made a new game feel like arriving after the story: the survivors
+    // light it during the opening, once the emergency is under control.
+    expect(world.structures.some((s) => s.type === 'campfire')).toBe(false);
+
+    // And when they do, every contributor to it is a real settler — the
+    // provenance model reads these ids back.
+    jumpToBeat(world, 'campRising');
     const hearth = world.structures.find((s) => s.type === 'campfire' && s.state === 'complete');
-    expect(hearth, 'the colony should start with a hearth').toBeTruthy();
+    expect(hearth, 'the survivors should light a hearth').toBeTruthy();
     for (const c of hearth!.contributions) {
       expect(world.settlers.some((s) => s.id === c.id), `${c.name} should exist`).toBe(true);
     }

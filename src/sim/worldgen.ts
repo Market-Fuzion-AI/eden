@@ -1,6 +1,7 @@
 import { BLASTER, JETPACK, LUMI, START_TIME, THREAT } from './config';
 import { buildCourse, distToCourse, propTop } from './course';
 import { initMission } from './mission';
+import { enterBeat, placeSurvivors, wakePos } from './firstLight';
 import { armThreat } from './threats';
 import { makeRng, type Rng } from './rng';
 import {
@@ -11,7 +12,7 @@ import {
   type CreatureSpeciesDef,
 } from './species';
 import { landmarkAt, placeName } from './landmarks';
-import { isWalkable, isWater, riverX, setTerrainSeed } from './terrain';
+import { groundY, isWalkable, isWater, riverX, setTerrainSeed } from './terrain';
 import { regionAt, regionWeights } from './regions';
 import type {
   Camp,
@@ -26,7 +27,6 @@ import type {
   World,
 } from './types';
 import { chronicle } from './chronicle';
-import { createProject } from './structures';
 import { clamp01, v2, type V2 } from './vec';
 
 let idCounter = 0;
@@ -607,68 +607,40 @@ function placeResources(world: World, rng: Rng): void {
  * wreck and a fabrication platform as scenery — rather than a spawned town.
  * The settlers still do the rest of the building themselves.
  */
+/**
+ * The landing site, on the morning of the crash.
+ *
+ * This used to build a finished settlement: a completed campfire credited to
+ * all twelve, a working Fabricator, a staging area. The player arrived after
+ * the interesting part. Now it builds only what actually came down — a broken
+ * pod and the debris around it — and First Light adds the rest as the survivors
+ * earn it.
+ *
+ * The Fabricator is deliberately absent. The expedition brought fabrication
+ * capability and it did not survive the landing; `world.fabricatorPos` stays
+ * null, so the interaction prompt and the panel simply never offer it. Repairing
+ * it is a later mission and none of that is built here.
+ */
 function buildHumanLanding(world: World, rng: Rng): void {
   const camp = world.camps.find((c) => c.speciesId === 'human')!;
 
-  // The colony hearth: complete from the first minute, so Human Landing has a
-  // gathering point before anyone has built anything.
-  const humans = world.settlers.filter((s) => s.speciesId === 'human');
-  const firePos = findLand(rng, camp.pos, 7);
-  const hearth = createProject(
-    world,
-    humans[0],
-    'campfire',
-    firePos,
-    ['The colony hearth, lit on the first night'],
-    ['Beside the landing site, where everyone already was'],
-  );
-  // Credited to the colonists who actually landed, in equal share. Every
-  // contributor id must resolve to a real settler — the provenance inspector
-  // and the claim model both read these records back.
-  const share = humans.length;
-  hearth.contributions = humans.map((s) => ({
-    id: s.id,
-    name: s.name,
-    wood: hearth.required.wood / share,
-    stone: hearth.required.stone / share,
-    work: 1 / share,
-  }));
-  hearth.contributed = { wood: hearth.required.wood, stone: hearth.required.stone };
-  hearth.progress = 1;
-  hearth.state = 'complete';
-  hearth.completedAt = world.timeSec;
-  for (const s of world.settlers) {
-    if (!s.knownStructureIds.includes(hearth.id)) s.knownStructureIds.push(hearth.id);
-  }
-
-  // Landing infrastructure — scenery, not simulation. Nothing here is
-  // interactive yet; the fabricator is a marked placeholder for a later
-  // milestone.
+  // Wreckage. More debris than the old scene had, and no infrastructure.
   world.landmarksBuilt = [
     { kind: 'pod', pos: findLand(rng, camp.pos, 14), rot: rng.next() * Math.PI * 2 },
     { kind: 'debris', pos: findLand(rng, camp.pos, 20), rot: rng.next() * Math.PI * 2 },
     { kind: 'debris', pos: findLand(rng, camp.pos, 24), rot: rng.next() * Math.PI * 2 },
-    { kind: 'fabricator', pos: findLand(rng, camp.pos, 11), rot: rng.next() * Math.PI * 2 },
-    { kind: 'staging', pos: findLand(rng, camp.pos, 9), rot: rng.next() * Math.PI * 2 },
+    { kind: 'debris', pos: findLand(rng, camp.pos, 17), rot: rng.next() * Math.PI * 2 },
+    { kind: 'debris', pos: findLand(rng, camp.pos, 28), rot: rng.next() * Math.PI * 2 },
+    // Salvage dragged clear of the pod. Scenery, not a machine.
+    { kind: 'staging', pos: findLand(rng, camp.pos, 10), rot: rng.next() * Math.PI * 2 },
   ];
-  // The pod and the fabricator are solid enough to walk around.
   for (const b of world.landmarksBuilt) {
     if (b.kind === 'pod') world.obstacles.push({ pos: b.pos, radius: 3.4 });
-    // Sized to the machine's deck, not its core: a smaller radius let the
-    // camera boom pull inside the hazard ring and fill the screen with it.
-    if (b.kind === 'fabricator') world.obstacles.push({ pos: b.pos, radius: 2.9 });
   }
 
-  // The technician keeps the fabricator during working hours. She remains
-  // fully autonomous otherwise — this only decides where she drifts back to.
-  const fab = world.landmarksBuilt.find((b) => b.kind === 'fabricator');
-  const tech = world.settlers.find((s) => s.name === 'Petra');
-  if (fab && tech) {
-    world.fabricatorPos = { ...fab.pos };
-    tech.roleAnchor = { role: 'fabricator', pos: { ...fab.pos }, radius: 16, fromHour: 6, toHour: 21 };
-    tech.home = { ...fab.pos };
-    tech.pos = findLand(rng, fab.pos, 5);
-  }
+  // Petra has no Fabricator to keep. She is sorting what is left of it, which
+  // First Light posts her to; there is no permanent anchor on Day 1.
+  world.fabricatorPos = null;
 }
 
 export function createWorld(seed: number): World {
@@ -756,6 +728,15 @@ export function createWorld(seed: number): World {
     mission: null,
     dialogueScript: null,
     conversation: null,
+    firstLight: {
+      beat: 'impact',
+      beatStartedAt: START_TIME,
+      metSurvivors: [],
+      tentsRaised: 0,
+      scanned: false,
+      revealedAt: -1,
+      spoken: [],
+    },
     landmarkNameAt: (p: V2) => placeName(p),
     camps: [
       { speciesId: 'human', label: 'Human camp', pos: { ...ANCHORS.humanCamp } },
@@ -861,6 +842,12 @@ export function createWorld(seed: number): World {
   // THE SIGNAL. Placed last so it can read the finished camp and terrain, and
   // so its crash site can be scored against the 3Cs course it must avoid.
   initMission(world);
+  // The authored opening. Survivors go to their emergency stations, Kai wakes
+  // beside the wreck, and the first beat starts talking.
+  placeSurvivors(world);
+  world.player.pos = { ...wakePos(world) };
+  world.player.y = groundY(world.player.pos.x, world.player.pos.z);
+  enterBeat(world, 'impact');
   // The wreck is solid. Without this Kai walks through the hull, which makes
   // the most important object in the mission read as a painting rather than as
   // a thing that fell out of the sky. Sized to the hull, not to the debris —

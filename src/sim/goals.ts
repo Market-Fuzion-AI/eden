@@ -1,5 +1,6 @@
 import { NORM, RATES, REL, SETTLER, SOCIAL, STRUCT, WORLD } from './config';
 import { chronicle, clockOf, daylight01, isNight } from './chronicle';
+import { firstLightActive } from './firstLight';
 import { landmarkAt, placeName } from './landmarks';
 import { remember } from './memory';
 import { stand, stepToward } from './movement';
@@ -707,13 +708,13 @@ export function settlerThink(world: World, s: Settler): void {
     const away = dist(s.pos, post.pos);
     const settled = s.hunger < 62 && s.energy > 32 && !s.buildPlan;
     if (working && settled && away > post.radius) {
-      s.goal = mkGoal('idle', 'Return to the Fabricator', t, {
+      s.goal = mkGoal('idle', post.label ?? 'Return to the Fabricator', t, {
         targetPos: { x: post.pos.x + rng.range(-3, 3), z: post.pos.z + rng.range(-3, 3) },
         deadline: t + 260,
       });
       s.goalReason = {
         summary: [
-          'Keeps the Fabricator during the working day',
+          post.label ? `Posted: ${post.label.toLowerCase()}` : 'Keeps the Fabricator during the working day',
           `${Math.round(away)}m from the station`,
           `Nothing more urgent — hunger ${Math.round(s.hunger)}, energy ${Math.round(s.energy)}`,
         ],
@@ -819,7 +820,12 @@ export function settlerThink(world: World, s: Settler): void {
     if (need) add(need.type === 'wood' ? 'gather-wood' : 'gather-stone', commitment);
     else add(s.buildPlan?.owner ? 'build' : 'help-build', commitment + 6);
   } else {
-    projectIdea = considerNewProject(world, s);
+    // While the authored opening is running the camp is being built to a plan,
+    // not by whoever happens to feel like it. Without this a settler starts
+    // their own campfire a few metres from the one First Light is about to
+    // light, and the settlement wakes up with two hearths inside the spacing
+    // rule. Released with everything else at the end of the opening.
+    projectIdea = firstLightActive(world) ? null : considerNewProject(world, s);
     help = findHelpCandidate(world, s);
     // Helping an existing project is preferred over starting a rival one.
     add('help-build', help ? help.score : 0);

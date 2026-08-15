@@ -23,6 +23,7 @@ import * as dev from '../sim/dev';
 import * as jetpack from '../sim/jetpack';
 import * as blaster from '../sim/blaster';
 import * as mission from '../sim/mission';
+import * as firstLight from '../sim/firstLight';
 import * as story from '../sim/survivorDialogue';
 import * as conversation from '../sim/conversation';
 import * as npcContext from '../sim/npcContext';
@@ -68,6 +69,32 @@ export function registerSocialLinks(mesh: THREE.Mesh | null): void {
   socialLinkMesh = mesh;
 }
 
+/**
+ * Set by LandingSite.tsx. The landing site used to be fixed at worldgen and
+ * built once; now First Light raises tents into it while the game runs, and a
+ * test that only counts `world.landmarksBuilt` will happily pass while the
+ * player looks at bare ground. This lets a browser check assert against the
+ * scene graph instead.
+ */
+let landingSiteGroup: THREE.Group | null = null;
+export function registerLandingSite(group: THREE.Group | null): void {
+  landingSiteGroup = group;
+}
+
+/**
+ * Set by StructureVisuals.tsx for each campfire. "One fire, at the middle of
+ * the camp" is the evening beat's whole payload, and a structure marked
+ * complete in the simulation is not the same claim as flames on screen.
+ */
+const campfires = new Map<string, { flames: THREE.Mesh[]; light: THREE.PointLight }>();
+export function registerCampfire(
+  id: string,
+  rig: { flames: THREE.Mesh[]; light: THREE.PointLight } | null,
+): void {
+  if (rig) campfires.set(id, rig);
+  else campfires.delete(id);
+}
+
 /** Stable hash of the terrain's vertex positions — detects any geometry drift. */
 function terrainHash(): string {
   if (!terrainGeometry) return 'no-terrain';
@@ -96,6 +123,7 @@ export function installDebugBridge(): void {
     jetpack,
     blaster,
     mission,
+    firstLight,
     story,
     conversation,
     npcContext,
@@ -122,6 +150,12 @@ export function installDebugBridge(): void {
     visibleScanMarkers: () => (scanMarkers?.children ?? []).filter((c) => c.visible).length,
     socialLinksVisible: () =>
       Boolean(socialLinkMesh?.visible) && (socialLinkMesh?.geometry.drawRange.count ?? 0) > 0,
+    /** How many landmark nodes are actually in the scene right now. */
+    landingSiteNodes: () => (landingSiteGroup?.children ?? []).length,
+    /** How many hearths are actually burning — flames drawn and casting light. */
+    litHearths: () =>
+      [...campfires.values()].filter((c) => c.flames.some((f) => f.visible) && c.light.intensity > 0)
+        .length,
     /** Advance only Kai, using current keyboard/camera state. */
     stepPlayer: (dt: number) =>
       updatePlayer(getWorld(), dt, { ...input.readMoveAxes(), camYaw: input.inputState.camYaw }),

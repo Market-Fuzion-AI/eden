@@ -7,6 +7,7 @@ import { identifyFocus } from './identify';
 import { remember } from './memory';
 import { simTick } from './simulation';
 import type { World } from './types';
+import { jumpToBeat, restoreFabricator } from './firstLight';
 import { createWorld } from './worldgen';
 
 /**
@@ -111,9 +112,14 @@ describe('the twelve who founded Human Landing', () => {
     }
   });
 
-  it('keeps Petra the fabricator the simulation already anchors to the machine', () => {
+  it('keeps Petra the fabricator the simulation anchors to the machine', () => {
     const world = createWorld(4104);
     const petra = byName(world, 'Petra');
+    // On Day 1 the Fabricator is wreckage, so there is no post to keep — she is
+    // posted to sorting the damaged gear instead. Her identity is unchanged.
+    expect(petra.roleAnchor?.role).toBe('station');
+    jumpToBeat(world, 'released');
+    restoreFabricator(world);
     expect(petra.roleAnchor?.role).toBe('fabricator');
     expect(settlerRole(petra)).toBe('Fabrication Technician');
     expect(petra.knowledge[0]).toBe('fabrication');

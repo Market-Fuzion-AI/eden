@@ -11,6 +11,7 @@ import {
   sumModifiers,
 } from './relationships';
 import { simTick } from './simulation';
+import { jumpToBeat } from './firstLight';
 import { createWorld } from './worldgen';
 import type { Settler, World } from './types';
 
@@ -44,6 +45,11 @@ function backdate(s: Settler, otherId: string, seconds = 600): void {
 
 /** Place two settlers side by side, isolated from everyone else. */
 function isolatePair(world: World): [Settler, Settler] {
+  // These tests are about the autonomous social simulation, which is what runs
+  // once the authored opening has handed the survivors back. Leaving First
+  // Light's station anchors in place would drag the pair straight back to camp,
+  // which is the opposite of isolating them.
+  jumpToBeat(world, 'released');
   const [a, b] = world.settlers;
   a.pos = { x: 0, z: 0 };
   b.pos = { x: 3, z: 0 };

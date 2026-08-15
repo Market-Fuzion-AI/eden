@@ -347,8 +347,16 @@ export interface Settler extends AgentCommon {
 }
 
 export interface RoleAnchor {
-  /** Identifies the role for inspection and dialogue. */
-  role: 'fabricator';
+  /**
+   * Identifies the role for inspection and dialogue.
+   *
+   * `station` is First Light's temporary hold: the same drift-back mechanism,
+   * applied to a survivor doing an emergency job, and cleared the moment their
+   * beat is over. See `firstLight.ts`.
+   */
+  role: 'fabricator' | 'station';
+  /** What the goal line says while the post is being kept. */
+  label?: string;
   pos: V2;
   /** How far they may drift from the post before being drawn back. */
   radius: number;
@@ -760,8 +768,39 @@ export interface WitnessedNorm {
  * gives the home base a silhouette without pretending to be simulation. The
  * fabricator is a marked placeholder for a later crafting milestone.
  */
+/** Beats of the authored opening, in order. */
+export type FirstLightBeat =
+  | 'impact'
+  | 'gather'
+  | 'stabilize'
+  | 'campRising'
+  | 'evening'
+  | 'headcount'
+  | 'released';
+
+/**
+ * First Light's whole state.
+ *
+ * Deliberately tiny. It is a director, not a quest log: which beat is running,
+ * what the player has done that the beats care about, and how much of the camp
+ * exists.
+ */
+export interface FirstLight {
+  beat: FirstLightBeat;
+  beatStartedAt: number;
+  /** Settler ids Kai has actually spoken to. */
+  metSurvivors: string[];
+  tentsRaised: number;
+  /** Whether Kai has swept the site with the scanner. */
+  scanned: boolean;
+  /** When the headcount found Maya missing, or -1. Gates the distress mission. */
+  revealedAt: number;
+  /** Reserved for authored lines already delivered, so none repeats. */
+  spoken: string[];
+}
+
 export interface BuiltLandmark {
-  kind: 'pod' | 'debris' | 'fabricator' | 'staging';
+  kind: 'pod' | 'debris' | 'fabricator' | 'staging' | 'tent';
   pos: V2;
   rot: number;
 }
@@ -1027,6 +1066,8 @@ export interface World {
    * rather than of one mission's script.
    */
   dialogueScript: import('./survivorDialogue').ActiveDialogue | null;
+  /** The authored opening. Always present; `beat: 'released'` once it is over. */
+  firstLight: FirstLight;
   /**
    * The general NPC conversation currently on screen, if any.
    *

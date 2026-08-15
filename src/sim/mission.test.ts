@@ -24,7 +24,22 @@ import { getInteractions, survivorAtHand, updatePlayer } from './player';
 import { simTick } from './simulation';
 import { isWalkable, isWater } from './terrain';
 import type { World } from './types';
-import { createWorld } from './worldgen';
+import { jumpToBeat } from './firstLight';
+import { createWorld as makeWorld } from './worldgen';
+
+/**
+ * A world in which the distress signal is allowed to exist.
+ *
+ * First Light holds the mission dormant until the headcount finds Maya
+ * missing — before that nobody knows there is anyone to look for. These tests
+ * are about the mission itself, so they start where the opening leaves off.
+ * The mission's own behaviour is unchanged; only its precondition is new.
+ */
+function createWorld(seed: number) {
+  const world = makeWorld(seed);
+  jumpToBeat(world, 'headcount');
+  return world;
+}
 
 /**
  * THE SIGNAL, played end to end with no browser.

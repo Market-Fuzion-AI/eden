@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { getWorld } from '../sim';
 import { providerMode, setProviderMode } from '../sim/conversation';
 import { MATERIALS } from '../sim/fabrication';
+import { jumpToBeat, restartFirstLight } from '../sim/firstLight';
+import type { FirstLightBeat } from '../sim/types';
 import type { MaterialId } from '../sim/types';
 import { devMode } from '../sim/dev';
 import { dialogueProviderStatus } from '../game/openaiDialogue';
@@ -47,6 +49,7 @@ export function DevControls() {
 
   const mode = providerMode();
   const p = getWorld().player;
+  const fl = getWorld().firstLight;
   const carrying = (Object.keys(MATERIALS) as MaterialId[]).filter((id) => p.materials[id] > 0);
 
   const switchProvider = (next: 'local' | 'openai') => {
@@ -109,6 +112,43 @@ export function DevControls() {
       <div className="dev-note">
         Switching to OPENAI affects new conversations. The game always falls back to LOCAL if the
         endpoint cannot answer.
+      </div>
+
+      <div className="dev-sep" />
+
+      {/* First Light QA. A jump builds whatever the target beat assumes, so a
+          tester lands in a coherent world rather than a half-built one. */}
+      <div className="dev-row">
+        <span className="dev-label">First Light</span>
+        <span className="dev-value on">{fl.beat}</span>
+      </div>
+      <div className="dev-beats">
+        {(
+          [
+            ['Restart', null],
+            ['Impact', 'impact'],
+            ['Camp rising', 'campRising'],
+            ['Evening', 'evening'],
+            ['Headcount', 'headcount'],
+          ] as [string, string | null][]
+        ).map(([label, beat]) => (
+          <button
+            key={label}
+            className={`dev-beat ${beat && fl.beat === beat ? 'active' : ''}`}
+            onClick={() => {
+              const w = getWorld();
+              if (beat === null) restartFirstLight(w);
+              else jumpToBeat(w, beat as FirstLightBeat);
+              bump();
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="dev-note">
+        Beat: <strong>{fl.beat}</strong> · met {fl.metSurvivors.length}/12 · tents {fl.tentsRaised}/6 ·
+        {fl.revealedAt >= 0 ? ' Maya revealed' : ' Maya not yet revealed'}
       </div>
 
       <div className="dev-sep" />

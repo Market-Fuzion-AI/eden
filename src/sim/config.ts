@@ -580,6 +580,42 @@ export const DIALOGUE = {
  * and the signal range is set so the carrier is audible for most of the trip —
  * navigation should be a needle you follow, not a needle you first have to find.
  */
+/**
+ * FIRST LIGHT — the authored opening.
+ *
+ * Timings are in sim-seconds. A day is 720, so `impactDwell: 40` is about
+ * three minutes of real time at 1x. Every beat has a completion condition the
+ * player can meet and one of these as a fallback, so the opening cannot
+ * deadlock for someone who wanders off.
+ */
+export const FIRST_LIGHT = {
+  /** Two-person emergency shelters for the twelve who came down alive. */
+  tents: 6,
+  /**
+   * How far from the fire they are pitched. Tight on purpose: people who have
+   * just come down in a crash sleep within arm's reach of the light, and a
+   * wider ring stops reading as a camp at any distance you can see it from.
+   */
+  tentRing: 9.5,
+  /** Sim-seconds between tents going up during campRising. */
+  tentInterval: 26,
+  /** How far a posted survivor may drift before drifting back. */
+  stationRadius: 5,
+  /** Long enough to come round and look at the wreck. */
+  impactDwell: 40,
+  /** How many survivors Kai must reach before the emergency is under control. */
+  metToStabilize: 3,
+  gatherTimeout: 320,
+  stabilizeTimeout: 260,
+  /** The camp cannot be declared finished before this, however fast tents go up. */
+  campMinimum: 170,
+  /** The quiet moment before the bad news. */
+  eveningDwell: 55,
+  headcountDwell: 26,
+  /** The thirteenth. Not at the landing site. */
+  missingName: 'Dr. Maya Reyes',
+} as const;
+
 export const MISSION = {
   survivorName: 'Dr. Maya Reyes',
   survivorRole: 'Agricultural Systems Specialist',
